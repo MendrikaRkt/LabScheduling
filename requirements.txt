@@ -1,0 +1,18 @@
+# Lab Scheduling Automation — runtime dependencies
+# Tested with Python 3.11 / 3.12 (64-bit).
+#
+# Install:  pip install -r requirements.txt
+# These versions are the ones the app was validated against. If pip cannot
+# resolve a wheel for your exact Python on Windows, relax the pin (e.g. drop
+# the patch number) — the app does not rely on version-specific behaviour.
+
+streamlit==1.58.0
+pandas==3.0.2
+numpy==2.4.4
+ortools==9.15.6755
+openpyxl==3.1.5
+altair==6.1.0
+pyarrow==24.0.0
+pillow==12.1.1
+GitPython==3.1.50
+psutil==5.9.8

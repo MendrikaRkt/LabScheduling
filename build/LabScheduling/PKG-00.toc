@@ -1,0 +1,77 @@
+('C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+ 'ABACUS AI\\LabScheduling\\build\\LabScheduling\\LabScheduling.pkg',
+ {'BINARY': True,
+  'DATA': True,
+  'EXECUTABLE': True,
+  'EXTENSION': True,
+  'PYMODULE': True,
+  'PYSOURCE': True,
+  'PYZ': False,
+  'SPLASH': True,
+  'SYMLINK': False},
+ [('pyi-contents-directory _internal', '', 'OPTION'),
+  ('PYZ-00.pyz',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS AI\\LabScheduling\\build\\LabScheduling\\PYZ-00.pyz',
+   'PYZ'),
+  ('struct',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS AI\\LabScheduling\\build\\LabScheduling\\localpycs\\struct.pyc',
+   'PYMODULE'),
+  ('pyimod01_archive',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS '
+   'AI\\LabScheduling\\build\\LabScheduling\\localpycs\\pyimod01_archive.pyc',
+   'PYMODULE'),
+  ('pyimod02_importers',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS '
+   'AI\\LabScheduling\\build\\LabScheduling\\localpycs\\pyimod02_importers.pyc',
+   'PYMODULE'),
+  ('pyimod03_ctypes',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS '
+   'AI\\LabScheduling\\build\\LabScheduling\\localpycs\\pyimod03_ctypes.pyc',
+   'PYMODULE'),
+  ('pyimod04_pywin32',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS '
+   'AI\\LabScheduling\\build\\LabScheduling\\localpycs\\pyimod04_pywin32.pyc',
+   'PYMODULE'),
+  ('pyiboot01_bootstrap',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS '
+   'AI\\LabScheduling\\.venv\\Lib\\site-packages\\PyInstaller\\loader\\pyiboot01_bootstrap.py',
+   'PYSOURCE'),
+  ('pyi_rth_inspect',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS '
+   'AI\\LabScheduling\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_inspect.py',
+   'PYSOURCE'),
+  ('pyi_rth_pkgutil',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS '
+   'AI\\LabScheduling\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_pkgutil.py',
+   'PYSOURCE'),
+  ('pyi_rth_multiprocessing',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS '
+   'AI\\LabScheduling\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_multiprocessing.py',
+   'PYSOURCE'),
+  ('pyi_rth_setuptools',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS '
+   'AI\\LabScheduling\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_setuptools.py',
+   'PYSOURCE'),
+  ('run_app',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS AI\\LabScheduling\\run_app.py',
+   'PYSOURCE')],
+ 'python314.dll',
+ True,
+ False,
+ False,
+ [],
+ None,
+ None,
+ None)
