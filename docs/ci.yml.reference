@@ -1,0 +1,49 @@
+name: CI — tests & qualité
+
+# Étape 6.7 (industrialisation) : exécute la suite de tests à chaque push / PR
+# pour garantir la non-régression du modèle, de la couche QA et des KPIs.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch: {}
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v4
+
+      - name: Installation de Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache des paquets pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+
+      - name: Installation des dépendances de test
+        # Dépendances minimales nécessaires aux tests (rapide, sans Streamlit).
+        run: |
+          python -m pip install --upgrade pip
+          pip install ortools pandas openpyxl pytest
+
+      - name: Vérification de syntaxe
+        run: |
+          python -c "import ast; ast.parse(open('pipeline.py').read())"
+          python -c "import ast; ast.parse(open('data_quality.py').read())"
+          python -c "import ast; ast.parse(open('kpi_report.py').read())"
+
+      - name: Exécution des tests (pytest)
+        run: pytest tests/ -v

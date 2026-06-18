@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Tests / outils
+.pytest_cache/
+.cache/
+
+# Sorties générées à l'exécution (rapports QA/KPI, logs)
+reports/
+*.log
+
+# Masters reconstruits localement (le master canonique vient de l'ETL)
+data_clean/master_schedule_rebuilt.csv
+
+# OS
+.DS_Store
+Thumbs.db

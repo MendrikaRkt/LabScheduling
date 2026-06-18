@@ -32,6 +32,207 @@ from datetime import datetime, timedelta
 from ortools.sat.python import cp_model
 import pandas as pd
 
+try:
+    import data_quality as _dq
+except Exception:  # le module QA est optionnel ; ne jamais casser l'import
+    _dq = None
+
+try:
+    import kpi_report as _kpi
+except Exception:  # le module KPI est optionnel ; ne jamais casser l'import
+    _kpi = None
+
+# Étape 6.5 — Reproductibilité & réglage du solveur (centralisés)
+RANDOM_SEED = 42            # graine fixe -> résultats reproductibles d'un run à l'autre
+SOLVER_RELATIVE_GAP = 0.02  # arrêt à 2 % de l'optimum prouvé -> temps maîtrisé
+SOLVER_LOG_PROGRESS = False # passer à True pour diagnostiquer la recherche
+
+# Fichiers SOURCES bruts (optionnels) pour la réconciliation de jointure (Étape 6.2).
+# S'ils sont présents à côté du master, on mesure la fuite aulario->master.
+ALUMNOS_SOURCE_CANDIDATES = (
+    'data_clean/report_AlumnosGruposCentroDecanos.xlsx',
+    'report_AlumnosGruposCentroDecanos.xlsx',
+)
+AULARIO_SOURCE_CANDIDATES = (
+    'data_clean/revisionAulario.xlsx',
+    'revisionAulario.xlsx',
+)
+
+
+def _first_existing(candidates):
+    """Renvoie le premier chemin existant parmi `candidates`, sinon None."""
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def configure_solver(solver, time_limit=None):
+    """Étape 6.5 — Applique un paramétrage solveur reproductible et maîtrisé.
+
+    Centralise random_seed / relative_gap_limit / log_search_progress /
+    max_time_in_seconds / num_search_workers pour TOUS les appels au solveur
+    (modèle principal ET modèle de repli), afin d'éviter la dérive de réglages.
+    """
+    p = solver.parameters
+    p.max_time_in_seconds = time_limit if time_limit is not None else SOLVER_TIME_LIMIT
+    p.num_search_workers = 8
+    p.random_seed = RANDOM_SEED
+    p.relative_gap_limit = SOLVER_RELATIVE_GAP
+    p.log_search_progress = SOLVER_LOG_PROGRESS
+    return solver
+
+
+def add_week_hints(model, week_vars, sessions):
+    """Étape 6.5 — Warm-start : suggère au solveur un étalement régulier des
+    semaines (réparti uniformément dans la fenêtre de chaque groupe, en
+    respectant l'ordre des séances). Les hints sont NON contraignants : ils
+    n'altèrent jamais la validité du modèle, ils accélèrent la convergence.
+    """
+    by_group = defaultdict(list)
+    for s in sessions:
+        by_group[(s['subject'], s['grupo'])].append(s)
+    n_hints = 0
+    for grp in by_group.values():
+        gsorted = sorted(grp, key=lambda x: x['session'])
+        n = len(gsorted)
+        if n == 0:
+            continue
+        lo = gsorted[0]['min_week']
+        hi = gsorted[0]['max_week']
+        span = max(1, hi - lo)
+        for k, s in enumerate(gsorted):
+            # semaine cible régulièrement espacée, bornée à [lo, hi]
+            target = lo + round(span * (k + 1) / (n + 1)) if n > 1 else (lo + hi) // 2
+            target = max(lo, min(hi, int(target)))
+            try:
+                model.AddHint(week_vars[s['id']], target)
+                n_hints += 1
+            except Exception:
+                pass
+    return n_hints
+
+
+# Étape 6.4 — Accumulateur de statistiques solveur (alimente les KPIs, §6.6).
+SOLVER_RUNS = []
+
+
+def record_solver_run(sem, label, status, solver, n_sessions, n_hints=0,
+                      recovered=False):
+    """Capture un run du solveur (statut, objectif, gap, temps) pour les KPIs."""
+    status_names = {
+        cp_model.OPTIMAL: "OPTIMAL", cp_model.FEASIBLE: "FEASIBLE",
+        cp_model.INFEASIBLE: "INFEASIBLE", cp_model.UNKNOWN: "UNKNOWN",
+        cp_model.MODEL_INVALID: "MODEL_INVALID",
+    }
+    entry = {
+        "semester": sem,
+        "label": label,
+        "status": status_names.get(status, str(status)),
+        "n_sessions": int(n_sessions),
+        "n_hints": int(n_hints),
+        "recovered": bool(recovered),
+        "wall_time_s": round(solver.WallTime(), 2),
+    }
+    try:
+        if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            entry["objective"] = solver.ObjectiveValue()
+            entry["best_bound"] = solver.BestObjectiveBound()
+            # gap relatif (proxy) : |obj - bound| / max(1, |obj|)
+            obj = solver.ObjectiveValue()
+            bound = solver.BestObjectiveBound()
+            entry["gap"] = round(abs(obj - bound) / max(1.0, abs(obj)), 4)
+    except Exception:
+        pass
+    SOLVER_RUNS.append(entry)
+    return entry
+
+
+def diagnose_infeasibility(sessions, sem, sem_holidays, label=""):
+    """Étape 6.4 — Diagnostic LISIBLE d'une infaisabilité.
+
+    Au lieu d'un simple « INFAISABLE », identifie les couples (salle|matière,
+    jour, bloc) SUR-SATURÉS : ceux qui exigent plus de séances que de semaines
+    disponibles dans la fenêtre (cause physique n°1 de l'audit §4.2). Écrit un
+    rapport et renvoie la liste des goulots.
+    """
+    bottlenecks = []
+
+    def _scan(group_iter, kind):
+        for key, grp in group_iter.items():
+            if len(grp) <= 1:
+                continue
+            ident, d, b = key
+            needed = len(grp)
+            min_w = min(s['min_week'] for s in grp)
+            max_w = max(s['max_week'] for s in grp)
+            valid = [w for w in range(min_w, max_w + 1)
+                     if (w, d) not in sem_holidays]
+            cap = len(valid)
+            if needed > cap:
+                bottlenecks.append({
+                    "kind": kind, "ident": ident,
+                    "day": DAYS[d] if 0 <= d < len(DAYS) else d,
+                    "block": BLOCK_LABELS.get(b, b),
+                    "needed": needed, "capacity": cap,
+                    "excess": needed - cap,
+                })
+
+    by_room = defaultdict(list)
+    for s in sessions:
+        for room in str(s['lab_rooms']).split(','):
+            room = room.strip()
+            if room:
+                by_room[(room, s['day_idx'], s['block_id'])].append(s)
+    by_subj = defaultdict(list)
+    for s in sessions:
+        by_subj[(s['subject'], s['day_idx'], s['block_id'])].append(s)
+
+    _scan(by_room, "SALLE")
+    _scan(by_subj, "MATIÈRE")
+    bottlenecks.sort(key=lambda x: x["excess"], reverse=True)
+
+    lines = [
+        "=" * 64,
+        f"  DIAGNOSTIC D'INFAISABILITÉ — S{sem} {label}".rstrip(),
+        "=" * 64,
+        f"  Sessions concernées : {len(sessions)}",
+    ]
+    if bottlenecks:
+        lines.append(f"  Goulots détectés    : {len(bottlenecks)} "
+                     f"(cause PHYSIQUE : capacité salle/créneau dépassée)")
+        lines.append("")
+        for bn in bottlenecks[:25]:
+            lines.append(
+                f"   [{bn['kind']:7s}] {str(bn['ident'])[:32]:32s} "
+                f"{bn['day']:10s} {bn['block']:12s} : "
+                f"{bn['needed']} séances / {bn['capacity']} semaines "
+                f"(excès {bn['excess']})"
+            )
+        lines.append("")
+        lines.append("  PISTES (cf. audit §4) : ouvrir un créneau/salle "
+                     "supplémentaire, élargir la fenêtre [min_week, max_week], "
+                     "ou réduire le nombre de groupes parallèles.")
+    else:
+        lines.append("  Aucun goulot capacité évident — cause probable :")
+        lines.append("   • conflits d'agendas étudiants (aucun créneau commun),")
+        lines.append("   • contraintes profs trop strictes,")
+        lines.append("   • fenêtre trop courte après retrait des jours fériés.")
+    lines.append("=" * 64)
+    report = "\n".join(lines)
+
+    try:
+        os.makedirs("reports", exist_ok=True)
+        suffix = f"_{label}" if label else ""
+        with open(f"reports/infeasibility_S{sem}{suffix}.txt", "w",
+                  encoding="utf-8") as fh:
+            fh.write(report)
+    except Exception:
+        pass
+
+    print(report)
+    return bottlenecks
+
 if sys.platform == 'win32':
     try:
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
@@ -3095,6 +3296,7 @@ def solve(all_groups):
     print_section("ÉTAPE 5 : Solveur CP-SAT")
 
     all_results = []
+    SOLVER_RUNS.clear()  # Étape 6.4/6.6 — repartir d'un journal solveur propre
 
     for sem in sorted(set(g['semester'] for g in all_groups)):
         sem_groups = [g for g in all_groups if g['semester'] == sem]
@@ -3334,16 +3536,20 @@ def solve(all_groups):
             model.Add(total == sum(var * w for var, w in objective_terms))
             model.Minimize(total)
 
+        # Étape 6.5 — Warm-start : injecter un étalement régulier comme hint.
+        n_hints = add_week_hints(model, week_vars, sessions)
+
         print(f"  Contraintes : C1={c1}, C4={c4}, C5={c5}, C8={c8}, "
               f"first_anchor={len(first_excess)}, last_anchor={len(last_deficit)}"
-              + (f", parity_groups={n_parity_groups}" if PARITY_ALTERNATION else ""))
+              + (f", parity_groups={n_parity_groups}" if PARITY_ALTERNATION else "")
+              + f", hints={n_hints}")
 
 
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = SOLVER_TIME_LIMIT
-        solver.parameters.num_search_workers = 8
+        # Étape 6.5 — Paramétrage reproductible & maîtrisé (centralisé).
+        solver = configure_solver(cp_model.CpSolver())
 
-        print(f"  [WAIT] Lancement (max {SOLVER_TIME_LIMIT}s)...")
+        print(f"  [WAIT] Lancement (max {SOLVER_TIME_LIMIT}s, seed={RANDOM_SEED}, "
+              f"gap={SOLVER_RELATIVE_GAP})...")
         status = solver.Solve(model)
 
         names = {cp_model.OPTIMAL: "OPTIMAL", cp_model.FEASIBLE: "FAISABLE",
@@ -3351,6 +3557,7 @@ def solve(all_groups):
 
         print(f"  Statut  : {names.get(status, '?')}")
         print(f"  Temps   : {solver.WallTime():.2f}s")
+        record_solver_run(sem, sem_label, status, solver, len(sessions), n_hints)
 
         if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
             print(f"  Pénalité: {solver.ObjectiveValue()}")
@@ -3377,6 +3584,9 @@ def solve(all_groups):
 
 
             print(f"  [WARN]  {sem_label} INFAISABLE — tentative de récupération automatique...")
+
+            # Étape 6.4 — diagnostic lisible AVANT la récupération.
+            diagnose_infeasibility(sessions, sem, sem_holidays, label="initial")
 
 
             oversaturated = []
@@ -3554,10 +3764,12 @@ def solve(all_groups):
                         model2.Add(total2 == sum(var * w for var, w in obj_terms2))
                         model2.Minimize(total2)
 
-                    solver2 = cp_model.CpSolver()
-                    solver2.parameters.max_time_in_seconds = SOLVER_TIME_LIMIT
-                    solver2.parameters.num_search_workers = 8
+                    # Étape 6.5 — même paramétrage reproductible pour le repli.
+                    nh2 = add_week_hints(model2, week_vars2, filtered_sessions)
+                    solver2 = configure_solver(cp_model.CpSolver())
                     status2 = solver2.Solve(model2)
+                    record_solver_run(sem, sem_label, status2, solver2,
+                                      len(filtered_sessions), nh2, recovered=True)
 
                     if status2 in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
                         print(f"  [OK] Récupération réussie : {len(filtered_sessions)} sessions planifiées")
@@ -3585,6 +3797,14 @@ def solve(all_groups):
                         print(f"  [FAIL] {sem_label} : infaisable même après récupération")
             else:
                 print(f"  [FAIL] {sem_label} : infaisable (aucun groupe à retirer)")
+
+    # Étape 6.6 — journaliser les stats solveur (statut, objectif, gap, temps).
+    try:
+        os.makedirs("reports", exist_ok=True)
+        with open("reports/solver_stats.json", "w", encoding="utf-8") as fh:
+            json.dump(SOLVER_RUNS, fh, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
     return pd.DataFrame(all_results) if all_results else None
 
@@ -4857,6 +5077,23 @@ def run_pipeline(df):
         print("\n  [FAIL] Aucun groupe forme.")
         return False
 
+    # --- QA données / modèle (Étape 6.2) ---------------------------------
+    # Couche qualité : intégrité du master, réconciliation de la jointure
+    # Excel et du regroupement (anti-fuite). Non bloquant par défaut.
+    dq_report = None
+    if _dq is not None:
+        try:
+            dq_report = _dq.run_data_quality_checks(
+                df,
+                subject_students,
+                all_groups,
+                alumnos_path=_first_existing(ALUMNOS_SOURCE_CANDIDATES),
+                aulario_path=_first_existing(AULARIO_SOURCE_CANDIDATES),
+                strict=False,
+            )
+        except Exception as exc:  # ne casse jamais le pipeline
+            print(f"  [QA][WARN] contrôle qualité ignoré : {exc}")
+
     audit_teacher_max_days(all_groups, professors_of_subject)
     results_df = solve(all_groups)
 
@@ -4867,6 +5104,21 @@ def run_pipeline(df):
     name_lookup, program_lookup = build_output_lookups(df)
     generate_outputs(results_df, all_groups, name_lookup, program_lookup, subject_students)
     analyze(results_df)
+
+    # --- Mesure de la qualité du planning (Étape 6.6) --------------------
+    # KPIs objectifs à chaque exécution (placement, équilibrage, salles,
+    # solveur). Écrit reports/kpi_report.{json,txt}. Non bloquant.
+    if _kpi is not None:
+        try:
+            _kpi.generate_kpi_report(
+                results_df,
+                all_groups,
+                dq_report=dq_report,
+                solver_runs=list(SOLVER_RUNS),
+            )
+        except Exception as exc:
+            print(f"  [KPI][WARN] rapport KPI ignoré : {exc}")
+
     run_daniel_format_generation()
     return True
 
