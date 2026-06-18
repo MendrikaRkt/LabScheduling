@@ -1844,44 +1844,175 @@ elif page == t('nav_config'):
     # TAB 4: Teacher availability
     # ════════════════════════════════════════
     with tab4:
-        st.caption("Block days/times when teachers CANNOT attend lab sessions.")
+        st.markdown("### 👨‍🏫 Teacher Availability Configuration")
+        st.caption("Configure teacher availability constraints and preferences for optimal scheduling.")
+        
+        try:
+            import pandas as _pd
+            _pbdf = _pd.read_csv('data_clean/optimization/professor_busy.csv')
+            _prof_names = sorted(_pbdf['professor_id'].dropna().astype(str).unique().tolist())
+        except Exception:
+            _prof_names = []
 
-        with st.expander("Add teacher restriction"):
-            tc1, tc2, tc3, tc4 = st.columns([2, 1, 1, 1])
+        _BLOCKS_UI = ["08:30-10:30", "10:30-12:30", "12:30-14:30",
+                      "15:00-17:00", "17:00-19:00", "19:00-21:00"]
+        _DAYS_FULL = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+
+        # ═══════════════════════════════════════════════════════════
+        # OPTION 1: Days per week CANNOT be used by teacher
+        # ═══════════════════════════════════════════════════════════
+        st.markdown("---")
+        st.markdown("#### 📅 Option 1: Days per week unavailable")
+        st.caption("🚫 Block entire weekdays when a teacher is never available (hard constraint)")
+        
+        st.session_state.advanced_config.setdefault('teacher_unavailable_weekdays', {})
+        
+        with st.expander("➕ Add unavailable weekday(s) for a teacher", expanded=False):
+            wd_c1, wd_c2, wd_c3 = st.columns([2, 2, 1])
+            with wd_c1:
+                if _prof_names:
+                    wd_teacher = st.selectbox("Teacher", _prof_names, key="wd_teacher_sel")
+                else:
+                    wd_teacher = st.text_input("Teacher name", key="wd_teacher_txt",
+                        help="Enter teacher name manually")
+            with wd_c2:
+                wd_days = st.multiselect("Unavailable weekday(s)", _DAYS_FULL, key="wd_days_sel",
+                    help="Select one or more days when this teacher cannot work")
+            with wd_c3:
+                st.write("")
+                st.write("")
+                if st.button("Add", key="add_wd_v1"):
+                    if wd_teacher and wd_days:
+                        _store = st.session_state.advanced_config['teacher_unavailable_weekdays']
+                        _store.setdefault(wd_teacher, [])
+                        for day in wd_days:
+                            if day not in _store[wd_teacher]:
+                                _store[wd_teacher].append(day)
+                        _store[wd_teacher] = sorted(_store[wd_teacher], key=lambda d: _DAYS_FULL.index(d))
+                        st.rerun()
+
+        if st.session_state.advanced_config['teacher_unavailable_weekdays']:
+            st.markdown("**🚫 Current unavailable weekdays:**")
+            for teacher, days in list(st.session_state.advanced_config['teacher_unavailable_weekdays'].items()):
+                cols = st.columns([4, 1])
+                with cols[0]:
+                    st.markdown(f"**{teacher}** → Never available on: **{', '.join(days)}**")
+                with cols[1]:
+                    if st.button("🗑️ Remove", key=f"del_wd_{teacher}"):
+                        del st.session_state.advanced_config['teacher_unavailable_weekdays'][teacher]
+                        st.rerun()
+        else:
+            st.info("ℹ️ No unavailable weekdays configured")
+
+        # ═══════════════════════════════════════════════════════════
+        # OPTION 2: Exact day/time CANNOT be used by teacher
+        # ═══════════════════════════════════════════════════════════
+        st.markdown("---")
+        st.markdown("#### 🕒 Option 2: Specific day/time slots unavailable")
+        st.caption("🚫 Block specific time slots on specific days (hard constraint)")
+        
+        st.session_state.advanced_config.setdefault('teacher_unavailability', {})
+        
+        with st.expander("➕ Add unavailable time slot", expanded=False):
+            tc1, tc2, tc3, tc4 = st.columns([2, 1.5, 1.5, 1])
             with tc1:
-                teacher_name = st.text_input("Teacher name", key="teacher_add_v3")
+                if _prof_names:
+                    teacher_name = st.selectbox("Teacher", _prof_names, key="teacher_sel_v5")
+                else:
+                    teacher_name = st.text_input("Teacher name", key="teacher_txt_v5",
+                        help="Enter teacher name manually")
             with tc2:
-                teacher_day = st.selectbox("Day",
-                    ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"],
-                    key="t_day_v3")
+                teacher_day = st.selectbox("Day", _DAYS_FULL, key="t_day_v4")
             with tc3:
-                teacher_block = st.selectbox("Time",
-                    ["08:30-10:30", "10:30-12:30", "12:30-14:30",
-                     "15:00-17:00", "17:00-19:00"], key="t_block_v3")
+                teacher_block = st.selectbox("Time slot",
+                    ["(All day)"] + _BLOCKS_UI, key="t_block_v4",
+                    help="Select 'All day' to block all time slots on this day")
             with tc4:
                 st.write("")
                 st.write("")
-                if st.button("Add", key="add_teacher_v3"):
+                if st.button("Add", key="add_teacher_v4"):
                     if teacher_name:
-                        if teacher_name not in st.session_state.advanced_config['teacher_unavailability']:
-                            st.session_state.advanced_config['teacher_unavailability'][teacher_name] = []
-                        slot = f"{teacher_day} {teacher_block}"
-                        if slot not in st.session_state.advanced_config['teacher_unavailability'][teacher_name]:
-                            st.session_state.advanced_config['teacher_unavailability'][teacher_name].append(slot)
+                        _store = st.session_state.advanced_config['teacher_unavailability']
+                        _store.setdefault(teacher_name, [])
+                        _blocks = _BLOCKS_UI if teacher_block == "(All day)" else [teacher_block]
+                        _changed = False
+                        for _b in _blocks:
+                            _slot = f"{teacher_day} {_b}"
+                            if _slot not in _store[teacher_name]:
+                                _store[teacher_name].append(_slot)
+                                _changed = True
+                        if _changed:
                             st.rerun()
 
         if st.session_state.advanced_config['teacher_unavailability']:
-            st.markdown("**Current restrictions:**")
+            st.markdown("**🚫 Current unavailable time slots:**")
             for teacher, slots in list(st.session_state.advanced_config['teacher_unavailability'].items()):
-                cols = st.columns([3, 1])
+                cols = st.columns([4, 1])
                 with cols[0]:
-                    st.markdown(f"**{teacher}** — {', '.join(slots)}")
+                    st.markdown(f"**{teacher}** → {len(slots)} slot(s): {', '.join(slots[:5])}" + 
+                               (f" *(+{len(slots)-5} more)*" if len(slots) > 5 else ""))
                 with cols[1]:
-                    if st.button("", key=f"del_t_v3_{teacher}"):
+                    if st.button("🗑️ Remove", key=f"del_t_v4_{teacher}"):
                         del st.session_state.advanced_config['teacher_unavailability'][teacher]
                         st.rerun()
         else:
-            st.info("No teacher restrictions configured")
+            st.info("ℹ️ No unavailable time slots configured")
+
+        # ═══════════════════════════════════════════════════════════
+        # OPTION 3: Preferred time range by teacher
+        # ═══════════════════════════════════════════════════════════
+        st.markdown("---")
+        st.markdown("#### ⭐ Option 3: Preferred time range")
+        st.caption("✅ Soft preferences: optimizer will try to respect these but won't block if impossible")
+        
+        st.session_state.advanced_config.setdefault('teacher_preferences', {})
+        
+        with st.expander("➕ Set teacher preferences", expanded=False):
+            pref_c1, pref_c2, pref_c3, pref_c4 = st.columns([2, 1, 2, 1])
+            with pref_c1:
+                if _prof_names:
+                    pref_teacher = st.selectbox("Teacher", _prof_names, key="pref_teacher_v2")
+                else:
+                    pref_teacher = st.text_input("Teacher", key="pref_teacher_txt_v2")
+            with pref_c2:
+                pref_max_days = st.number_input("Max days/week", 0, 5, 0, key="pref_max_days_v2",
+                    help="0 = no limit. Soft constraint: warns if exceeded but doesn't block.")
+            with pref_c3:
+                pref_hours = st.multiselect("Preferred time slots", _BLOCKS_UI, key="pref_hours_v2",
+                    help="Time slots the teacher prefers. Optimizer will penalize assignments outside this range.")
+            with pref_c4:
+                st.write("")
+                st.write("")
+                if st.button("Set", key="pref_set_v2") and pref_teacher:
+                    _prefs = {}
+                    if pref_max_days > 0:
+                        _prefs['max_days_per_week'] = int(pref_max_days)
+                    if pref_hours:
+                        _prefs['preferred_blocks'] = sorted(_BLOCKS_UI.index(b) + 1 for b in pref_hours)
+                    if _prefs:
+                        st.session_state.advanced_config['teacher_preferences'][pref_teacher] = _prefs
+                    else:
+                        st.session_state.advanced_config['teacher_preferences'].pop(pref_teacher, None)
+                    st.rerun()
+
+        if st.session_state.advanced_config['teacher_preferences']:
+            st.markdown("**⭐ Current teacher preferences:**")
+            for teacher, prefs in list(st.session_state.advanced_config['teacher_preferences'].items()):
+                cols = st.columns([4, 1])
+                _desc_parts = []
+                if prefs.get('max_days_per_week'):
+                    _desc_parts.append(f"\u2264{prefs['max_days_per_week']} days/week")
+                if prefs.get('preferred_blocks'):
+                    _hours = [_BLOCKS_UI[b-1] for b in prefs['preferred_blocks']]
+                    _desc_parts.append(f"Prefers: {', '.join(_hours)}")
+                with cols[0]:
+                    st.markdown(f"**{teacher}** → {' · '.join(_desc_parts)}")
+                with cols[1]:
+                    if st.button("🗑️ Remove", key=f"del_pref_v2_{teacher}"):
+                        st.session_state.advanced_config['teacher_preferences'].pop(teacher)
+                        st.rerun()
+        else:
+            st.info("ℹ️ No teacher preferences configured")
 
     # ─── Wizard navigation ───
     n_overrides_nav = len(st.session_state.advanced_config.get('subject_overrides', {}))
@@ -1973,6 +2104,7 @@ elif page == t('nav_optimize'):
                 'allow_morning_y2y4': st.session_state.advanced_config.get('allow_morning_y2y4', False),
             },
             'teachers': st.session_state.advanced_config.get('teacher_unavailability', {}),
+            'teacher_rules': st.session_state.advanced_config.get('teacher_rules', {}),
             'meta': {
                 'saved_at': datetime.now().isoformat(),
                 'app_version': '1.0.0',
@@ -3150,19 +3282,62 @@ elif page == t('nav_integrity'):
         shown += 1
 
     if profs is not None:
-        st.markdown("**Professors** — subject · eligible teachers (all shown)")
+        # Lab credits per professor (1 P credit = 5 lab sessions) — feature #6 output.
+        import unicodedata as _ud
+        def _norm_pn(x):
+            x = _ud.normalize("NFKD", str(x))
+            x = "".join(c for c in x if not _ud.combining(c))
+            return " ".join(sorted(x.lower().replace(",", " ").split()))
+        _credit_by_norm = {}
+        for _p in ("professor_lab_load.csv",
+                   "outputs/optimization/professor_lab_load.csv"):
+            if os.path.exists(_p):
+                try:
+                    _ll = pd.read_csv(_p)
+                    for _, _r in _ll.iterrows():
+                        _credit_by_norm[_norm_pn(_r.get("prof_name", ""))] = {
+                            "cr": float(_r.get("lab_credits", 0) or 0),
+                            "sess": int(float(_r.get("lab_sessions", 0) or 0)),
+                            "over": bool(_r.get("over_budget", False)),
+                        }
+                    break
+                except Exception:
+                    pass
+
+        st.markdown("**Professors** — subject · eligible teachers · lab credits → sessions "
+                    "(1 P credit = 5 sessions)")
         for subj in sorted(sessions["subject"].unique()):
             names = _names_for(str(subj))
             if not names:
                 continue
-            # one chip per professor — ALL of them, no truncation
+            # one chip per professor — name + lab-credit load when known
             chips = ""
             for nm in names:
+                _ci = _credit_by_norm.get(_norm_pn(nm))
+                if _ci and _ci["cr"] > 0:
+                    _flag = " \u26a0" if _ci["over"] else ""
+                    _load = (f"<span style='color:#6fb6e8;font-weight:600;'> · "
+                             f"{_ci['cr']:.0f} cr P \u2192 {_ci['sess']} sess{_flag}</span>")
+                else:
+                    _load = ""
                 chips += (
                     f"<span style='display:inline-block;background:var(--bg-elevated,#1b2440);"
                     f"border:1px solid var(--border,#2c3658);border-radius:7px;"
                     f"padding:2px 8px;margin:2px 4px 2px 0;font-size:0.78rem;"
-                    f"color:var(--text-primary,#e6ecf5);'>{nm}</span>"
+                    f"color:var(--text-primary,#e6ecf5);'>{nm}{_load}</span>"
+                )
+            # scheduled slots for this subject (where data actually links to time)
+            _ss = sessions[sessions["subject"] == subj]
+            _slot_bits = ""
+            if len(_ss):
+                _agg = (_ss.groupby(["day", "time_block"]).size()
+                        .sort_values(ascending=False))
+                _parts = [f"{d} {tb} \u00d7{n}" for (d, tb), n in _agg.items()]
+                _slot_bits = (
+                    "<div style='margin-top:0.45rem;padding-top:0.4rem;"
+                    "border-top:1px solid var(--border,#2c365844);font-size:0.73rem;"
+                    "color:var(--text-secondary,#9fb0c8);'>"
+                    "\U0001F4C5 scheduled sessions: " + " · ".join(_parts) + "</div>"
                 )
             st.markdown(
                 f"<div style='padding:0.7rem 0.95rem;border-radius:10px;margin-bottom:0.6rem;"
@@ -3172,7 +3347,7 @@ elif page == t('nav_integrity'):
                 f"{str(subj).split('_',1)[-1]}</span>"
                 f"<span style='font-size:0.72rem;font-weight:600;color:#22c55e;border:1px solid #22c55e55;"
                 f"background:#22c55e14;border-radius:6px;padding:1px 8px;'>{len(names)} eligible</span>"
-                f"</div>{chips}</div>",
+                f"</div>{chips}{_slot_bits}</div>",
                 unsafe_allow_html=True,
             )
 
