@@ -1476,5 +1476,371 @@ def build_vista_profesor_sheet(workbook, schedule_df, subjects, professor_lookup
 
 
 # =============================================================================
+# VUE PROFESSEUR (consolidée) — Partie 1
+# =============================================================================
+#
+# Cette section ajoute une NOUVELLE feuille « Vue Professeur » à chaque classeur
+# de niveau (Primero / Segundo / Tercero, S1 et S2). Contrairement à la feuille
+# « Vista profesor » existante (une GRILLE horaire par MATIÈRE), cette feuille est
+# CENTRÉE SUR LE PROFESSEUR : une ligne par (professeur, matière) avec :
+#   • le nom du professeur,
+#   • la/les matière(s) et le(s) groupe(s) qu'il encadre,
+#   • les crédits assignés par matière (lus dans « Asignación docente »),
+#   • le nombre de séances de labo planifiées par matière,
+#   • l'horaire détaillé des séances (jours / heures / salle).
+#
+# Tout est en FRANÇAIS (demande explicite). La convention 1 crédit P = 5 séances
+# est rappelée dans l'en-tête de la feuille.
+# =============================================================================
+
+CREDIT_TO_SESSIONS = 5  # 1 crédit de laboratoire (P) = 5 séances (convention coordinateur)
+
+# En-têtes et styles dédiés à la Vue Professeur (palette sobre, lisible)
+VP_HEADER_FILL  = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
+VP_HEADER_FONT  = Font(name='Calibri', size=10, bold=True, color='FFFFFF')
+VP_TITLE_FONT   = Font(name='Calibri', size=13, bold=True, color='1F4E78')
+VP_NOTE_FONT    = Font(name='Calibri', size=9, italic=True, color='595959')
+VP_PROF_FONT    = Font(name='Calibri', size=10, bold=True)
+VP_CELL_FONT    = Font(name='Calibri', size=9)
+VP_OK_FILL      = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
+VP_WARN_FILL    = PatternFill(start_color='FCE4D6', end_color='FCE4D6', fill_type='solid')
+VP_BAND_FILL    = PatternFill(start_color='F2F6FC', end_color='F2F6FC', fill_type='solid')
+
+
+def _find_asignacion_file():
+    """Localise le classeur « Asignacion_*.xlsx » (source des crédits T/P).
+
+    Cherche, dans l'ordre :
+      1) une éventuelle constante de module ASIGNACION_PATH (re-pointée par
+         excel_export, comme les autres chemins, si elle existe) ;
+      2) les noms usuels via app_paths.resolve_existing ;
+      3) une recherche récursive dans l'arborescence de travail.
+
+    Renvoie un chemin existant ou None (la feuille affichera alors « N/D »).
+    """
+    common = [
+        'Asignacion_2025-2026_v5.xlsx',
+        'Asignacion_2025-2026_v5.xlsx'.replace('-', '_'),
+        'data_clean/Asignacion_2025-2026_v5.xlsx',
+        'data/Asignacion_2025-2026_v5.xlsx',
+        '/home/ubuntu/Uploads/Asignacion_2025-2026_v5.xlsx',
+        '/home/ubuntu/Shared/Uploads/Asignacion_2025-2026_v5.xlsx',
+        '/home/ubuntu/lab_project/Asignacion_2025-2026_v5.xlsx',
+    ]
+    g = globals().get('ASIGNACION_PATH')
+    if g and os.path.exists(g):
+        return g
+    # via app_paths
+    try:
+        import app_paths as _ap
+        for rel in ([g] if g else []) + common:
+            if not rel:
+                continue
+            r = _ap.resolve_existing(rel)
+            if r and os.path.exists(r):
+                return r
+    except Exception:
+        pass
+    # chemins relatifs bruts
+    for rel in common:
+        if os.path.exists(rel):
+            return rel
+    # recherche récursive : tout fichier commençant par « Asignacion » et .xlsx
+    search_roots = []
+    try:
+        import app_paths as _ap2
+        ws = getattr(_ap2, 'WORKSPACE', None) or _ap2.workspace_path()
+        ws = os.path.dirname(ws) if os.path.splitext(str(ws))[1] else str(ws)
+        search_roots.append(ws)
+    except Exception:
+        pass
+    search_roots.append(os.getcwd())
+    seen = set()
+    for root in search_roots:
+        if not root or root in seen or not os.path.isdir(root):
+            continue
+        seen.add(root)
+        for dirpath, _dirs, files in os.walk(root):
+            for f in files:
+                fl = f.lower()
+                if fl.startswith('asignacion') and fl.endswith('.xlsx'):
+                    return os.path.join(dirpath, f)
+    return None
+
+
+def _get_lab_config():
+    """Renvoie le LAB_CONFIG du pipeline (mots-clés de mapping matière→Asignación).
+
+    Importé paresseusement : dans l'application, pipeline.py est déjà chargé.
+    En cas d'échec (ortools absent dans un contexte isolé), on renvoie {} et le
+    mapping se rabat sur une correspondance par nom dépouillé du préfixe S1_/S2_.
+    """
+    try:
+        import pipeline as _P
+        return getattr(_P, 'LAB_CONFIG', {}) or {}
+    except Exception:
+        return {}
+
+
+def _load_professor_lab_credits():
+    """Charge les crédits de LABORATOIRE (caractère « P ») par professeur et matière.
+
+    Renvoie un dict :
+        { matière_Asignación : { prof_label : crédits_P (float) } }
+    et un dict de mapping inverse pratique :
+        { matière_Asignación : "Prof A; Prof B" }  (noms des encadrants P)
+
+    En cas d'absence du fichier Asignación ou d'erreur, renvoie ({}, {}) : la
+    feuille s'affichera alors avec « N/D » pour les crédits (jamais d'exception).
+    """
+    fp = _find_asignacion_file()
+    if not fp:
+        print('    [WARN] Vue Professeur : fichier Asignación introuvable — crédits = N/D')
+        return {}, {}
+    try:
+        import professor_credits as _pc
+        assign = _pc.parse_assignment(fp)      # offering_id, subject, prof_code, credits, char
+        budgets = _pc.load_budgets(fp)         # prof_code -> prof_name
+        code_to_name = dict(zip(budgets['prof_code'], budgets['prof_name']))
+    except Exception as exc:
+        print(f'    [WARN] Vue Professeur : lecture Asignación impossible ({exc}) — crédits = N/D')
+        return {}, {}
+
+    def _label(code):
+        name = code_to_name.get(code)
+        if name and str(name).strip() and str(name).strip().lower() != str(code).strip().lower():
+            return f"{name} ({code})"
+        return str(code)
+
+    labP = assign[assign['char'] == 'P']
+    credits_by_subject = {}
+    names_by_subject = {}
+    for subj, grp in labP.groupby('subject'):
+        per_prof = grp.groupby('prof_code')['credits'].sum()
+        d = {}
+        names = []
+        for code, cr in per_prof.items():
+            lab = _label(code)
+            d[lab] = float(cr)
+            names.append(lab)
+        credits_by_subject[str(subj)] = d
+        names_by_subject[str(subj)] = '; '.join(names)
+    return credits_by_subject, names_by_subject
+
+
+def _map_sched_to_asignacion(sched_subject, asignacion_subjects, lab_config):
+    """Pour une matière planifiée (ex. « S1_Física »), renvoie la liste des
+    matières de l'Asignación correspondantes, via les mots-clés de LAB_CONFIG.
+
+    Repli : correspondance exacte sur le nom dépouillé du préfixe si aucun
+    mot-clé ne correspond (ou si LAB_CONFIG est indisponible).
+    """
+    target = _normalize_subject_key(sched_subject)
+    # index nom dépouillé -> clé LAB_CONFIG
+    stripped_to_cfg = {}
+    for k in lab_config:
+        stripped_to_cfg[_normalize_subject_key(k)] = k
+    cfg_key = stripped_to_cfg.get(target)
+    matched = []
+    if cfg_key is not None:
+        cfg = lab_config[cfg_key]
+        kws = [_normalize_subject_key(k) for k in cfg.get('keywords', [])]
+        exc = [_normalize_subject_key(e) for e in cfg.get('keyword_exclude', [])]
+        for asub in asignacion_subjects:
+            na = _normalize_subject_key(asub)
+            if any(k and k in na for k in kws) and not any(e and e in na for e in exc):
+                matched.append(asub)
+    if not matched:
+        for asub in asignacion_subjects:
+            if _normalize_subject_key(asub) == target:
+                matched.append(asub)
+    return matched
+
+
+def _format_session_timetable(subject_sessions):
+    """Construit l'horaire détaillé des séances d'une matière, par groupe.
+
+    subject_sessions : DataFrame des lignes de planning pour UNE matière.
+    Renvoie une chaîne lisible, p.ex. :
+        « G1 : Lunes 12:30-14:30 (Ciencias Exp. I) — 12 séances ; G2 : Martes ... »
+
+    On regroupe par (groupe, jour, créneau, salle) pour ne pas répéter chaque
+    semaine, et on indique le nombre de séances de ce créneau récurrent.
+    """
+    if len(subject_sessions) == 0:
+        return ''
+    parts = []
+    # tri par numéro de groupe
+    try:
+        groups = sorted(subject_sessions['grupo'].dropna().unique(),
+                        key=lambda x: (float(x) if str(x).replace('.', '', 1).isdigit() else 1e9, str(x)))
+    except Exception:
+        groups = list(subject_sessions['grupo'].dropna().unique())
+    for g in groups:
+        gs = subject_sessions[subject_sessions['grupo'] == g]
+        slot_parts = []
+        # créneaux récurrents distincts pour ce groupe
+        grouping_cols = [c for c in ('day', 'time_block', 'lab_rooms') if c in gs.columns]
+        if grouping_cols:
+            agg = gs.groupby(grouping_cols).size().reset_index(name='n')
+            for _, row in agg.iterrows():
+                day = str(row.get('day', '')).strip()
+                tb = str(row.get('time_block', '')).strip()
+                room = str(row.get('lab_rooms', '')).strip()
+                room_disp = display_lab_name(room) if room and room.lower() != 'nan' else ''
+                n = int(row['n'])
+                seg = f"{day} {tb}".strip()
+                if room_disp:
+                    seg += f" ({room_disp})"
+                seg += f" — {n} séance{'s' if n > 1 else ''}"
+                slot_parts.append(seg)
+        try:
+            g_disp = int(float(g))
+        except Exception:
+            g_disp = g
+        parts.append(f"G{g_disp} : " + " / ".join(slot_parts))
+    return " ; ".join(parts)
+
+
+def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
+                                           credits_by_subject=None,
+                                           names_by_subject=None):
+    """Construit la feuille « Vue Professeur » (consolidée, centrée professeur).
+
+    Une ligne par (professeur, matière) pour les matières de CE niveau, avec :
+        Professeur | Matière | Crédits assignés (P) | Sessions attendues (créd×5)
+        | Nº groupes | Sessions planifiées | Horaire des séances
+
+    Arguments :
+        workbook      : classeur openpyxl en cours de construction.
+        schedule_df   : planning du niveau (déjà filtré sur ses matières).
+        subjects      : liste des noms de matières du niveau (préfixés S1_/S2_).
+        credits_by_subject / names_by_subject : pré-chargés une seule fois par
+            excel_export (sinon chargés ici). Voir _load_professor_lab_credits().
+
+    Robustesse : si l'Asignación est absente, les crédits affichent « N/D » et
+    aucune exception n'est levée (la feuille reste générée).
+    """
+    worksheet = workbook.create_sheet('Vue Professeur')
+
+    # Chargement des crédits si non fournis
+    if credits_by_subject is None or names_by_subject is None:
+        credits_by_subject, names_by_subject = _load_professor_lab_credits()
+
+    lab_config = _get_lab_config()
+    asignacion_subjects = list(credits_by_subject.keys())
+
+    # ---- Titre + note méthodologique ----
+    title = worksheet.cell(row=1, column=1,
+                           value='Vue Professeur — répartition des séances de laboratoire')
+    title.font = VP_TITLE_FONT
+    note = worksheet.cell(
+        row=2, column=1,
+        value=("Convention : 1 crédit de laboratoire (P) = 5 séances. "
+               "Les séances et l'horaire sont au niveau de la MATIÈRE (co-encadrement fréquent : "
+               "l'optimiseur garantit qu'un professeur habilité est libre, sans nommer un encadrant par séance). "
+               "Crédits « N/D » = fichier Asignación non disponible."))
+    note.font = VP_NOTE_FONT
+
+    if schedule_df is None or len(schedule_df) == 0:
+        worksheet.cell(row=4, column=1,
+                       value='Aucune séance planifiée pour ce niveau.').font = VP_CELL_FONT
+        worksheet.column_dimensions['A'].width = 60
+        return
+
+    # ---- En-têtes du tableau ----
+    headers = [
+        'Professeur', 'Matière', 'Crédits assignés (P)', 'Sessions attendues (créd×5)',
+        'Nº groupes', 'Sessions planifiées (matière)', 'Horaire des séances (jour / heure / salle)',
+    ]
+    header_row = 4
+    for j, h in enumerate(headers, start=1):
+        c = write_bordered_cell(worksheet, header_row, j, h,
+                                VP_HEADER_FONT, VP_HEADER_FILL, CENTER_ALIGNMENT)
+
+    # ---- Construire les lignes (professeur, matière) ----
+    # Pour chaque matière planifiée du niveau, retrouver les profs P et leurs crédits.
+    # IMPORTANT : « Sessions planifiées » est un total AU NIVEAU DE LA MATIÈRE (les
+    # séances sont partagées entre les co-encadrants). L'état OK / Écart est donc
+    # calculé au niveau de la MATIÈRE : (Σ crédits P de la matière × 5) vs planifié.
+    # Chaque ligne professeur affiche SES crédits et SES séances attendues, mais la
+    # couleur OK/Écart reflète la cohérence globale de la matière (identique pour
+    # tous les professeurs de cette matière), ce qui évite un faux « écart » par ligne.
+    rows = []  # (prof_label, matiere_disp, credits, expected, n_groups, planned, horaire, etat)
+    scheduled_present = sorted(set(s for s in subjects
+                                   if s in schedule_df['subject'].unique()))
+    for sched in scheduled_present:
+        subj_sessions = schedule_df[schedule_df['subject'] == sched]
+        planned = int(len(subj_sessions))
+        n_groups = int(subj_sessions['grupo'].nunique()) if 'grupo' in subj_sessions.columns else 0
+        horaire = _format_session_timetable(subj_sessions)
+        matiere_disp = strip_semester_prefix(sched)
+
+        asig_subs = _map_sched_to_asignacion(sched, asignacion_subjects, lab_config)
+        # agrège les crédits P par professeur sur l'ensemble des matières Asignación liées
+        prof_credits = defaultdict(float)
+        for asub in asig_subs:
+            for prof_label, cr in credits_by_subject.get(asub, {}).items():
+                prof_credits[prof_label] += cr
+
+        # État au niveau matière : Σ crédits P × 5 comparé au planifié
+        subj_total_credits = sum(prof_credits.values())
+        subj_expected = subj_total_credits * CREDIT_TO_SESSIONS
+        if prof_credits:
+            subj_etat = 'OK' if abs(planned - subj_expected) < 1e-6 else 'Écart'
+            for prof_label in sorted(prof_credits):
+                cr = prof_credits[prof_label]
+                expected = cr * CREDIT_TO_SESSIONS
+                rows.append((prof_label, matiere_disp, round(cr, 2),
+                             round(expected, 1), n_groups, planned, horaire, subj_etat))
+        elif credits_by_subject:
+            # Pas de crédit P trouvé (matière budgétée en théorie) : on l'indique.
+            rows.append(('— (aucun crédit P assigné)', matiere_disp, 0.0, 0.0,
+                         n_groups, planned, horaire, 'Sans crédit P'))
+        else:
+            # Asignación indisponible : crédits N/D
+            rows.append(('N/D', matiere_disp, 'N/D', 'N/D',
+                         n_groups, planned, horaire, ''))
+
+    # Tri : par professeur puis matière
+    rows.sort(key=lambda r: (str(r[0]), str(r[1])))
+
+    # ---- Écriture des lignes, avec alternance de bande par professeur ----
+    current_row = header_row + 1
+    prev_prof = None
+    band = False
+    for (prof_label, matiere_disp, cr, expected, n_groups, planned, horaire, etat) in rows:
+        if prof_label != prev_prof:
+            band = not band
+            prev_prof = prof_label
+        row_fill = VP_BAND_FILL if band else None
+        # cellule d'état pilote la couleur (OK vert / écart orange)
+        etat_fill = None
+        if etat == 'OK':
+            etat_fill = VP_OK_FILL
+        elif etat in ('Écart', 'Sans crédit P'):
+            etat_fill = VP_WARN_FILL
+
+        values = [prof_label, matiere_disp, cr, expected, n_groups, planned, horaire]
+        for j, val in enumerate(values, start=1):
+            font = VP_PROF_FONT if j == 1 else VP_CELL_FONT
+            align = WRAP_TOP_ALIGNMENT if j == 7 else (LEFT_ALIGNMENT if j <= 2 else CENTER_ALIGNMENT)
+            fill = row_fill
+            write_bordered_cell(worksheet, current_row, j, val, font, fill, align)
+        # surligne légèrement les colonnes chiffrées en cas d'écart
+        if etat_fill:
+            for j in (3, 4, 6):
+                worksheet.cell(row=current_row, column=j).fill = etat_fill
+        worksheet.row_dimensions[current_row].height = 30
+        current_row += 1
+
+    # ---- Largeurs de colonnes + figeage des en-têtes ----
+    widths = [30, 28, 16, 16, 10, 16, 70]
+    for j, w in enumerate(widths, start=1):
+        worksheet.column_dimensions[get_column_letter(j)].width = w
+    worksheet.freeze_panes = f'A{header_row + 1}'
+
+
+# =============================================================================
 # MAIN
 # =============================================================================
