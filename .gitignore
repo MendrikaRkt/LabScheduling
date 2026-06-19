@@ -15,6 +15,17 @@ reports/
 
 # Masters reconstruits localement (le master canonique vient de l'ETL)
 data_clean/master_schedule_rebuilt.csv
+data_clean/optimization/
+
+# Données source volumineuses (ne pas versionner — fournies hors dépôt)
+Asignacion_*.xlsx
+
+# Sorties générées à l'exécution (plannings, snapshots de versions)
+outputs/
+versions/
+
+# Sous-produit régénérable de professor_credits.py (assignation complète)
+professor_assignment.csv
 
 # OS
 .DS_Store

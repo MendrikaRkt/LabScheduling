@@ -1,0 +1,177 @@
+prof_code,prof_name,lab_credits,lab_sessions,theory_credits,total_assigned,budget,budget_source,margin,over_budget,src_total_credits
+APM,"Parody Martín, Álvaro",16.0,80.0,9.0,25.0,24.0,fichier,-1.0,True,25.0
+PVA,Patricio Alejandro Venegas Aravena,10.0,50.0,12.0,22.0,,absent,,False,22.0
+CMR,"Merchán Riveros, María Camila",10.0,50.0,4.0,14.0,,absent,,False,14.0
+RFC,"Fernández del Castillo, Rafael",8.0,40.0,14.0,22.0,24.0,fichier,2.0,False,22.0
+SBT,"Blanco Trejo, Sergio",7.0,35.0,14.6,21.6,24.0,fichier,2.3999999999999986,False,21.6
+PFM,"Ferrada Martínez, Pablo",6.8,34.0,18.0,24.8,24.0,fichier,-0.8000000000000007,True,24.8
+MGO,Manuel Gantiva Osorio,6.4,32.0,2.0,8.4,12.0,fichier,3.5999999999999996,False,8.4
+AVG,"Valverde González, Ángel de Jesús",6.0,30.0,19.0,25.0,24.0,fichier,-1.0,True,25.0
+MAP,"Parrales Borrego, Miguel Ángel",6.0,30.0,18.0,24.0,24.0,fichier,0.0,False,24.0
+ASA,"Sandoval Amador, Anderson",6.0,30.0,0.0,6.0,6.0,fichier,0.0,False,6.0
+DAG,Daniel Álvarez Lorenzo,5.4,27.0,6.0,11.4,24.0,fichier,12.6,False,11.4
+JMS,"Moreno Soto, Javier",5.0,25.0,21.0,26.0,24.0,fichier,-2.0,True,26.0
+BSP,Beatriz Soto Portillo,5.0,25.0,18.25,23.25,12.0,fichier,-11.25,True,23.25
+JSO,"Salvador Ortíz, Jose Ramón",4.0,20.0,21.2,25.2,24.0,fichier,-1.1999999999999993,True,25.200000000000003
+ALS,Alessio Zuliani,3.6,18.0,20.5,24.1,24.0,fichier,-0.10000000000000142,True,24.1
+BRJ,"Ronquillo Japón, Bernardo",3.2,16.0,12.0,15.2,6.0,fichier,-9.2,True,15.2
+ASN,"Sánchez de la Nieta, Agustín",3.0,15.0,17.0,20.0,24.0,fichier,4.0,False,20.0
+EPV,"Pacheco Viana, Erid Eulogio",3.0,15.0,2.0,5.0,6.0,fichier,1.0,False,5.0
+JRB,"Borrueco Muñoz, José Roberto",3.0,15.0,0.0,3.0,,absent,,False,3.0
+LOV,"Ortíz Vásquez, Luisa Fernanda",2.4,12.0,0.0,2.4,6.0,fichier,3.6,False,2.4
+MPM,"Pereira Martín, Mario",2.0,10.0,22.0,24.0,24.0,fichier,0.0,False,24.0
+PVR,"Velarde Rueda, Pablo",2.0,10.0,21.8,23.8,24.0,fichier,0.1999999999999993,False,23.8
+MLA,Mayra Anabel Angulo Lara,2.0,10.0,21.0,23.0,24.0,fichier,1.0,False,23.0
+MADP,"Diaz Perez, Manuel Antonio",2.0,10.0,16.0,18.0,18.0,fichier,0.0,False,18.0
+FMP,"Muros Ponce, Francisco Javier",2.0,10.0,6.0,8.0,6.0,fichier,-2.0,True,8.0
+JAC,"Arroyo Caire, Javier",2.0,10.0,0.0,2.0,6.0,fichier,4.0,False,2.0
+LAB,"Alvarado Barrios, Lázaro",1.0,5.0,34.5,35.5,24.0,fichier,-11.5,True,35.5
+ATC,"Tapia Córdoba, Alejandro",1.0,5.0,20.0,21.0,24.0,fichier,3.0,False,21.0
+JLE,"Endrino Armenteros, José Luis",1.0,5.0,15.0,16.0,16.0,fichier,0.0,False,16.0
+CI,"Ierardi, Carmelina",1.0,5.0,14.0,15.0,24.0,fichier,9.0,False,15.0
+DGR,"Gutiérrez Reina, Daniel",1.0,5.0,4.5,5.5,12.0,fichier,6.5,False,5.5
+APS,"Pérez Sequera, Ana Cristina",1.0,5.0,0.0,1.0,12.0,fichier,11.0,False,1.0
+SYL,"Yanes Luis, Samuel",0.8,4.0,5.0,5.8,24.0,fichier,18.2,False,5.8
+IACM,"Cruz Matías, Irving Alberto",0.0,0.0,30.1,30.1,,absent,,False,30.1
+FPS,"Peralta Samaniego, Federico",0.0,0.0,25.0,25.0,24.0,fichier,-1.0,True,25.0
+ATO,"Torrebejano Osorio, Alba",0.0,0.0,24.2,24.2,,absent,,False,24.200000000000003
+GBP,"Bejarano Pellicer, Guillermo",0.0,0.0,24.1,24.1,24.0,fichier,-0.10000000000000142,True,24.1
+AMP,"Pacheco Martínez, Ana María",0.0,0.0,24.0,24.0,,absent,,False,24.0
+ASL,"Soria Lorente, Anier",0.0,0.0,24.0,24.0,24.0,fichier,0.0,False,24.0
+CGN,"Naudeau, Carolina Gisele",0.0,0.0,24.0,24.0,24.0,fichier,0.0,False,24.0
+JJP,"Perea Rodriguez, Juan Jose",0.0,0.0,24.0,24.0,24.0,fichier,0.0,False,24.0
+RCY,"Cañete Yaque, Raquel",0.0,0.0,24.0,24.0,24.0,fichier,0.0,False,24.0
+SF,"Firmenich, Sergio",0.0,0.0,24.0,24.0,,absent,,False,24.0
+MCG,"Ceballos González, Manuel",0.0,0.0,22.25,22.25,24.0,fichier,1.75,False,22.25
+DC,"Canales Aguilera, Diego",0.0,0.0,22.0,22.0,18.0,fichier,-4.0,True,22.0
+ACME,"Martínez Estudillo, Alfonso Carlos",0.0,0.0,20.2,20.2,,absent,,False,20.2
+JCS,"Serrano Ruiz, Juan Carlos",0.0,0.0,20.1,20.1,20.0,fichier,-0.10000000000000142,True,20.1
+CVM,"Vázquez Monzón, Carlos",0.0,0.0,20.0,20.0,24.0,fichier,4.0,False,20.0
+JML,"Martínez López, José Antonio",0.0,0.0,19.6,19.6,24.0,fichier,4.399999999999999,False,19.6
+COD,"Ortiz Domínguez, Carlos",0.0,0.0,18.0,18.0,18.0,fichier,0.0,False,18.0
+DBG,"Benítez Gómez, Daniel",0.0,0.0,18.0,18.0,12.0,fichier,-6.0,True,18.0
+IJF,"Jurado Flores, Isabel",0.0,0.0,18.0,18.0,18.0,fichier,0.0,False,18.0
+JABC,"Borja Conde, José Antonio",0.0,0.0,18.0,18.0,,absent,,False,18.0
+JMC,"Manzano Crespo, Jose María",0.0,0.0,18.0,18.0,18.0,fichier,0.0,False,18.0
+MAR,"Alcalde Rico, María",0.0,0.0,18.0,18.0,30.0,fichier,12.0,False,18.0
+ADR,"Durán Rosal, Antonio Manuel",0.0,0.0,17.5,17.5,,absent,,False,17.5
+LRU,"Rodríguez Urrego, Leonardo",0.0,0.0,13.0,13.0,24.0,fichier,11.0,False,13.0
+ABM,"Bandera Moreno, Alejandro",0.0,0.0,12.6,12.6,,absent,,False,12.6
+FPG,"Pinto Gómez, Fernando",0.0,0.0,12.5,12.5,,absent,,False,12.5
+AJFM,"Freire Mendoza, Alejandro José",0.0,0.0,12.0,12.0,,absent,,False,12.0
+ARB,"De los Ríos Berjillos, Araceli",0.0,0.0,12.0,12.0,,absent,,False,12.0
+BJ,"Jimenez Fernandez-Palacios, Belén",0.0,0.0,12.0,12.0,,absent,,False,12.0
+CGA,"García Alonso, Carlos",0.0,0.0,12.0,12.0,12.0,fichier,0.0,False,12.0
+CSC,"Sánchez Cazorla, Carlos Julio",0.0,0.0,12.0,12.0,12.0,fichier,0.0,False,12.0
+DBA,"Becerra Alonso, David",0.0,0.0,12.0,12.0,,absent,,False,12.0
+FPM,"Peidro Morillo, Fausto",0.0,0.0,12.0,12.0,,absent,,False,12.0
+FRG,"Rivas García, Francisco",0.0,0.0,12.0,12.0,,absent,,False,12.0
+GMB,"Murillo Bellón, Guillermo",0.0,0.0,12.0,12.0,12.0,fichier,0.0,False,12.0
+JASP,"Salinas Pérez, José Alberto",0.0,0.0,12.0,12.0,,absent,,False,12.0
+JGF,"García Fuentes, Juan",0.0,0.0,12.0,12.0,,absent,,False,12.0
+JGQ,"García Quintanilla, Jordi",0.0,0.0,12.0,12.0,12.0,fichier,0.0,False,12.0
+MLPN,"Parody Núñez, María Luisa",0.0,0.0,12.0,12.0,,absent,,False,12.0
+MRG,"Rueda García, Mónica",0.0,0.0,12.0,12.0,,absent,,False,12.0
+NGB,"Gonzalez Blanco, Natividad",0.0,0.0,12.0,12.0,,absent,,False,12.0
+RCF,"Colmenarejo Fernández, Rosa",0.0,0.0,12.0,12.0,,absent,,False,12.0
+SSM,"Salmerón Medina, Salvador",0.0,0.0,12.0,12.0,12.0,fichier,0.0,False,12.0
+PMG,"Millán Gata, Pablo",0.0,0.0,11.5,11.5,12.0,fichier,0.5,False,11.5
+FMC,"Montero Chacón, Francisco de Paula",0.0,0.0,10.0,10.0,12.0,fichier,2.0,False,10.0
+FMR,"Medina Reguera, Fernando",0.0,0.0,10.0,10.0,12.0,fichier,2.0,False,10.0
+RGV,"Galán De Vega, Ricardo",0.0,0.0,10.0,10.0,12.0,fichier,2.0,False,10.0
+CAV,"Arellano Vera, Carlos",0.0,0.0,9.0,9.0,12.0,fichier,3.0,False,9.0
+CGG,"Garcia Gomez, Covadonga",0.0,0.0,9.0,9.0,12.0,fichier,3.0,False,9.0
+CRM,"Ramírez Moreno, Carlos",0.0,0.0,9.0,9.0,,absent,,False,9.0
+JCRG,"Rodríguez Gómez, Juan Carlos",0.0,0.0,9.0,9.0,,absent,,False,9.0
+IMG,"Marín Gayte, Irene",0.0,0.0,8.0,8.0,,absent,,False,8.0
+JBS,"Brey Sánchez, José Javier",0.0,0.0,8.0,8.0,6.0,fichier,-2.0,True,8.0
+RSA,"Scott Avellaneda, Renee Marie",0.0,0.0,8.0,8.0,6.0,fichier,-2.0,True,8.0
+TGC,Tamara Guerrero Cervera,0.0,0.0,8.0,8.0,12.0,fichier,4.0,False,8.0
+GGR,"Gutierrez Romero, Gema",0.0,0.0,7.0,7.0,,absent,,False,7.0
+AAM,"Ariza Montes, Antonio",0.0,0.0,6.0,6.0,,absent,,False,6.0
+ACM,"Campos Méndez, Antonio Francisco",0.0,0.0,6.0,6.0,,absent,,False,6.0
+AJZI,"Zafra Ibañez, Antonio Jesús",0.0,0.0,6.0,6.0,6.0,fichier,0.0,False,6.0
+APR,"Parrón Rivero, Abraham",0.0,0.0,6.0,6.0,,absent,,False,6.0
+CAA,"Del Alamo Alonso, Carlos",0.0,0.0,6.0,6.0,6.0,fichier,0.0,False,6.0
+CCM,"Cantón Marín, Carlos",0.0,0.0,6.0,6.0,12.0,fichier,6.0,False,6.0
+CRQ,"Rodríguez Quirós, Carmen",0.0,0.0,6.0,6.0,6.0,fichier,0.0,False,6.0
+DVP,"Villacís Proaño, David",0.0,0.0,6.0,6.0,,absent,,False,6.0
+EMF,"Morales Fernández, Emilio",0.0,0.0,6.0,6.0,,absent,,False,6.0
+FB,"Bas Jiménez, Francisco",0.0,0.0,6.0,6.0,6.0,fichier,0.0,False,6.0
+FIL,"Isorna Llerena, Fernando",0.0,0.0,6.0,6.0,,absent,,False,6.0
+FJME,"Martínez Estudillo, Francisco José",0.0,0.0,6.0,6.0,,absent,,False,6.0
+FPV,"Pérez Valencia, Francisco José",0.0,0.0,6.0,6.0,,absent,,False,6.0
+FSM,"Salmerón Medina, Francisco",0.0,0.0,6.0,6.0,6.0,fichier,0.0,False,6.0
+JAD,"Dávila, Johnny Antonio",0.0,0.0,6.0,6.0,,absent,,False,6.0
+JAG,"Aguilar Guisado, Juan",0.0,0.0,6.0,6.0,6.0,fichier,0.0,False,6.0
+JCB,"Carretero Bravo, Jesús",0.0,0.0,6.0,6.0,,absent,,False,6.0
+JCG,"Clemente González, José Ignacio",0.0,0.0,6.0,6.0,,absent,,False,6.0
+JCM,"Castro Mora , José",0.0,0.0,6.0,6.0,,absent,,False,6.0
+JDM,"Duarte Merelo, Jesús",0.0,0.0,6.0,6.0,,absent,,False,6.0
+JDR,"Domínguez Ruiz, Francisco Javier",0.0,0.0,6.0,6.0,6.0,fichier,0.0,False,6.0
+JEA,"Estepa Alonso, Juan Enrique",0.0,0.0,6.0,6.0,,absent,,False,6.0
+JIR,"Irala Recio, Javier",0.0,0.0,6.0,6.0,,absent,,False,6.0
+LCR,"Cortes Rull, Luis",0.0,0.0,6.0,6.0,12.0,fichier,6.0,False,6.0
+MCM,"Masot Civit, Miguel",0.0,0.0,6.0,6.0,,absent,,False,6.0
+MLC,"López Casquete de Prado, Manuel",0.0,0.0,6.0,6.0,,absent,,False,6.0
+MPV,"Pérez Viguera, Marta",0.0,0.0,6.0,6.0,6.0,fichier,0.0,False,6.0
+MRCC,"Capote Campos, María de los Reyes",0.0,0.0,6.0,6.0,6.0,fichier,0.0,False,6.0
+RMB,"Melero Bolaños, Rosa",0.0,0.0,6.0,6.0,,absent,,False,6.0
+RMM,"Micó Miranda, Rafael",0.0,0.0,6.0,6.0,6.0,fichier,0.0,False,6.0
+RVJ,"Vera Jiménez, Rafael",0.0,0.0,6.0,6.0,,absent,,False,6.0
+SBR,Santiago Bobo Ruiz,0.0,0.0,6.0,6.0,6.0,fichier,0.0,False,6.0
+VMF,"Fico, Vito Mario",0.0,0.0,6.0,6.0,6.0,fichier,0.0,False,6.0
+EDP,"del Pozo, Enrique",0.0,0.0,5.0,5.0,6.0,fichier,1.0,False,5.0
+JBM,"Blanco Montero, Javier",0.0,0.0,5.0,5.0,,absent,,False,5.0
+JCD,Juan Carlos Durán,0.0,0.0,5.0,5.0,6.0,fichier,1.0,False,5.0
+AGR,"Guzman Rizo, Adriana",0.0,0.0,4.5,4.5,,absent,,False,4.5
+JRMC,"Maradiaga Chirinos, Jorge Raúl",0.0,0.0,4.5,4.5,,absent,,False,4.5
+ALA,"López Sousa, Ana",0.0,0.0,4.0,4.0,,absent,,False,4.0
+EGP,"Grappin, Edwin",0.0,0.0,4.0,4.0,,absent,,False,4.0
+MPVZ,"Podadera Valenzuela, Manuel",0.0,0.0,4.0,4.0,12.0,fichier,8.0,False,4.0
+RBX,RBX,0.0,0.0,4.0,4.0,,absent,,False,
+TIA,"Ashley, Thomas Ian",0.0,0.0,4.0,4.0,,absent,,False,4.0
+VM,Verónica Mesa,0.0,0.0,4.0,4.0,0.0,fichier,-4.0,True,0.0
+ELG,"López González, Eduardo",0.0,0.0,3.5,3.5,6.0,fichier,2.5,False,3.5
+AM,"Martínez, Álvaro",0.0,0.0,3.0,3.0,,absent,,False,0.0
+AMC,"Martínez Ceballos, Álvaro",0.0,0.0,3.0,3.0,,absent,,False,3.0
+ATR,"Terrones Rodríguez, Antonio Luis",0.0,0.0,3.0,3.0,,absent,,False,3.0
+DEMA,"Muñoz Alé, Delia",0.0,0.0,3.0,3.0,,absent,,False,3.0
+FGE,"Gómez-Estern Aguilar, Fabio",0.0,0.0,3.0,3.0,6.0,fichier,3.0,False,3.0
+FI,Paco Ibáñez (de Aurelio),0.0,0.0,3.0,3.0,6.0,fichier,3.0,False,3.0
+FIN,"Ibañez de Navarra Quintero, Francisco",0.0,0.0,3.0,3.0,,absent,,False,3.0
+JJB,JJB,0.0,0.0,3.0,3.0,,absent,,False,
+MGG,"García Gutierrez, Miguel",0.0,0.0,3.0,3.0,,absent,,False,3.0
+MMB,"Martin Betancourt, Mariana",0.0,0.0,3.0,3.0,,absent,,False,3.0
+MVM,Marcelo Villena Manzanares,0.0,0.0,3.0,3.0,6.0,fichier,3.0,False,3.0
+PLC,"Calvo Domínguez, Pedro Luís",0.0,0.0,3.0,3.0,,absent,,False,3.0
+PMM,"Martín Molina, Pedro",0.0,0.0,3.0,3.0,,absent,,False,3.0
+TLC,"Lopez Del Cerro, Teodoro",0.0,0.0,3.0,3.0,,absent,,False,3.0
+EGG,EGG,0.0,0.0,2.5,2.5,,absent,,False,
+ERU,"Del Real Urbano, Elisa",0.0,0.0,2.5,2.5,,absent,,False,2.5
+IGA,"Guerrero Arias, Ismael",0.0,0.0,2.5,2.5,,absent,,False,2.5
+MARO,"Rodriguez, Miguel Ángel",0.0,0.0,2.5,2.5,,absent,,False,2.5
+OGF,OGF,0.0,0.0,2.5,2.5,,absent,,False,
+AFG,"Florensa Giménez, Albert",0.0,0.0,2.0,2.0,,absent,,False,2.0
+AGM,"Gil Moyano, Antonio",0.0,0.0,2.0,2.0,12.0,fichier,10.0,False,2.0
+ER,"Rodríguez, Esteve",0.0,0.0,2.0,2.0,,absent,,False,2.0
+JMME,"Muñoz de Escalona Pavón, José Manuel",0.0,0.0,2.0,2.0,6.0,fichier,4.0,False,2.0
+JRP,Joaquín Rus Pezzi,0.0,0.0,2.0,2.0,12.0,fichier,10.0,False,2.0
+MDL,Duque López María,0.0,0.0,2.0,2.0,,absent,,False,2.0
+MMS,Manuel Martín Sánchez,0.0,0.0,2.0,2.0,12.0,fichier,10.0,False,2.0
+MMV,"Martín Valdivia, Maite",0.0,0.0,2.0,2.0,,absent,,False,2.0
+VOHG,"Herrera García, Vicente Octavio",0.0,0.0,2.0,2.0,12.0,fichier,10.0,False,2.0
+ABR,"Barral Rivada, Antonio",0.0,0.0,1.5,1.5,,absent,,False,1.5
+CJR,"Risquez Aguilar, Carlos José",0.0,0.0,1.5,1.5,,absent,,False,1.5
+FDO,"Durán Olivencia, Francisco José",0.0,0.0,1.5,1.5,18.0,fichier,16.5,False,1.5
+JARL,"Reina Luque, Juan Antonio",0.0,0.0,1.5,1.5,,absent,,False,1.5
+JC,"Cisnero, Jara",0.0,0.0,1.5,1.5,,absent,,False,1.5
+PS,"Sánchez, Patricio",0.0,0.0,1.5,1.5,,absent,,False,1.5
+ADT,"Del Toro, Andrés",0.0,0.0,1.0,1.0,,absent,,False,1.0
+AMA,"Manzanares, Arancha",0.0,0.0,1.0,1.0,,absent,,False,1.0
+FMY,"Moya Yoldi, Francisco Javier",0.0,0.0,1.0,1.0,,absent,,False,1.0
+IC,"Castro, Ignacio",0.0,0.0,1.0,1.0,,absent,,False,1.0
+MCJ,"Cabanás Jiménez, Margarita",0.0,0.0,1.0,1.0,6.0,fichier,5.0,False,1.0
+ACR,"Carmona Ruiz, Antonio",0.0,0.0,0.5,0.5,,absent,,False,0.5
+PAH,"Ahumada, Pedro",0.0,0.0,0.5,0.5,,absent,,False,0.5
+DCA,DCA,0.0,0.0,0.1,0.1,,absent,,False,

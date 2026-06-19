@@ -106,7 +106,7 @@ except Exception:
 # ════════════════════════════════════════════════════════════
 st.set_page_config(
     page_title="Lab Scheduling — Universidad Loyola",
-    page_icon="🔬",
+    page_icon="L",
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
@@ -699,7 +699,7 @@ with st.sidebar:
     # browser tab leaves it running in the background. This button stops the
     # whole process tree so nothing lingers in Task Manager.
     st.markdown("<div style='height: 1.2rem'></div>", unsafe_allow_html=True)
-    if st.button(f"⏻ {t('quit_app')}", use_container_width=True, key="quit_app_btn"):
+    if st.button(f"{t('quit_app')}", use_container_width=True, key="quit_app_btn"):
         st.session_state["_quitting"] = True
         st.rerun()
 
@@ -804,7 +804,7 @@ def wizard_stepper(current_step_key):
             num_display = str(i + 1)
         elif is_complete:
             cls += ' is-complete'
-            num_display = '✓'
+            num_display = str(i + 1)
         else:
             num_display = str(i + 1)
 
@@ -840,10 +840,8 @@ def validation_badge(label, status='valid'):
     """Render a small validation badge.
     status: 'valid', 'warning', 'error', 'info'
     """
-    icons = {'valid': '✓', 'warning': '!', 'error': '✗', 'info': 'i'}
     cls = f'validation-badge is-{status}'
-    icon = icons.get(status, 'i')
-    return f'<span class="{cls}">{icon} {label}</span>'
+    return f'<span class="{cls}">{label}</span>'
 
 
 def render_checkpoint_summary(title, items):
@@ -853,7 +851,7 @@ def render_checkpoint_summary(title, items):
     badges = ''.join(validation_badge(l, s) for l, s in items)
     html = f'''
         <div class="checkpoint-summary">
-            <div class="checkpoint-summary-title">✓ {title}</div>
+            <div class="checkpoint-summary-title">{title}</div>
             <div class="checkpoint-list">{badges}</div>
         </div>
     '''
@@ -927,7 +925,7 @@ def render_run_report(log_text="", elapsed_s=None):
         sub = "Most enrolments were placed. A few remain unassigned — see the details below."
     st.markdown(f"""
         <div class="checkpoint-summary">
-            <div class="checkpoint-summary-title">✓ {headline}</div>
+            <div class="checkpoint-summary-title">{headline}</div>
             <div style="color:var(--text-secondary); margin-top:0.25rem;">{sub}</div>
         </div>
     """, unsafe_allow_html=True)
@@ -980,9 +978,164 @@ def render_run_report(log_text="", elapsed_s=None):
         unsafe_allow_html=True,
     )
 
+    # ── Conformité : qualité des données, KPIs, non placés, solveur ──
+    try:
+        render_quality_panel()
+    except Exception:
+        pass
+
     # ── Raw log: demoted, collapsed, clearly labelled as technical ──
     with st.expander("Technical solver log (for developers)"):
         st.code(log_text or "(no log captured)", language="text")
+
+
+def _load_report_json(rel):
+    """Charge un rapport JSON écrit par le pipeline (reports/*.json) de façon
+    défensive. Résout le chemin via app_paths quand disponible, sinon relatif.
+    Renvoie None si le fichier est absent ou illisible."""
+    candidates = [rel]
+    try:
+        if PATHS_OK:
+            found = app_paths.resolve_existing(rel)
+            if found:
+                candidates.insert(0, found)
+    except Exception:
+        pass
+    for path in candidates:
+        try:
+            if os.path.exists(path):
+                with open(path, encoding="utf-8") as fh:
+                    return json.load(fh)
+        except Exception:
+            continue
+    return None
+
+
+def render_quality_panel(show_solver=True):
+    """Surface les données de conformité produites par le pipeline :
+    contrôle qualité des données, KPIs du planning, inscriptions non placées
+    (avec diagnostic détaillé) et journal du solveur CP-SAT.
+
+    Tout est lu depuis les rapports JSON (reports/*.json). Chaque bloc dégrade
+    proprement si son rapport est absent — rien n'est codé en dur.
+    """
+    kpi = _load_report_json("reports/kpi_report.json")
+    dq = _load_report_json("reports/data_quality_report.json")
+    unplaced = _load_report_json("reports/unplaced_students.json")
+    solver = _load_report_json("reports/solver_stats.json")
+
+    if not any([kpi, dq, unplaced is not None, solver]):
+        st.info("Les rapports de conformité ne sont pas encore disponibles. "
+                "Lancez l'optimisation pour les générer.")
+        return
+
+    # ── Contrôle qualité des données ────────────────────────────────────
+    if dq:
+        section_header("Contrôle qualité des données")
+        integ = dq.get("integrity", {}) or {}
+        grp = dq.get("grouping", {}) or {}
+        ok = integ.get("ok")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            stat_card("Intégrité", "OK" if ok else "À revoir",
+                      "structure des données")
+        with c2:
+            stat_card("Lignes", f"{integ.get('n_rows', '—'):,}".replace(",", " ")
+                      if isinstance(integ.get('n_rows'), int) else "—",
+                      "master_schedule")
+        with c3:
+            stat_card("Étudiants", integ.get("n_students", "—"), "uniques")
+        with c4:
+            gp = grp.get("global_placement_pct")
+            stat_card("Taux de placement",
+                      f"{gp:.1f}%" if isinstance(gp, (int, float)) else "—",
+                      f"{grp.get('total_placed', '—')}/{grp.get('total_enrolled', '—')} inscriptions")
+
+        per_subj = grp.get("per_subject") or []
+        if per_subj:
+            try:
+                df_subj = pd.DataFrame(per_subj)
+                df_subj = df_subj.rename(columns={
+                    "subject": "Matière", "enrolled": "Inscrits",
+                    "placed": "Placés", "unplaced": "Non placés",
+                    "placement_pct": "Taux (%)"})
+                with st.expander("Détail par matière"):
+                    st.dataframe(df_subj, use_container_width=True, hide_index=True)
+            except Exception:
+                pass
+
+    # ── KPIs du planning ────────────────────────────────────────────────
+    if kpi:
+        section_header("Indicateurs du planning (KPIs)")
+        groups = kpi.get("groups", {}) or {}
+        plc = kpi.get("placement", {}) or {}
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            stat_card("Groupes", groups.get("total", "—"),
+                      f"dont {groups.get('overflow', 0)} en overflow")
+        with c2:
+            stat_card("Taille moyenne",
+                      groups.get("size_mean", "—"),
+                      f"min {groups.get('size_min', '—')} · max {groups.get('size_max', '—')}")
+        with c3:
+            stat_card("Sessions totales", kpi.get("total_sessions", "—"),
+                      "sur les deux semestres")
+        with c4:
+            stat_card("Sessions vendredi", kpi.get("friday_sessions", "—"),
+                      "à surveiller")
+
+        day_bal = kpi.get("day_balance") or {}
+        if day_bal:
+            try:
+                order = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+                s = pd.Series(day_bal)
+                s = s.reindex([d for d in order if d in s.index])
+                st.caption("Répartition des sessions par jour")
+                st.bar_chart(s)
+            except Exception:
+                pass
+
+    # ── Inscriptions non placées (diagnostic) ───────────────────────────
+    section_header("Inscriptions non placées")
+    if not unplaced:
+        st.success("Toutes les inscriptions ont été placées (0 non placée).")
+    else:
+        help_tip(
+            "Diagnostic automatique de chaque inscription non placée : nombre de "
+            "créneaux où l'étudiant est libre, combien sont compatibles avec la "
+            "matière, combien disposent encore d'une place, et le motif retenu.",
+            icon=""
+        )
+        try:
+            df_u = pd.DataFrame(unplaced)
+            cols = {
+                "student_name": "Étudiant", "subject": "Matière",
+                "n_free_slots": "Créneaux libres",
+                "n_compatible_slots": "Compatibles matière",
+                "n_compatible_with_room": "Compatibles avec place",
+                "verdict": "Motif",
+            }
+            keep = [c for c in cols if c in df_u.columns]
+            df_u = df_u[keep].rename(columns=cols)
+            st.dataframe(df_u, use_container_width=True, hide_index=True)
+        except Exception as e:
+            st.warning(f"Impossible d'afficher le détail : {e}")
+
+    # ── Journal du solveur ──────────────────────────────────────────────
+    if show_solver and solver:
+        section_header("Journal du solveur CP-SAT")
+        try:
+            df_s = pd.DataFrame(solver)
+            cols = {
+                "label": "Semestre", "status": "État",
+                "n_sessions": "Sessions", "n_hints": "Hints",
+                "wall_time_s": "Temps (s)", "objective": "Objectif", "gap": "Gap",
+            }
+            keep = [c for c in cols if c in df_s.columns]
+            df_s = df_s[keep].rename(columns=cols)
+            st.dataframe(df_s, use_container_width=True, hide_index=True)
+        except Exception:
+            pass
 
 
 def wizard_nav(prev_label=None, next_label=None, prev_page=None, next_page=None,
@@ -1110,7 +1263,7 @@ if page == t('nav_home'):
         except Exception:
             _runs = []
         if _runs:
-            with st.expander(f"🕑 {t('recent_runs')} ({len(_runs)})", expanded=False):
+            with st.expander(f"{t('recent_runs')} ({len(_runs)})", expanded=False):
                 _rows = []
                 for r in _runs[:10]:
                     _ts = r.get("timestamp", "")
@@ -1123,7 +1276,7 @@ if page == t('nav_home'):
                         t('rate_lbl'): f"{r.get('assignment_rate', '—')}%",
                         t('sessions_lbl'): r.get("sessions", "—"),
                         t('groups_lbl'): r.get("groups", "—"),
-                        "⏱ s": r.get("elapsed_s", "—"),
+                        "s": r.get("elapsed_s", "—"),
                     })
                 st.dataframe(pd.DataFrame(_rows), use_container_width=True,
                              hide_index=True)
@@ -1844,7 +1997,7 @@ elif page == t('nav_config'):
     # TAB 4: Teacher availability
     # ════════════════════════════════════════
     with tab4:
-        st.markdown("### 👨‍🏫 Teacher Availability Configuration")
+        st.markdown("### Teacher Availability Configuration")
         st.caption("Configure teacher availability constraints and preferences for optimal scheduling.")
         
         try:
@@ -1862,12 +2015,12 @@ elif page == t('nav_config'):
         # OPTION 1: Days per week CANNOT be used by teacher
         # ═══════════════════════════════════════════════════════════
         st.markdown("---")
-        st.markdown("#### 📅 Option 1: Days per week unavailable")
-        st.caption("🚫 Block entire weekdays when a teacher is never available (hard constraint)")
+        st.markdown("#### Option 1: Days per week unavailable")
+        st.caption("Block entire weekdays when a teacher is never available (hard constraint)")
         
         st.session_state.advanced_config.setdefault('teacher_unavailable_weekdays', {})
         
-        with st.expander("➕ Add unavailable weekday(s) for a teacher", expanded=False):
+        with st.expander("Add unavailable weekday(s) for a teacher", expanded=False):
             wd_c1, wd_c2, wd_c3 = st.columns([2, 2, 1])
             with wd_c1:
                 if _prof_names:
@@ -1892,28 +2045,28 @@ elif page == t('nav_config'):
                         st.rerun()
 
         if st.session_state.advanced_config['teacher_unavailable_weekdays']:
-            st.markdown("**🚫 Current unavailable weekdays:**")
+            st.markdown("**Current unavailable weekdays:**")
             for teacher, days in list(st.session_state.advanced_config['teacher_unavailable_weekdays'].items()):
                 cols = st.columns([4, 1])
                 with cols[0]:
                     st.markdown(f"**{teacher}** → Never available on: **{', '.join(days)}**")
                 with cols[1]:
-                    if st.button("🗑️ Remove", key=f"del_wd_{teacher}"):
+                    if st.button("Remove", key=f"del_wd_{teacher}"):
                         del st.session_state.advanced_config['teacher_unavailable_weekdays'][teacher]
                         st.rerun()
         else:
-            st.info("ℹ️ No unavailable weekdays configured")
+            st.info("No unavailable weekdays configured")
 
         # ═══════════════════════════════════════════════════════════
         # OPTION 2: Exact day/time CANNOT be used by teacher
         # ═══════════════════════════════════════════════════════════
         st.markdown("---")
-        st.markdown("#### 🕒 Option 2: Specific day/time slots unavailable")
-        st.caption("🚫 Block specific time slots on specific days (hard constraint)")
+        st.markdown("#### Option 2: Specific day/time slots unavailable")
+        st.caption("Block specific time slots on specific days (hard constraint)")
         
         st.session_state.advanced_config.setdefault('teacher_unavailability', {})
         
-        with st.expander("➕ Add unavailable time slot", expanded=False):
+        with st.expander("Add unavailable time slot", expanded=False):
             tc1, tc2, tc3, tc4 = st.columns([2, 1.5, 1.5, 1])
             with tc1:
                 if _prof_names:
@@ -1945,29 +2098,29 @@ elif page == t('nav_config'):
                             st.rerun()
 
         if st.session_state.advanced_config['teacher_unavailability']:
-            st.markdown("**🚫 Current unavailable time slots:**")
+            st.markdown("**Current unavailable time slots:**")
             for teacher, slots in list(st.session_state.advanced_config['teacher_unavailability'].items()):
                 cols = st.columns([4, 1])
                 with cols[0]:
                     st.markdown(f"**{teacher}** → {len(slots)} slot(s): {', '.join(slots[:5])}" + 
                                (f" *(+{len(slots)-5} more)*" if len(slots) > 5 else ""))
                 with cols[1]:
-                    if st.button("🗑️ Remove", key=f"del_t_v4_{teacher}"):
+                    if st.button("Remove", key=f"del_t_v4_{teacher}"):
                         del st.session_state.advanced_config['teacher_unavailability'][teacher]
                         st.rerun()
         else:
-            st.info("ℹ️ No unavailable time slots configured")
+            st.info("No unavailable time slots configured")
 
         # ═══════════════════════════════════════════════════════════
         # OPTION 3: Preferred time range by teacher
         # ═══════════════════════════════════════════════════════════
         st.markdown("---")
-        st.markdown("#### ⭐ Option 3: Preferred time range")
-        st.caption("✅ Soft preferences: optimizer will try to respect these but won't block if impossible")
+        st.markdown("#### Option 3: Preferred time range")
+        st.caption("Soft preferences: optimizer will try to respect these but won't block if impossible")
         
         st.session_state.advanced_config.setdefault('teacher_preferences', {})
         
-        with st.expander("➕ Set teacher preferences", expanded=False):
+        with st.expander("Set teacher preferences", expanded=False):
             pref_c1, pref_c2, pref_c3, pref_c4 = st.columns([2, 1, 2, 1])
             with pref_c1:
                 if _prof_names:
@@ -1996,7 +2149,7 @@ elif page == t('nav_config'):
                     st.rerun()
 
         if st.session_state.advanced_config['teacher_preferences']:
-            st.markdown("**⭐ Current teacher preferences:**")
+            st.markdown("**Current teacher preferences:**")
             for teacher, prefs in list(st.session_state.advanced_config['teacher_preferences'].items()):
                 cols = st.columns([4, 1])
                 _desc_parts = []
@@ -2008,11 +2161,11 @@ elif page == t('nav_config'):
                 with cols[0]:
                     st.markdown(f"**{teacher}** → {' · '.join(_desc_parts)}")
                 with cols[1]:
-                    if st.button("🗑️ Remove", key=f"del_pref_v2_{teacher}"):
+                    if st.button("Remove", key=f"del_pref_v2_{teacher}"):
                         st.session_state.advanced_config['teacher_preferences'].pop(teacher)
                         st.rerun()
         else:
-            st.info("ℹ️ No teacher preferences configured")
+            st.info("No teacher preferences configured")
 
     # ─── Wizard navigation ───
     n_overrides_nav = len(st.session_state.advanced_config.get('subject_overrides', {}))
@@ -2131,7 +2284,7 @@ elif page == t('nav_optimize'):
         # Pipeline phases with weights (sum = 100)
         PHASES = [
             ("Loading data files", 5),
-            ("🧹 Cleaning + joining (master_schedule)", 15),
+            ("Cleaning + joining (master_schedule)", 15),
             ("Detecting anomalies", 5),
             ("Preparing optimization data", 10),
             ("Forming groups (round-robin + cross-program)", 15),
@@ -2229,7 +2382,7 @@ elif page == t('nav_optimize'):
                 progress_container.progress(int(pct) / 100, text=f"{phase_name} — {int(pct)}%")
                 timer_container.markdown(
                     f"<div style='font-size: 0.8rem; color: var(--text-secondary); text-align: center;'>"
-                    f"⏱️ Elapsed: <strong>{int(elapsed)}s</strong> · Phase {phase_idx}/{len(PHASES)}"
+                    f"Elapsed: <strong>{int(elapsed)}s</strong> · Phase {phase_idx}/{len(PHASES)}"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
@@ -2394,6 +2547,9 @@ elif page == t('nav_results'):
                      use_container_width=True, hide_index=True)
     except Exception as e:
         st.error(f"Loading error: {e}")
+
+    # Conformité : qualité des données, KPIs, non placés et solveur.
+    render_quality_panel()
 
     wizard_nav(
         prev_label="Optimize", prev_page='optimize',
@@ -2582,7 +2738,7 @@ elif page == t('nav_dashboard'):
     # ───────────────────────────────────────────────────────
     # 3. QUALITY METRICS — expandable sections
     # ───────────────────────────────────────────────────────
-    section_header("🔬 Quality metrics")
+    section_header("Quality metrics")
 
     qual_tab1, qual_tab2, qual_tab3, qual_tab4 = st.tabs([
         "Distribution", "Rooms", "Student overload", "Spacing"
@@ -3165,30 +3321,30 @@ elif page == t('nav_integrity'):
         st.markdown(
             f"<div style='padding:1.1rem 1.3rem;border-radius:12px;margin-bottom:1.2rem;"
             f"background:rgba(34,197,94,0.10);border:1px solid rgba(34,197,94,0.45);'>"
-            f"<span style='font-size:1.15rem;font-weight:700;color:#22c55e;'>✓ All integrity checks passed</span>"
+            f"<span style='font-size:1.15rem;font-weight:700;color:#22c55e;'>All integrity checks passed</span>"
             f"<br><span style='color:var(--text-muted);'>{n_pass} passed · {n_info} informational · {n_skip} not applicable in this build</span>"
             f"</div>", unsafe_allow_html=True)
     else:
         st.markdown(
             f"<div style='padding:1.1rem 1.3rem;border-radius:12px;margin-bottom:1.2rem;"
             f"background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.45);'>"
-            f"<span style='font-size:1.15rem;font-weight:700;color:#ef4444;'>⚠ {n_fail} integrity check(s) failed</span>"
+            f"<span style='font-size:1.15rem;font-weight:700;color:#ef4444;'>{n_fail} integrity check(s) failed</span>"
             f"<br><span style='color:var(--text-muted);'>{n_pass} passed · {n_info} informational · {n_skip} not applicable</span>"
             f"</div>", unsafe_allow_html=True)
 
     # ── Check cards ─────────────────────────────────────────
     _style = {
-        "pass": ("#22c55e", "rgba(34,197,94,0.06)", "✓", "PASS"),
-        "fail": ("#ef4444", "rgba(239,68,68,0.07)", "✕", "FAIL"),
-        "info": ("#f4b942", "rgba(244,185,66,0.07)", "ℹ", "INFO"),
-        "skip": ("#64748b", "rgba(100,116,139,0.06)", "—", "N/A"),
+        "pass": ("#22c55e", "rgba(34,197,94,0.06)", "", "PASS"),
+        "fail": ("#ef4444", "rgba(239,68,68,0.07)", "", "FAIL"),
+        "info": ("#f4b942", "rgba(244,185,66,0.07)", "", "INFO"),
+        "skip": ("#64748b", "rgba(100,116,139,0.06)", "", "N/A"),
     }
     for status, title, detail in results:
         color, bg, icon, tag = _style[status]
         st.markdown(
             f"<div style='display:flex;gap:0.9rem;align-items:flex-start;padding:0.85rem 1.1rem;"
-            f"border-radius:10px;margin-bottom:0.6rem;background:{bg};border:1px solid {color}33;'>"
-            f"<div style='font-size:1.2rem;color:{color};line-height:1.4;'>{icon}</div>"
+            f"border-radius:10px;margin-bottom:0.6rem;background:{bg};border:1px solid {color}33;"
+            f"border-left:3px solid {color};'>"
             f"<div style='flex:1;'>"
             f"<div style='font-weight:650;color:var(--text-primary);'>{title} "
             f"<span style='font-size:0.7rem;color:{color};border:1px solid {color}66;border-radius:6px;"
@@ -3315,7 +3471,7 @@ elif page == t('nav_integrity'):
             for nm in names:
                 _ci = _credit_by_norm.get(_norm_pn(nm))
                 if _ci and _ci["cr"] > 0:
-                    _flag = " \u26a0" if _ci["over"] else ""
+                    _flag = " (dépassement)" if _ci["over"] else ""
                     _load = (f"<span style='color:#6fb6e8;font-weight:600;'> · "
                              f"{_ci['cr']:.0f} cr P \u2192 {_ci['sess']} sess{_flag}</span>")
                 else:
@@ -3337,7 +3493,7 @@ elif page == t('nav_integrity'):
                     "<div style='margin-top:0.45rem;padding-top:0.4rem;"
                     "border-top:1px solid var(--border,#2c365844);font-size:0.73rem;"
                     "color:var(--text-secondary,#9fb0c8);'>"
-                    "\U0001F4C5 scheduled sessions: " + " · ".join(_parts) + "</div>"
+                    "scheduled sessions: " + " · ".join(_parts) + "</div>"
                 )
             st.markdown(
                 f"<div style='padding:0.7rem 0.95rem;border-radius:10px;margin-bottom:0.6rem;"
@@ -3350,6 +3506,62 @@ elif page == t('nav_integrity'):
                 f"</div>{chips}{_slot_bits}</div>",
                 unsafe_allow_html=True,
             )
+
+    # ── Crédits par professeur (table claire et triable) ────────────────
+    section_header("Crédits par professeur")
+    _ll_path = None
+    for _p in ("professor_lab_load.csv",
+               "outputs/optimization/professor_lab_load.csv"):
+        if os.path.exists(_p):
+            _ll_path = _p
+            break
+    if _ll_path is None:
+        st.info("Fichier professor_lab_load.csv introuvable. "
+                "Générez-le pour afficher les crédits par professeur.")
+    else:
+        try:
+            _df = pd.read_csv(_ll_path)
+            _df_lab = _df[_df["lab_credits"].fillna(0) > 0].copy()
+            n_prof = len(_df_lab)
+            n_over = int(_df_lab["over_budget"].fillna(False).astype(bool).sum())
+            tot_cr = float(_df_lab["lab_credits"].fillna(0).sum())
+            tot_sess = int(_df_lab["lab_sessions"].fillna(0).sum())
+
+            help_tip(
+                "Charge de laboratoire par professeur. Règle validée : "
+                "1 crédit P = 5 sessions de laboratoire. Les dépassements de "
+                "budget sont signalés (jamais bloquants).",
+                icon=""
+            )
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                stat_card("Professeurs", n_prof, "avec crédits labo")
+            with c2:
+                stat_card("Crédits labo", f"{tot_cr:.0f}", "total assigné")
+            with c3:
+                stat_card("Sessions labo", tot_sess, "total (crédits × 5)")
+            with c4:
+                stat_card("Dépassements", n_over, "budget signalé")
+
+            _show = _df_lab.rename(columns={
+                "prof_code": "Code",
+                "prof_name": "Professeur",
+                "lab_credits": "Crédits labo",
+                "lab_sessions": "Sessions labo",
+                "theory_credits": "Crédits théorie",
+                "total_assigned": "Total assigné",
+                "budget": "Budget",
+                "margin": "Marge",
+                "over_budget": "Dépassement",
+            })
+            _cols = ["Code", "Professeur", "Crédits labo", "Sessions labo",
+                     "Crédits théorie", "Total assigné", "Budget", "Marge",
+                     "Dépassement"]
+            _cols = [c for c in _cols if c in _show.columns]
+            _show = _show[_cols].sort_values("Crédits labo", ascending=False)
+            st.dataframe(_show, use_container_width=True, hide_index=True)
+        except Exception as e:
+            st.warning(f"Impossible d'afficher les crédits par professeur : {e}")
 
     st.caption("These are the same checks as verify_flow.py — shown here so no terminal is needed.")
 
@@ -3741,7 +3953,7 @@ elif page == t('nav_edit'):
             "<div style='padding:0.5rem 1rem; border-radius:8px; "
             "background:rgba(255,255,255,0.03); border-left:3px solid #4ade80; "
             "font-size:0.85rem; color:var(--text-secondary); margin-bottom:1rem;'>"
-            "✓ No pending changes — you can edit freely"
+            "No pending changes — you can edit freely"
             "</div>",
             unsafe_allow_html=True,
         )
@@ -3818,7 +4030,7 @@ elif page == t('nav_edit'):
     for i, label in enumerate(step_labels, start=1):
         if i < current_step:
             bg, color, border = "rgba(34,197,94,0.15)", "#4ade80", "#22c55e"
-            icon = "✓"
+            icon = str(i)
         elif i == current_step:
             bg, color, border = "rgba(99,102,241,0.15)", "#a5b4fc", "#6366f1"
             icon = str(i)
@@ -4637,7 +4849,7 @@ elif page == t('nav_export'):
         <div class="info-card" style="background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-accent-subtle) 100%); border-left: 4px solid var(--navy); margin-bottom: 1.5rem;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <div style="font-weight: 600; color: var(--text-heading); font-size: 1.05rem; margin-bottom: 0.25rem;">⚡ Regenerate everything</div>
+                    <div style="font-weight: 600; color: var(--text-heading); font-size: 1.05rem; margin-bottom: 0.25rem;">Regenerate everything</div>
                     <div style="font-size: 0.85rem; color: var(--text-secondary);">Generate S1 + S2 files for all 3 levels (Primero + Segundo + Tercero) at once</div>
                 </div>
             </div>
@@ -4799,7 +5011,7 @@ elif page == t('nav_export'):
             for fp, rel in s1_files:
                 with open(fp, 'rb') as f:
                     parts = rel.split(os.sep)
-                    label = f"📄 {parts[0]} · {parts[-1]}"
+                    label = f"{parts[0]} · {parts[-1]}"
                     st.download_button(
                         label, data=f.read(), file_name=parts[-1],
                         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -4821,7 +5033,7 @@ elif page == t('nav_export'):
             for fp, rel in s2_files:
                 with open(fp, 'rb') as f:
                     parts = rel.split(os.sep)
-                    label = f"📄 {parts[0]} · {parts[-1]}"
+                    label = f"{parts[0]} · {parts[-1]}"
                     st.download_button(
                         label, data=f.read(), file_name=parts[-1],
                         mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
