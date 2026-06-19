@@ -116,6 +116,106 @@ def add_week_hints(model, week_vars, sessions):
 # Étape 6.4 — Accumulateur de statistiques solveur (alimente les KPIs, §6.6).
 SOLVER_RUNS = []
 
+# Diagnostic des étudiants non placés (alimente l'app + les exports Excel).
+# Chaque entrée explique POURQUOI un étudiant inscrit n'a pas pu être affecté
+# à un groupe : créneaux libres de l'étudiant vs créneaux des groupes existants.
+UNPLACED_DIAGNOSTICS = []
+
+
+def diagnose_unplaced_students(all_groups, subject_students, student_busy):
+    """Analyse fine des inscriptions non placées.
+
+    Pour chaque étudiant inscrit à une matière mais absent de tout groupe de
+    cette matière, on reconstruit :
+      - ses créneaux LIBRES (30 créneaux possibles − créneaux occupés),
+      - les créneaux des groupes existants de la matière (jour/bloc + remplissage),
+      - le verdict : soit AUCUN créneau commun (conflit d'emploi du temps total),
+        soit créneaux communs mais groupes SATURÉS (capacité atteinte).
+
+    Renseigne et renvoie la liste globale UNPLACED_DIAGNOSTICS.
+    """
+    UNPLACED_DIAGNOSTICS.clear()
+
+    # Table id étudiant -> nom lisible (best-effort).
+    try:
+        import pandas as _pd
+        _dfn = _pd.read_csv('data_clean/master_schedule.csv',
+                            usecols=['AlumnoID', 'Apellidos', 'Nombre'])
+        _dfn = _dfn.drop_duplicates('AlumnoID')
+        sid_to_name = {str(r['AlumnoID']): f"{r['Apellidos']}, {r['Nombre']}"
+                       for _, r in _dfn.iterrows()}
+    except Exception:
+        sid_to_name = {}
+
+    all_slots = [(d, b) for d in range(len(DAYS)) for b in ALL_BLOCKS]
+
+    for subject, ids in subject_students.items():
+        enrolled = set(ids)
+        subj_groups = [g for g in all_groups if g['subject'] == subject]
+        placed = set()
+        for g in subj_groups:
+            placed.update(g.get('student_ids', []))
+        unplaced = enrolled - placed
+        if not unplaced:
+            continue
+
+        # Créneaux occupés par AU MOINS un groupe de la matière (jour, bloc).
+        group_slots = {}
+        for g in subj_groups:
+            key = (g['day_idx'], g['block_id'])
+            cur = group_slots.setdefault(key, {'groups': 0, 'free_capacity': 0})
+            cur['groups'] += 1
+            cur['free_capacity'] += max(0, g['max_students'] - g['nb_students'])
+
+        for sid in unplaced:
+            busy = student_busy.get(sid, set())
+            free_slots = [s for s in all_slots if s not in busy]
+            free_labels = [f"{DAYS[d]} {BLOCK_LABELS[b]}" for (d, b) in free_slots]
+
+            # Créneaux des groupes où l'étudiant serait libre.
+            compatible = [(d, b) for (d, b) in group_slots if (d, b) in free_slots]
+            compatible_with_room = [
+                (d, b) for (d, b) in compatible
+                if group_slots[(d, b)]['free_capacity'] > 0]
+
+            if not subj_groups:
+                verdict = "Aucun groupe formé pour cette matière"
+            elif not compatible:
+                verdict = ("Conflit d'emploi du temps total : l'étudiant est occupé "
+                           "sur TOUS les créneaux des groupes existants")
+            elif not compatible_with_room:
+                verdict = ("Créneaux compatibles mais groupes SATURÉS "
+                           "(capacité salle/groupe atteinte)")
+            else:
+                verdict = ("Créneaux compatibles disponibles — non placé par "
+                           "contrainte de cohorte/programme")
+
+            UNPLACED_DIAGNOSTICS.append({
+                'subject': subject,
+                'student_id': str(sid),
+                'student_name': sid_to_name.get(str(sid), f"<id {sid}>"),
+                'n_free_slots': len(free_slots),
+                'free_slots': free_labels,
+                'group_slots': [
+                    {'day': DAYS[d], 'block': BLOCK_LABELS[b],
+                     'n_groups': group_slots[(d, b)]['groups'],
+                     'free_capacity': group_slots[(d, b)]['free_capacity']}
+                    for (d, b) in sorted(group_slots)],
+                'n_compatible_slots': len(compatible),
+                'n_compatible_with_room': len(compatible_with_room),
+                'verdict': verdict,
+            })
+
+    # Persiste le rapport pour l'app et les exports Excel.
+    try:
+        os.makedirs('reports', exist_ok=True)
+        with open('reports/unplaced_students.json', 'w', encoding='utf-8') as fh:
+            json.dump(UNPLACED_DIAGNOSTICS, fh, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"  [WARN]  Erreur export unplaced_students.json : {e}")
+
+    return UNPLACED_DIAGNOSTICS
+
 
 def record_solver_run(sem, label, status, solver, n_sessions, n_hints=0,
                       recovered=False):
@@ -3283,6 +3383,18 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
         ss = sum(g['num_sessions'] for g in sg)
         print(f"     Semestre {sem} : {len(sg)} groupes, {ss} sessions")
 
+    # Diagnostic détaillé des inscriptions non placées (app + Excel).
+    try:
+        diag = diagnose_unplaced_students(all_groups, subject_students, student_busy)
+        if diag:
+            print(f"\n  [DIAG] {len(diag)} inscription(s) non placée(s) — "
+                  f"détail dans reports/unplaced_students.json :")
+            for d in diag:
+                print(f"     · {d['student_name']:38s} | {d['subject']:28s} | "
+                      f"{d['verdict']}")
+    except Exception as e:
+        print(f"  [WARN]  Diagnostic non placés échoué : {e}")
+
     return all_groups
 
 
@@ -3809,6 +3921,126 @@ def solve(all_groups):
     return pd.DataFrame(all_results) if all_results else None
 
 
+def _append_quality_sheets(wb, HF, HN, NF, BF, TF, RF, TB, CA, LA, GF):
+    """Ajoute au classeur principal les feuilles de conformité, à partir des
+    rapports JSON déjà écrits pendant le run (data_quality, kpi_report,
+    solver_stats, unplaced_students). Tout est défensif : une feuille absente
+    de données est simplement ignorée.
+    """
+    from openpyxl.utils import get_column_letter
+
+    def _load(path):
+        try:
+            with open(path, encoding='utf-8') as fh:
+                return json.load(fh)
+        except Exception:
+            return None
+
+    def _title(ws, text, ncols):
+        c = ws.cell(row=1, column=1, value=text)
+        c.font = TF
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max(1, ncols))
+        return 3
+
+    def _headers(ws, row, headers):
+        for ci, h in enumerate(headers, 1):
+            c = ws.cell(row=row, column=ci, value=h)
+            c.font = HN; c.fill = HF; c.alignment = CA; c.border = TB
+        return row + 1
+
+    # ── Feuille 1 : Calidad y KPIs ──────────────────────────────────────
+    kpi = _load('reports/kpi_report.json')
+    dq = _load('reports/data_quality_report.json')
+    ws = wb.create_sheet("Calidad y KPIs")
+    r = _title(ws, "Calidad de datos y KPIs del planning", 4)
+
+    if dq:
+        r = _headers(ws, r, ["Control de calidad de datos", "Valor"])
+        integ = dq.get('integrity', {}) if isinstance(dq, dict) else {}
+        grouping = dq.get('grouping', {}) if isinstance(dq, dict) else {}
+        rows = [
+            ("Integridad de datos", "OK" if integ.get('ok') else "REVISAR"),
+            ("Líneas master_schedule", integ.get('n_rows')),
+            ("Estudiantes únicos", integ.get('n_students')),
+            ("Inscripciones", grouping.get('total_enrolled')),
+            ("Colocadas", grouping.get('total_placed')),
+            ("No colocadas", grouping.get('total_unplaced')),
+            ("Tasa de colocación (%)", grouping.get('global_placement_pct')),
+        ]
+        for label, val in rows:
+            ws.cell(row=r, column=1, value=label).font = NF
+            cc = ws.cell(row=r, column=2, value=val); cc.font = NF
+            r += 1
+        r += 1
+
+    if kpi:
+        plc = kpi.get('placement', {})
+        grp = kpi.get('groups', {})
+        r = _headers(ws, r, ["Indicador (KPI)", "Valor"])
+        krows = [
+            ("Inscripciones", plc.get('enrolled')),
+            ("Colocadas", plc.get('placed')),
+            ("No colocadas", plc.get('unplaced')),
+            ("Tasa de colocación (%)", plc.get('placement_pct')),
+            ("Grupos formados", grp.get('total')),
+            ("Grupos overflow", grp.get('overflow')),
+            ("Tamaño medio de grupo", grp.get('size_mean')),
+            ("Tamaño mín / máx", f"{grp.get('size_min')} / {grp.get('size_max')}"),
+        ]
+        for label, val in krows:
+            ws.cell(row=r, column=1, value=label).font = NF
+            ws.cell(row=r, column=2, value=val).font = NF
+            r += 1
+        r += 1
+
+        day_bal = kpi.get('day_balance', {})
+        if day_bal:
+            r = _headers(ws, r, ["Día", "Sesiones"])
+            for day, n in day_bal.items():
+                ws.cell(row=r, column=1, value=day).font = NF
+                ws.cell(row=r, column=2, value=n).font = NF
+                r += 1
+    for ci, w in [(1, 34), (2, 16), (3, 14), (4, 14)]:
+        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    # ── Feuille 2 : No asignados (con motivo) ───────────────────────────
+    unplaced = _load('reports/unplaced_students.json') or []
+    ws2 = wb.create_sheet("No asignados")
+    if unplaced:
+        r = _title(ws2, f"Inscripciones no asignadas ({len(unplaced)}) — motivo y disponibilidad", 6)
+        r = _headers(ws2, r, ["Estudiante", "Asignatura", "Créneos libres",
+                              "Créneos compatibles", "Compatibles con plaza", "Motivo"])
+        for u in unplaced:
+            vals = [u.get('student_name'), u.get('subject'), u.get('n_free_slots'),
+                    u.get('n_compatible_slots'), u.get('n_compatible_with_room'),
+                    u.get('verdict')]
+            for ci, v in enumerate(vals, 1):
+                c = ws2.cell(row=r, column=ci, value=v); c.font = NF; c.border = TB
+                c.alignment = LA
+            r += 1
+        for ci, w in [(1, 34), (2, 26), (3, 14), (4, 16), (5, 18), (6, 60)]:
+            ws2.column_dimensions[get_column_letter(ci)].width = w
+    else:
+        _title(ws2, "Todas las inscripciones fueron asignadas (0 no asignados)", 1)
+
+    # ── Feuille 3 : Solver ──────────────────────────────────────────────
+    solver = _load('reports/solver_stats.json') or []
+    ws3 = wb.create_sheet("Solver")
+    r = _title(ws3, "Journal du solveur CP-SAT", 7)
+    if solver:
+        r = _headers(ws3, r, ["Semestre", "Estado", "Sesiones", "Hints",
+                              "Tiempo (s)", "Objetivo", "Gap"])
+        for s in solver:
+            vals = [s.get('label'), s.get('status'), s.get('n_sessions'),
+                    s.get('n_hints'), s.get('wall_time_s'), s.get('objective'),
+                    s.get('gap')]
+            for ci, v in enumerate(vals, 1):
+                c = ws3.cell(row=r, column=ci, value=v); c.font = NF; c.border = TB
+            r += 1
+        for ci, w in [(1, 12), (2, 12), (3, 12), (4, 10), (5, 12), (6, 14), (7, 10)]:
+            ws3.column_dimensions[get_column_letter(ci)].width = w
+
+
 def generate_outputs(results_df, all_groups, name_lookup, program_lookup, subject_students):
     """
     Step 6: Generate all output files (CSV + XLSX) from the solver result.
@@ -4107,6 +4339,13 @@ def generate_outputs(results_df, all_groups, name_lookup, program_lookup, subjec
     for ci, w in grp_widths:
         ws_grp.column_dimensions[get_column_letter(ci)].width = w
 
+
+    # Feuilles de conformité (Étapes 6.2 / 6.6) : qualité données, KPIs,
+    # inscriptions non placées (avec motif), journal solveur. Non bloquant.
+    try:
+        _append_quality_sheets(wb, HF, HN, NF, BF, TF, RF, TB, CA, LA, GF)
+    except Exception as e:
+        print(f"  [WARN]  Feuilles qualité non ajoutées : {e}")
 
     path = f"{OUTPUT_DIR}optimized_schedule_v5.xlsx"
     wb.save(path)
@@ -5101,13 +5340,10 @@ def run_pipeline(df):
         print("\n  [FAIL] Aucune solution generee.")
         return True
 
-    name_lookup, program_lookup = build_output_lookups(df)
-    generate_outputs(results_df, all_groups, name_lookup, program_lookup, subject_students)
-    analyze(results_df)
-
     # --- Mesure de la qualité du planning (Étape 6.6) --------------------
     # KPIs objectifs à chaque exécution (placement, équilibrage, salles,
-    # solveur). Écrit reports/kpi_report.{json,txt}. Non bloquant.
+    # solveur). Écrit reports/kpi_report.{json,txt}. Généré AVANT les exports
+    # Excel pour pouvoir y être embarqué. Non bloquant.
     if _kpi is not None:
         try:
             _kpi.generate_kpi_report(
@@ -5118,6 +5354,10 @@ def run_pipeline(df):
             )
         except Exception as exc:
             print(f"  [KPI][WARN] rapport KPI ignoré : {exc}")
+
+    name_lookup, program_lookup = build_output_lookups(df)
+    generate_outputs(results_df, all_groups, name_lookup, program_lookup, subject_students)
+    analyze(results_df)
 
     run_daniel_format_generation()
     return True
