@@ -1,0 +1,710 @@
+﻿professor_id,day_idx,block_id
+Carlos Ortiz Domínguez,2,4
+Carlos Ortiz Domínguez,1,2
+Carlos Ortiz Domínguez,2,1
+Carlos Ortiz Domínguez,1,5
+Carlos Ortiz Domínguez,4,1
+Carlos Ortiz Domínguez,1,4
+Carlos Ortiz Domínguez,0,5
+Carlos Ortiz Domínguez,1,3
+Carlos Ortiz Domínguez,3,5
+José Ramon Salvador Ortíz,1,3
+José Ramon Salvador Ortíz,2,4
+José Ramon Salvador Ortíz,0,4
+José Ramon Salvador Ortíz,2,1
+José Ramon Salvador Ortíz,4,3
+José Ramon Salvador Ortíz,1,1
+José Ramon Salvador Ortíz,0,3
+José Ramon Salvador Ortíz,1,4
+José Ramon Salvador Ortíz,0,6
+José Ramon Salvador Ortíz,4,2
+José Ramon Salvador Ortíz,2,3
+José Ramon Salvador Ortíz,3,3
+José Ramon Salvador Ortíz,2,2
+José Ramon Salvador Ortíz,3,2
+José Ramon Salvador Ortíz,4,1
+Lázaro Alvarado Barrios,4,1
+Lázaro Alvarado Barrios,1,5
+Lázaro Alvarado Barrios,4,3
+Lázaro Alvarado Barrios,1,1
+Lázaro Alvarado Barrios,1,4
+Lázaro Alvarado Barrios,3,3
+Lázaro Alvarado Barrios,3,6
+Lázaro Alvarado Barrios,2,2
+Lázaro Alvarado Barrios,1,6
+Lázaro Alvarado Barrios,1,3
+Lázaro Alvarado Barrios,3,5
+José Luis Endrino Armenteros,1,2
+José Luis Endrino Armenteros,1,5
+José Luis Endrino Armenteros,1,4
+José Luis Endrino Armenteros,1,6
+José Luis Endrino Armenteros,1,3
+Luisa Fernanda Ortiz Vásquez,1,2
+Luisa Fernanda Ortiz Vásquez,1,4
+José Ignacio Clemente González,2,4
+José Ignacio Clemente González,0,4
+José Ignacio Clemente González,3,4
+José Ignacio Clemente González,1,1
+José Ignacio Clemente González,2,2
+Manuel López Casquete de Prado,1,2
+Manuel López Casquete de Prado,1,3
+Francisco Javier Muros Ponce,2,1
+Francisco Javier Muros Ponce,3,1
+Francisco Javier Muros Ponce,1,1
+Francisco Javier Muros Ponce,2,3
+Francisco Javier Muros Ponce,4,1
+Mario Pereira Martín,4,4
+Mario Pereira Martín,2,4
+Mario Pereira Martín,1,2
+Mario Pereira Martín,2,1
+Mario Pereira Martín,3,4
+Mario Pereira Martín,4,3
+Mario Pereira Martín,3,1
+Mario Pereira Martín,1,5
+Mario Pereira Martín,0,3
+Mario Pereira Martín,1,4
+Mario Pereira Martín,2,3
+Mario Pereira Martín,3,3
+Mario Pereira Martín,2,5
+Mario Pereira Martín,4,1
+Sergio Blanco Trejo,2,4
+Sergio Blanco Trejo,1,2
+Sergio Blanco Trejo,2,1
+Sergio Blanco Trejo,4,3
+Sergio Blanco Trejo,3,1
+Sergio Blanco Trejo,1,5
+Sergio Blanco Trejo,1,1
+Sergio Blanco Trejo,0,3
+Sergio Blanco Trejo,4,2
+Sergio Blanco Trejo,2,3
+Sergio Blanco Trejo,3,3
+Sergio Blanco Trejo,0,5
+Sergio Blanco Trejo,2,2
+Sergio Blanco Trejo,4,1
+Agustín Alejandro Sánchez de la Nieta López,0,1
+Agustín Alejandro Sánchez de la Nieta López,2,4
+Agustín Alejandro Sánchez de la Nieta López,3,4
+Agustín Alejandro Sánchez de la Nieta López,1,5
+Agustín Alejandro Sánchez de la Nieta López,1,4
+Agustín Alejandro Sánchez de la Nieta López,3,3
+Agustín Alejandro Sánchez de la Nieta López,2,6
+Agustín Alejandro Sánchez de la Nieta López,0,5
+Agustín Alejandro Sánchez de la Nieta López,1,6
+Agustín Alejandro Sánchez de la Nieta López,1,3
+Francisco Bas Jiménez,1,4
+Francisco Bas Jiménez,0,5
+José Javier Brey Sánchez,1,4
+José Javier Brey Sánchez,0,5
+Ángel de Jesús Valverde González,4,4
+Ángel de Jesús Valverde González,0,3
+Ángel de Jesús Valverde González,1,4
+Ángel de Jesús Valverde González,2,3
+Ángel de Jesús Valverde González,3,3
+Ángel de Jesús Valverde González,0,5
+Ángel de Jesús Valverde González,2,5
+Ángel de Jesús Valverde González,1,3
+Ángel de Jesús Valverde González,3,5
+Fernando Medina Reguera,4,3
+Fernando Medina Reguera,1,1
+Fernando Medina Reguera,1,2
+Fernando Medina Reguera,1,5
+Carlos Arellano Vera,4,3
+Carlos Arellano Vera,1,6
+Carlos Arellano Vera,1,3
+Carlos Arellano Vera,1,5
+José Manuel Muñoz de Escalona Pavón,1,6
+José Manuel Muñoz de Escalona Pavón,1,4
+Francisco Salmerón Medina,1,1
+María Alcalde Rico,1,1
+María Alcalde Rico,1,2
+María Alcalde Rico,2,2
+Raquel Cañete Yaque,1,1
+Raquel Cañete Yaque,2,3
+Raquel Cañete Yaque,0,5
+Raquel Cañete Yaque,3,2
+Raquel Cañete Yaque,2,5
+Raquel Cañete Yaque,1,3
+Raquel Cañete Yaque,3,5
+Salvador Salmerón Medina,1,1
+Salvador Salmerón Medina,2,2
+Beatriz Soto Portillo,1,2
+Beatriz Soto Portillo,2,1
+Beatriz Soto Portillo,1,1
+Beatriz Soto Portillo,2,3
+Beatriz Soto Portillo,0,5
+Beatriz Soto Portillo,2,2
+Beatriz Soto Portillo,2,5
+Beatriz Soto Portillo,3,5
+Rafael Fernández Del Castillo,0,1
+Rafael Fernández Del Castillo,2,4
+Rafael Fernández Del Castillo,2,1
+Rafael Fernández Del Castillo,4,3
+Rafael Fernández Del Castillo,3,1
+Rafael Fernández Del Castillo,1,1
+Rafael Fernández Del Castillo,0,3
+Rafael Fernández Del Castillo,4,2
+Rafael Fernández Del Castillo,2,3
+Rafael Fernández Del Castillo,3,3
+Rafael Fernández Del Castillo,3,2
+Rafael Fernández Del Castillo,1,3
+Araceli De los Ríos Berjillos,1,2
+Araceli De los Ríos Berjillos,4,1
+Araceli De los Ríos Berjillos,1,1
+Araceli De los Ríos Berjillos,3,3
+Araceli De los Ríos Berjillos,3,2
+Araceli De los Ríos Berjillos,1,3
+Juan García Fuentes,1,1
+Juan García Fuentes,1,2
+Juan García Fuentes,3,2
+Juan García Fuentes,4,3
+Manuel Ceballos González,1,2
+Manuel Ceballos González,1,1
+Manuel Ceballos González,0,3
+Manuel Ceballos González,2,3
+Manuel Ceballos González,0,2
+Manuel Ceballos González,3,3
+Manuel Ceballos González,2,2
+Manuel Ceballos González,3,2
+Manuel Ceballos González,1,3
+Miguel Ángel Parrales Borrego,1,2
+Miguel Ángel Parrales Borrego,4,3
+Miguel Ángel Parrales Borrego,1,1
+Miguel Ángel Parrales Borrego,1,4
+Miguel Ángel Parrales Borrego,2,6
+Miguel Ángel Parrales Borrego,3,6
+Miguel Ángel Parrales Borrego,2,2
+Miguel Ángel Parrales Borrego,3,2
+Miguel Ángel Parrales Borrego,2,5
+Alessio Zuliani,1,1
+Alessio Zuliani,1,2
+Alessio Zuliani,1,3
+Ana Cristina Pérez Sequera,1,1
+Ana Cristina Pérez Sequera,1,2
+Fernando Pinto Gómez,0,1
+Fernando Pinto Gómez,3,1
+Fernando Pinto Gómez,0,3
+Fernando Pinto Gómez,0,2
+Fernando Pinto Gómez,3,2
+Jesús Ángel Carretero Bravo,0,1
+Jesús Ángel Carretero Bravo,3,1
+Jesús Ángel Carretero Bravo,0,3
+Jesús Ángel Carretero Bravo,0,2
+Jesús Ángel Carretero Bravo,3,2
+Pablo Daniel Ferrada Martínez,2,1
+Pablo Daniel Ferrada Martínez,4,1
+Pablo Daniel Ferrada Martínez,4,2
+Pablo Daniel Ferrada Martínez,2,3
+Pablo Daniel Ferrada Martínez,2,2
+Pablo Daniel Ferrada Martínez,1,3
+Anier Soria Lorente,1,2
+Anier Soria Lorente,1,5
+Anier Soria Lorente,3,1
+Anier Soria Lorente,1,1
+Anier Soria Lorente,4,2
+Anier Soria Lorente,3,3
+Anier Soria Lorente,0,5
+Irene Marín Gayte,1,2
+Irene Marín Gayte,2,1
+Irene Marín Gayte,3,1
+Irene Marín Gayte,1,1
+Irene Marín Gayte,2,2
+Irene Marín Gayte,1,3
+José Antonio Borja Conde,2,1
+José Antonio Borja Conde,4,3
+José Antonio Borja Conde,3,1
+José Antonio Borja Conde,2,3
+José Antonio Borja Conde,2,2
+José Antonio Borja Conde,3,2
+Mayra Anabel Lara Angulo,0,1
+Mayra Anabel Lara Angulo,4,1
+Mayra Anabel Lara Angulo,2,2
+Juan Carlos Serrano Ruiz,3,4
+Juan Carlos Serrano Ruiz,1,5
+Juan Carlos Serrano Ruiz,1,4
+Juan Carlos Serrano Ruiz,1,6
+Juan Carlos Serrano Ruiz,3,5
+Ana María Pacheco Martínez,1,2
+Ana María Pacheco Martínez,1,1
+Ana María Pacheco Martínez,1,4
+Ana María Pacheco Martínez,2,6
+Ana María Pacheco Martínez,2,2
+Ana María Pacheco Martínez,1,6
+Ana María Pacheco Martínez,3,2
+Ana María Pacheco Martínez,2,5
+Anderson Andres Sandoval Amador,2,4
+Anderson Andres Sandoval Amador,1,5
+Anderson Andres Sandoval Amador,3,1
+Anderson Andres Sandoval Amador,1,1
+Anderson Andres Sandoval Amador,1,4
+Anderson Andres Sandoval Amador,2,6
+Pablo Aníbal Velarde Rueda,4,4
+Pablo Aníbal Velarde Rueda,2,4
+Pablo Aníbal Velarde Rueda,0,4
+Pablo Aníbal Velarde Rueda,3,4
+Pablo Aníbal Velarde Rueda,1,5
+Pablo Aníbal Velarde Rueda,4,3
+Pablo Aníbal Velarde Rueda,1,4
+Pablo Aníbal Velarde Rueda,4,2
+Pablo Aníbal Velarde Rueda,2,6
+Pablo Aníbal Velarde Rueda,0,5
+Pablo Aníbal Velarde Rueda,3,6
+Álvaro Parody Martín,2,4
+Álvaro Parody Martín,1,2
+Álvaro Parody Martín,3,4
+Álvaro Parody Martín,1,5
+Álvaro Parody Martín,3,1
+Álvaro Parody Martín,1,4
+Álvaro Parody Martín,0,2
+Álvaro Parody Martín,0,5
+Álvaro Parody Martín,3,6
+Álvaro Parody Martín,1,6
+Álvaro Parody Martín,2,5
+Álvaro Parody Martín,3,5
+Isabel Jurado Flores,2,4
+Isabel Jurado Flores,0,4
+Isabel Jurado Flores,3,4
+Isabel Jurado Flores,1,5
+Isabel Jurado Flores,1,4
+Isabel Jurado Flores,1,6
+Isabel Jurado Flores,3,5
+María Camila Merchan Riveros,2,4
+María Camila Merchan Riveros,1,2
+María Camila Merchan Riveros,0,4
+María Camila Merchan Riveros,3,4
+María Camila Merchan Riveros,2,1
+María Camila Merchan Riveros,0,2
+María Camila Merchan Riveros,2,2
+María Camila Merchan Riveros,4,1
+María Camila Merchan Riveros,3,5
+Pablo Millán Gata,2,4
+Pablo Millán Gata,1,2
+Pablo Millán Gata,0,4
+Pablo Millán Gata,3,4
+Pablo Millán Gata,4,2
+Pablo Millán Gata,3,5
+Carmelina Ierardi,4,4
+Carmelina Ierardi,2,4
+Carmelina Ierardi,3,4
+Carmelina Ierardi,4,3
+Carmelina Ierardi,1,5
+Carmelina Ierardi,4,2
+Carmelina Ierardi,0,6
+Carmelina Ierardi,4,5
+Carmelina Ierardi,0,5
+Carmelina Ierardi,3,6
+Carmelina Ierardi,2,5
+Carmelina Ierardi,3,5
+Federico Daniel Peralta Samaniego,2,4
+Federico Daniel Peralta Samaniego,1,2
+Federico Daniel Peralta Samaniego,2,1
+Federico Daniel Peralta Samaniego,1,1
+Federico Daniel Peralta Samaniego,1,4
+Federico Daniel Peralta Samaniego,4,2
+Federico Daniel Peralta Samaniego,4,5
+Federico Daniel Peralta Samaniego,4,1
+Federico Daniel Peralta Samaniego,3,5
+Erid Eulogio Pacheco Viana,1,2
+Erid Eulogio Pacheco Viana,2,1
+Erid Eulogio Pacheco Viana,1,1
+Erid Eulogio Pacheco Viana,4,2
+Erid Eulogio Pacheco Viana,4,1
+Manuel Eduardo GANTIVA OSORIO,1,2
+Manuel Eduardo GANTIVA OSORIO,2,1
+Manuel Eduardo GANTIVA OSORIO,4,3
+Manuel Eduardo GANTIVA OSORIO,1,1
+Manuel Eduardo GANTIVA OSORIO,0,3
+Manuel Eduardo GANTIVA OSORIO,4,2
+Manuel Eduardo GANTIVA OSORIO,3,3
+Manuel Eduardo GANTIVA OSORIO,2,2
+Guillermo Bejarano Pellicer,4,4
+Guillermo Bejarano Pellicer,0,4
+Guillermo Bejarano Pellicer,3,4
+Guillermo Bejarano Pellicer,1,5
+Guillermo Bejarano Pellicer,4,3
+Guillermo Bejarano Pellicer,0,3
+Guillermo Bejarano Pellicer,1,4
+Guillermo Bejarano Pellicer,0,5
+Guillermo Bejarano Pellicer,1,6
+José María Manzano Crespo,2,4
+José María Manzano Crespo,0,4
+José María Manzano Crespo,3,4
+José María Manzano Crespo,1,5
+José María Manzano Crespo,1,4
+José María Manzano Crespo,3,5
+Javier Moreno Soto,0,1
+Javier Moreno Soto,2,4
+Javier Moreno Soto,2,1
+Javier Moreno Soto,4,3
+Javier Moreno Soto,3,1
+Javier Moreno Soto,1,1
+Javier Moreno Soto,0,3
+Javier Moreno Soto,4,2
+Javier Moreno Soto,2,3
+Javier Moreno Soto,0,2
+Javier Moreno Soto,3,3
+Javier Moreno Soto,2,2
+Javier Moreno Soto,3,2
+Javier Moreno Soto,1,3
+Patricio Alejandro Venegas Aravena,1,2
+Patricio Alejandro Venegas Aravena,2,1
+Patricio Alejandro Venegas Aravena,1,1
+Patricio Alejandro Venegas Aravena,0,2
+Patricio Alejandro Venegas Aravena,2,2
+Patricio Alejandro Venegas Aravena,1,3
+Natividad González Blanco,1,1
+Natividad González Blanco,3,4
+Natividad González Blanco,1,4
+Natividad González Blanco,2,2
+Daniel Álvarez Lorenzo,3,1
+Daniel Álvarez Lorenzo,1,2
+Daniel Álvarez Lorenzo,2,1
+Manuel Antonio Diaz Perez,1,2
+Manuel Antonio Diaz Perez,2,1
+Manuel Antonio Diaz Perez,3,4
+Manuel Antonio Diaz Perez,1,5
+Manuel Antonio Diaz Perez,4,2
+Manuel Antonio Diaz Perez,2,2
+Manuel Antonio Diaz Perez,2,5
+Manuel Antonio Diaz Perez,4,1
+Manuel Antonio Diaz Perez,3,5
+José Alberto Salinas Pérez,3,2
+José Alberto Salinas Pérez,1,2
+José Alberto Salinas Pérez,2,1
+José Alberto Salinas Pérez,4,2
+Alfonso Carlos Martínez Estudillo,4,4
+Alfonso Carlos Martínez Estudillo,4,1
+Alfonso Carlos Martínez Estudillo,3,1
+Alfonso Carlos Martínez Estudillo,1,1
+Alfonso Carlos Martínez Estudillo,0,5
+Alfonso Carlos Martínez Estudillo,1,3
+Francisco José Martínez Estudillo,0,2
+Francisco José Martínez Estudillo,3,2
+Javier Arroyo Caire,0,1
+Javier Arroyo Caire,3,1
+Javier Arroyo Caire,3,4
+Javier Arroyo Caire,2,2
+María de los Reyes Capote Campos,0,1
+María de los Reyes Capote Campos,3,1
+Ricardo Galán De Vega,1,1
+Carlos García Alonso,1,3
+Carlos García Alonso,4,2
+Carlos García Alonso,2,2
+José Antonio Ariza Montes,2,3
+José Antonio Ariza Montes,3,3
+Emilio Morales Fernández,0,2
+Emilio Morales Fernández,1,3
+Renee Marie Scott Avellaneda,1,1
+Renee Marie Scott Avellaneda,4,1
+Juan Enrique Estepa Alonso,1,6
+Juan Enrique Estepa Alonso,2,6
+Covadonga Garcia Gómez,2,4
+Covadonga Garcia Gómez,2,5
+Covadonga Garcia Gómez,3,4
+Laurent María Iekeler Guerrero,1,2
+Laurent María Iekeler Guerrero,0,3
+Ignacio Sepúlveda Del Río,3,1
+Ignacio Sepúlveda Del Río,0,2
+María Luz Ortega Carpio,3,3
+María Luz Ortega Carpio,4,2
+Rafael Araque Padilla,1,3
+Rafael Araque Padilla,2,2
+Samuel Yanes Luis,3,1
+Samuel Yanes Luis,1,1
+Samuel Yanes Luis,1,3
+Alejandro Tapia Córdoba,2,1
+Alejandro Tapia Córdoba,1,1
+Alejandro Tapia Córdoba,4,2
+Alejandro Tapia Córdoba,2,2
+Alejandro Tapia Córdoba,3,2
+Alejandro Tapia Córdoba,1,3
+Bernardo Ronquillo Japón,1,2
+Bernardo Ronquillo Japón,2,1
+Bernardo Ronquillo Japón,4,3
+Bernardo Ronquillo Japón,1,1
+Bernardo Ronquillo Japón,0,3
+Bernardo Ronquillo Japón,4,2
+Bernardo Ronquillo Japón,1,4
+Bernardo Ronquillo Japón,3,3
+Bernardo Ronquillo Japón,0,5
+Bernardo Ronquillo Japón,2,2
+Bernardo Ronquillo Japón,2,5
+Bernardo Ronquillo Japón,4,1
+Bernardo Ronquillo Japón,3,5
+José Roberto Borrueco Muñoz,1,1
+José Roberto Borrueco Muñoz,4,1
+José Roberto Borrueco Muñoz,2,1
+Rafael Micó Miranda,1,6
+Rafael Micó Miranda,2,6
+Rafael Micó Miranda,3,6
+Irving Alberto Cruz Matías,0,1
+Irving Alberto Cruz Matías,1,5
+Irving Alberto Cruz Matías,4,2
+Irving Alberto Cruz Matías,2,3
+Irving Alberto Cruz Matías,3,3
+Irving Alberto Cruz Matías,0,5
+Irving Alberto Cruz Matías,3,5
+Francisco Javier Domínguez Ruiz,1,6
+Francisco Javier Domínguez Ruiz,2,6
+Leonardo Rodríguez Urrego,4,4
+Leonardo Rodríguez Urrego,3,1
+Leonardo Rodríguez Urrego,2,2
+Antonio Manuel Durán Rosal,1,3
+Antonio Manuel Durán Rosal,3,5
+Antonio Manuel Durán Rosal,1,4
+Antonio Manuel Durán Rosal,1,5
+José Antonio Martínez López,1,6
+José Antonio Martínez López,3,6
+José Antonio Martínez López,3,5
+José Antonio Martínez López,1,5
+Juan Jose Perea Rodriguez,3,4
+Juan Jose Perea Rodriguez,3,1
+Juan Jose Perea Rodriguez,1,4
+Juan Jose Perea Rodriguez,3,6
+Juan Jose Perea Rodriguez,2,5
+María Luisa Parody Núñez,3,1
+María Luisa Parody Núñez,1,2
+María Luisa Parody Núñez,0,1
+Jesús Duarte Merelo,2,3
+Jesús Duarte Merelo,3,2
+Jesús Duarte Merelo,0,4
+Jesús Duarte Merelo,1,4
+Carmen Rodríguez Quirós,1,4
+Carlos Julio Sánchez Cazorla,1,1
+Carlos Julio Sánchez Cazorla,0,2
+Carlos Julio Sánchez Cazorla,4,1
+Carlos Julio Sánchez Cazorla,2,2
+Jordi García Quintanilla,1,4
+Jordi García Quintanilla,1,5
+Francisco de Paula Montero Chacón,1,1
+Francisco de Paula Montero Chacón,1,2
+Francisco de Paula Montero Chacón,3,4
+Francisco de Paula Montero Chacón,1,4
+Margarita Cabanas Jimenez,3,4
+Margarita Cabanas Jimenez,1,4
+Belén Jimenez Fernandez-Palacios,2,4
+Belén Jimenez Fernandez-Palacios,4,1
+Belén Jimenez Fernandez-Palacios,2,1
+Miguel Civit Masot,1,1
+Miguel Civit Masot,4,3
+Carlos Ramírez Moreno,1,5
+Carlos Ramírez Moreno,1,1
+Carlos Ramírez Moreno,0,5
+Carlos Ramírez Moreno,2,2
+Carlos Ramírez Moreno,2,5
+Antonio José Ortiz Palomares,3,5
+Juan Carlos Duran Quintero,0,5
+Antonio Carmona Ruiz,2,5
+Antonio Carmona Ruiz,3,5
+Antonio Carmona Ruiz,1,5
+Elisa Del Real Urbano,2,5
+Elisa Del Real Urbano,3,5
+Elisa Del Real Urbano,1,5
+José Castro Mora,1,5
+José Castro Mora,1,1
+José Castro Mora,2,6
+José Castro Mora,3,2
+José Castro Mora,2,5
+Francisco Ibánez de Navarra Quintero,4,4
+Francisco Ibánez de Navarra Quintero,1,4
+Marcelo Villena Manzanares,4,4
+Marcelo Villena Manzanares,1,4
+Emilio Álvaro Gómez García,1,2
+Emilio Álvaro Gómez García,2,2
+Octavio José Garrido Fernandez,1,2
+Octavio José Garrido Fernandez,2,2
+Ivan Lozares Estany,0,6
+Juan Luis Zaldivar Abreu,0,6
+Rodrigo Bocanegra Carme,0,6
+Manuel Martín Sánchez,1,5
+Manuel Martín Sánchez,3,5
+Manuel Martín Sánchez,3,6
+Miguel Trigueros Gonzalez,1,6
+Miguel Trigueros Gonzalez,3,6
+Teodoro Lopez Del Cerro,1,6
+Teodoro Lopez Del Cerro,3,6
+Diego Canales Aguilera,4,4
+Diego Canales Aguilera,1,2
+Diego Canales Aguilera,0,4
+Diego Canales Aguilera,3,4
+Diego Canales Aguilera,1,5
+Diego Canales Aguilera,0,3
+Diego Canales Aguilera,1,4
+Diego Canales Aguilera,4,5
+Diego Canales Aguilera,3,6
+Diego Canales Aguilera,0,5
+Diego Canales Aguilera,2,2
+Diego Canales Aguilera,1,6
+Diego Canales Aguilera,2,5
+Diego Canales Aguilera,4,1
+Diego Canales Aguilera,3,5
+David Becerra Alonso,3,1
+David Becerra Alonso,1,1
+David Becerra Alonso,2,2
+Rosa Melero Bolaños,3,2
+Rosa Melero Bolaños,1,3
+Mario Wenning,0,2
+Mario Wenning,3,5
+Mario Wenning,1,4
+Mario Wenning,4,3
+Pablo Romero Buccicardi,3,2
+Pablo Romero Buccicardi,1,2
+José Carlos Cañizares Gaztelu,2,5
+José Carlos Cañizares Gaztelu,1,3
+José Carlos Cañizares Gaztelu,3,4
+José Carlos Cañizares Gaztelu,4,1
+Santiago Bobo Ruiz,2,5
+Santiago Bobo Ruiz,1,5
+Gustavo García-Herrera Blanco,1,1
+Gustavo García-Herrera Blanco,1,3
+María del Carmen López Martín,1,4
+María del Carmen López Martín,0,5
+Ana Mercedes López Rodríguez,2,3
+Ana Mercedes López Rodríguez,1,2
+Ignacio Andrío Lejarza,3,2
+Ignacio Andrío Lejarza,1,2
+Carlos Vázquez Monzón,0,1
+Carlos Vázquez Monzón,3,1
+Carlos Vázquez Monzón,1,1
+Carlos Vázquez Monzón,4,2
+Carlos Vázquez Monzón,0,2
+Carlos Vázquez Monzón,4,1
+Thomas Ian Ashley,3,1
+Thomas Ian Ashley,1,1
+Thomas Ian Ashley,4,1
+Thomas Ian Ashley,4,2
+Carolina Gisele Naudeau,1,2
+Carolina Gisele Naudeau,3,4
+Carolina Gisele Naudeau,4,1
+Carolina Gisele Naudeau,1,1
+Carolina Gisele Naudeau,1,4
+Carolina Gisele Naudeau,2,3
+Carolina Gisele Naudeau,3,2
+Carolina Gisele Naudeau,1,3
+Guillermo Murillo Bellón,1,2
+Guillermo Murillo Bellón,1,4
+Juan Aguilar Guisado,1,3
+Juan Aguilar Guisado,2,1
+Juan Carlos Rodríguez Gómez,1,2
+Juan Carlos Rodríguez Gómez,3,4
+Juan Carlos Rodríguez Gómez,3,1
+Juan Carlos Rodríguez Gómez,1,4
+Juan Carlos Rodríguez Gómez,3,2
+Juan Carlos Rodríguez Gómez,4,1
+Alejandro Bandera Moreno,2,4
+Alejandro Bandera Moreno,1,2
+Alejandro Bandera Moreno,1,5
+Alejandro Bandera Moreno,2,2
+Alejandro Bandera Moreno,2,5
+Mónica Rueda García,0,5
+Mónica Rueda García,2,6
+Mónica Rueda García,0,4
+Mónica Rueda García,0,6
+Vito Mario Fico,2,1
+Vito Mario Fico,2,2
+Johnny Antonio Dávila,2,4
+Johnny Antonio Dávila,1,5
+Cecilia De Arriba Rivas,0,2
+Cecilia De Arriba Rivas,3,2
+Rosa Colmenarejo Fernández,0,2
+Rosa Colmenarejo Fernández,2,5
+Rosa Colmenarejo Fernández,3,2
+Rosa Colmenarejo Fernández,2,4
+Eduardo Moreno Reyes,1,1
+Eduardo Moreno Reyes,3,3
+María del Pino Ramos Sosa,1,1
+María del Pino Ramos Sosa,3,3
+Genoveva Millán Vázquez de la Torre,3,2
+Genoveva Millán Vázquez de la Torre,4,3
+Manuel Alejandro Cardenete Flores,0,6
+PAULA VILLEGAS MARTOS,0,1
+PAULA VILLEGAS MARTOS,2,1
+Daniel Muñoz Pardo,1,6
+Daniel Muñoz Pardo,4,5
+Gladis Herminia Gonzales Aguilar,0,5
+María Patrocinio Álvarez Padilla,1,6
+María Patrocinio Álvarez Padilla,2,5
+Pedro Pablo Pérez Hernández,1,3
+David Alejandro Villacís Proaño,1,2
+David Alejandro Villacís Proaño,2,3
+David Alejandro Villacís Proaño,0,2
+David Alejandro Villacís Proaño,2,2
+David Alejandro Villacís Proaño,1,3
+Oana Adelina Tanasache,3,4
+Oana Adelina Tanasache,0,6
+Carlos Canton Marin,2,3
+Carlos Canton Marin,1,1
+Gema Gutiérrez Romero,2,5
+Gema Gutiérrez Romero,1,5
+Jorge Raúl Maradiaga Chirinos,0,3
+Jorge Raúl Maradiaga Chirinos,2,1
+Sergio Damian Firmenich Zorrilla,2,4
+Sergio Damian Firmenich Zorrilla,0,4
+Sergio Damian Firmenich Zorrilla,2,1
+Sergio Damian Firmenich Zorrilla,1,5
+Sergio Damian Firmenich Zorrilla,1,4
+Sergio Damian Firmenich Zorrilla,4,2
+Sergio Damian Firmenich Zorrilla,0,2
+Sergio Damian Firmenich Zorrilla,3,2
+Alejandro José Freire Mendoza,0,2
+Alejandro José Freire Mendoza,1,2
+Alejandro José Freire Mendoza,3,2
+Alejandro José Freire Mendoza,2,2
+Abraham Parrón Rivero,1,2
+Abraham Parrón Rivero,4,2
+Miguel Muñoz Garnica,1,1
+Miguel Muñoz Garnica,2,2
+Francisco José Pérez Valencia,0,4
+Francisco José Pérez Valencia,0,5
+Antonio Francisco Campos Méndez,3,4
+Antonio Francisco Campos Méndez,1,5
+Alba Torrebejano Osorio,2,4
+Alba Torrebejano Osorio,1,2
+Alba Torrebejano Osorio,1,4
+Alba Torrebejano Osorio,4,2
+Alba Torrebejano Osorio,2,2
+Alba Torrebejano Osorio,1,3
+Daniel Benitez Gómez,1,2
+Daniel Benitez Gómez,0,6
+Daniel Benitez Gómez,4,2
+Daniel Benitez Gómez,0,5
+Ángela Arregui Chavarría,0,5
+Ángela Arregui Chavarría,0,6
+Rafael Vera Jiménez,0,1
+Rafael Vera Jiménez,1,1
+Javier Irala Recio,1,2
+Javier Irala Recio,2,2
+Fausto Peidro Morillo,3,6
+Fausto Peidro Morillo,3,5
+Fausto Peidro Morillo,0,5
+Laura Serrano Mendoza,4,4
+Laura Serrano Mendoza,3,3
+María Teresa Valera Fernández Mesa,4,4
+María Teresa Valera Fernández Mesa,3,3
+Eduardo Manuel López González,2,5
+Eduardo Manuel López González,0,4
+Eduardo Manuel López González,3,4
+Eduardo Manuel López González,0,5
+Francisco José Durán Olivencia,2,5
+Francisco José Durán Olivencia,0,4
+Francisco José Durán Olivencia,0,5
+Delia Muñoz Alé,2,5
+Delia Muñoz Alé,3,4
+Delia Muñoz Alé,0,5
+Fernando Isorna Llerena,0,5
+María Tamara Guerrero Cervera,3,4
+Juan Carlos Meléndez Rodríguez,1,1
+Juan Carlos Meléndez Rodríguez,4,1
+José Antonio Delgado Romero,1,1
+José Antonio Delgado Romero,3,3
+Álvaro Carmona Pestaña,0,3
+Álvaro Carmona Pestaña,1,3
+Manuel Podadera Valenzuela,4,4
+Manuel Podadera Valenzuela,3,4
+Jesús Jiménez López,3,6
+Vicente Octavio Herrera García,2,5
+Vicente Octavio Herrera García,3,6
+Eugenio Martínez Cámara,2,5
+María Teresa Martín Valdivia,2,5
+Alvaro Martinez Ceballos,3,5
+Alvaro Martinez Ceballos,0,5
+Antonio Gil Moyano,2,5

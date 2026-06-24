@@ -57,6 +57,7 @@ import os
 import sys
 import json
 import io
+import re
 import zipfile
 import base64
 import subprocess
@@ -978,15 +979,45 @@ def render_run_report(log_text="", elapsed_s=None):
         unsafe_allow_html=True,
     )
 
-    # ── Conformité : qualité des données, KPIs, non placés, solveur ──
-    try:
-        render_quality_panel()
-    except Exception:
-        pass
-
     # ── Raw log: demoted, collapsed, clearly labelled as technical ──
+    # The full quality / KPI / unplaced / solver breakdown lives on the
+    # Results page — not duplicated here to keep the run report concise.
     with st.expander("Technical solver log (for developers)"):
         st.code(log_text or "(no log captured)", language="text")
+
+
+def _find_prof_load_csv():
+    """Locate professor_lab_load.csv robustly, regardless of the current
+    working directory. Checks the workspace + bundled resource (via app_paths)
+    and a set of relative fallbacks. Returns the first existing path or None."""
+    rels = [
+        "professor_lab_load.csv",
+        "outputs/optimization/professor_lab_load.csv",
+        "outputs/professor_lab_load.csv",
+    ]
+    # app_paths resolves the workspace copy then the bundled resource dir
+    # (the folder where app.py lives) — works even if cwd is elsewhere.
+    if PATHS_OK:
+        for rel in rels:
+            try:
+                found = app_paths.resolve_existing(rel)
+                if found:
+                    return found
+            except Exception:
+                pass
+    # Directory of this script, then plain relative paths.
+    try:
+        _here = os.path.dirname(os.path.abspath(__file__))
+    except Exception:
+        _here = None
+    for rel in rels:
+        if _here:
+            cand = os.path.join(_here, rel)
+            if os.path.exists(cand):
+                return cand
+        if os.path.exists(rel):
+            return rel
+    return None
 
 
 def _load_report_json(rel):
@@ -1025,64 +1056,64 @@ def render_quality_panel(show_solver=True):
     solver = _load_report_json("reports/solver_stats.json")
 
     if not any([kpi, dq, unplaced is not None, solver]):
-        st.info("Les rapports de conformité ne sont pas encore disponibles. "
-                "Lancez l'optimisation pour les générer.")
+        st.info("Conformance reports are not available yet. "
+                "Run the optimization to generate them.")
         return
 
-    # ── Contrôle qualité des données ────────────────────────────────────
+    # ── Data quality control ────────────────────────────────────────────
     if dq:
-        section_header("Contrôle qualité des données")
+        section_header("Data quality control")
         integ = dq.get("integrity", {}) or {}
         grp = dq.get("grouping", {}) or {}
         ok = integ.get("ok")
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            stat_card("Intégrité", "OK" if ok else "À revoir",
-                      "structure des données")
+            stat_card("Integrity", "OK" if ok else "Review",
+                      "data structure")
         with c2:
-            stat_card("Lignes", f"{integ.get('n_rows', '—'):,}".replace(",", " ")
+            stat_card("Rows", f"{integ.get('n_rows', '—'):,}".replace(",", " ")
                       if isinstance(integ.get('n_rows'), int) else "—",
                       "master_schedule")
         with c3:
-            stat_card("Étudiants", integ.get("n_students", "—"), "uniques")
+            stat_card("Students", integ.get("n_students", "—"), "unique")
         with c4:
             gp = grp.get("global_placement_pct")
-            stat_card("Taux de placement",
+            stat_card("Placement rate",
                       f"{gp:.1f}%" if isinstance(gp, (int, float)) else "—",
-                      f"{grp.get('total_placed', '—')}/{grp.get('total_enrolled', '—')} inscriptions")
+                      f"{grp.get('total_placed', '—')}/{grp.get('total_enrolled', '—')} enrolments")
 
         per_subj = grp.get("per_subject") or []
         if per_subj:
             try:
                 df_subj = pd.DataFrame(per_subj)
                 df_subj = df_subj.rename(columns={
-                    "subject": "Matière", "enrolled": "Inscrits",
-                    "placed": "Placés", "unplaced": "Non placés",
-                    "placement_pct": "Taux (%)"})
-                with st.expander("Détail par matière"):
+                    "subject": "Subject", "enrolled": "Enrolled",
+                    "placed": "Placed", "unplaced": "Unplaced",
+                    "placement_pct": "Rate (%)"})
+                with st.expander("Breakdown by subject"):
                     st.dataframe(df_subj, use_container_width=True, hide_index=True)
             except Exception:
                 pass
 
-    # ── KPIs du planning ────────────────────────────────────────────────
+    # ── Schedule KPIs ───────────────────────────────────────────────────
     if kpi:
-        section_header("Indicateurs du planning (KPIs)")
+        section_header("Schedule KPIs")
         groups = kpi.get("groups", {}) or {}
         plc = kpi.get("placement", {}) or {}
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            stat_card("Groupes", groups.get("total", "—"),
-                      f"dont {groups.get('overflow', 0)} en overflow")
+            stat_card("Groups", groups.get("total", "—"),
+                      f"{groups.get('overflow', 0)} in overflow")
         with c2:
-            stat_card("Taille moyenne",
+            stat_card("Average size",
                       groups.get("size_mean", "—"),
                       f"min {groups.get('size_min', '—')} · max {groups.get('size_max', '—')}")
         with c3:
-            stat_card("Sessions totales", kpi.get("total_sessions", "—"),
-                      "sur les deux semestres")
+            stat_card("Total sessions", kpi.get("total_sessions", "—"),
+                      "across both semesters")
         with c4:
-            stat_card("Sessions vendredi", kpi.get("friday_sessions", "—"),
-                      "à surveiller")
+            stat_card("Friday sessions", kpi.get("friday_sessions", "—"),
+                      "to monitor")
 
         day_bal = kpi.get("day_balance") or {}
         if day_bal:
@@ -1090,46 +1121,46 @@ def render_quality_panel(show_solver=True):
                 order = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
                 s = pd.Series(day_bal)
                 s = s.reindex([d for d in order if d in s.index])
-                st.caption("Répartition des sessions par jour")
+                st.caption("Sessions per day")
                 st.bar_chart(s)
             except Exception:
                 pass
 
-    # ── Inscriptions non placées (diagnostic) ───────────────────────────
-    section_header("Inscriptions non placées")
+    # ── Unplaced enrolments (diagnostics) ───────────────────────────────
+    section_header("Unplaced enrolments")
     if not unplaced:
-        st.success("Toutes les inscriptions ont été placées (0 non placée).")
+        st.success("All enrolments were placed (0 unplaced).")
     else:
         help_tip(
-            "Diagnostic automatique de chaque inscription non placée : nombre de "
-            "créneaux où l'étudiant est libre, combien sont compatibles avec la "
-            "matière, combien disposent encore d'une place, et le motif retenu.",
+            "Automatic diagnostic for each unplaced enrolment: number of slots "
+            "where the student is free, how many are compatible with the subject, "
+            "how many still have an available seat, and the resulting verdict.",
             icon=""
         )
         try:
             df_u = pd.DataFrame(unplaced)
             cols = {
-                "student_name": "Étudiant", "subject": "Matière",
-                "n_free_slots": "Créneaux libres",
-                "n_compatible_slots": "Compatibles matière",
-                "n_compatible_with_room": "Compatibles avec place",
-                "verdict": "Motif",
+                "student_name": "Student", "subject": "Subject",
+                "n_free_slots": "Free slots",
+                "n_compatible_slots": "Subject-compatible",
+                "n_compatible_with_room": "With free seat",
+                "verdict": "Reason",
             }
             keep = [c for c in cols if c in df_u.columns]
             df_u = df_u[keep].rename(columns=cols)
             st.dataframe(df_u, use_container_width=True, hide_index=True)
         except Exception as e:
-            st.warning(f"Impossible d'afficher le détail : {e}")
+            st.warning(f"Could not display details: {e}")
 
-    # ── Journal du solveur ──────────────────────────────────────────────
+    # ── CP-SAT solver log ───────────────────────────────────────────────
     if show_solver and solver:
-        section_header("Journal du solveur CP-SAT")
+        section_header("CP-SAT solver log")
         try:
             df_s = pd.DataFrame(solver)
             cols = {
-                "label": "Semestre", "status": "État",
+                "label": "Semester", "status": "Status",
                 "n_sessions": "Sessions", "n_hints": "Hints",
-                "wall_time_s": "Temps (s)", "objective": "Objectif", "gap": "Gap",
+                "wall_time_s": "Time (s)", "objective": "Objective", "gap": "Gap",
             }
             keep = [c for c in cols if c in df_s.columns]
             df_s = df_s[keep].rename(columns=cols)
@@ -1199,6 +1230,27 @@ if page == t('nav_home'):
               </div>
             </div>
         """, unsafe_allow_html=True)
+
+    # ─── Highlights band (always-true capability pills) ───
+    _highlights = [
+        ("CP-SAT", "Google OR-Tools solver"),
+        ("9 / 9", "constraints enforced (C1–C9)"),
+        ("0", "scheduling conflicts"),
+        ("Excel", "Daniel's export format"),
+    ]
+    _pills = "".join(
+        f"<div style='flex:1 1 0;min-width:150px;background:var(--surface,#13203A);"
+        f"border:1px solid var(--line,#243453);border-radius:14px;padding:16px 18px;'>"
+        f"<div style='font-family:var(--font-display,serif);font-size:1.6rem;font-weight:600;"
+        f"color:var(--ink,#EAF1FA);line-height:1;'>{big}</div>"
+        f"<div style='font-size:0.82rem;color:var(--ink-soft,#A9BBD4);margin-top:0.4rem;'>{small}</div>"
+        f"</div>"
+        for big, small in _highlights
+    )
+    st.markdown(
+        f"<div style='display:flex;gap:14px;flex-wrap:wrap;margin:0 0 1.6rem;'>{_pills}</div>",
+        unsafe_allow_html=True,
+    )
 
     # ─── Onboarding tour card (prominent CTA) ───
     pipeline_ran = st.session_state.get('pipeline_ran', False)
@@ -1308,26 +1360,37 @@ if page == t('nav_home'):
     else:
         st.info(t('no_data_yet'))
 
-    # Workflow steps
+    # Workflow steps — numbered cards with a clear sequence
     section_header(t("start_here"))
     sc1, sc2, sc3, sc4 = st.columns(4)
     steps = [
-        (sc1, '', t('home_step1_title'), t('home_step1_desc')),
-        (sc2, '', t('home_step2_title'), t('home_step2_desc')),
-        (sc3, '', t('home_step3_title'), t('home_step3_desc')),
-        (sc4, '', t('home_step4_title'), t('home_step4_desc')),
+        (sc1, '1', t('home_step1_title'), t('home_step1_desc')),
+        (sc2, '2', t('home_step2_title'), t('home_step2_desc')),
+        (sc3, '3', t('home_step3_title'), t('home_step3_desc')),
+        (sc4, '4', t('home_step4_title'), t('home_step4_desc')),
     ]
-    for col, emoji, title, desc in steps:
+
+    def _clean_step_title(txt):
+        # Translation strings prefix a number ("1. Load data"); the badge now
+        # carries the number, so strip the leading "N." for a cleaner title.
+        return re.sub(r'^\s*\d+\.\s*', '', str(txt))
+
+    for col, num, title, desc in steps:
         with col:
             st.markdown(f"""
-                <div class="info-card" style="height: 120px;">
-                    <div style="font-weight: 600; color: var(--text-heading); margin-bottom: 0.35rem;">{title}</div>
+                <div class="info-card" style="height: 158px; padding: 20px 22px;">
+                    <div style="display:flex;align-items:center;justify-content:center;
+                                width:34px;height:34px;border-radius:50%;
+                                background:linear-gradient(135deg,var(--cyan),var(--navy));
+                                color:#06121F;font-family:var(--font-mono,monospace);
+                                font-weight:700;font-size:0.95rem;margin-bottom:0.7rem;">{num}</div>
+                    <div style="font-weight: 600; color: var(--text-heading); margin-bottom: 0.35rem;">{_clean_step_title(title)}</div>
                     <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">{desc}</div>
                 </div>
             """, unsafe_allow_html=True)
 
-    # Key features
-    section_header(f' {t("key_features")}')
+    # Key features — accented cards
+    section_header(t("key_features"))
     fc1, fc2, fc3 = st.columns(3)
     features = [
         (fc1, t('feat1_t'), t('feat1_d')),
@@ -1337,9 +1400,9 @@ if page == t('nav_home'):
     for col, title, desc in features:
         with col:
             st.markdown(f"""
-                <div class="info-card" style="height: 132px;">
-                    <div style="font-weight: 600; color: var(--text-heading); margin-bottom: 0.35rem;">{title}</div>
-                    <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">{desc}</div>
+                <div class="info-card" style="height: 150px; border-left: 3px solid var(--cyan); padding: 20px 22px;">
+                    <div style="font-family:var(--font-display,serif); font-weight: 600; font-size:1.05rem; color: var(--text-heading); margin-bottom: 0.45rem;">{title}</div>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.55;">{desc}</div>
                 </div>
             """, unsafe_allow_html=True)
 
@@ -3444,21 +3507,19 @@ elif page == t('nav_integrity'):
             x = _ud.normalize("NFKD", str(x))
             x = "".join(c for c in x if not _ud.combining(c))
             return " ".join(sorted(x.lower().replace(",", " ").split()))
+        _ll_csv = _find_prof_load_csv()
         _credit_by_norm = {}
-        for _p in ("professor_lab_load.csv",
-                   "outputs/optimization/professor_lab_load.csv"):
-            if os.path.exists(_p):
-                try:
-                    _ll = pd.read_csv(_p)
-                    for _, _r in _ll.iterrows():
-                        _credit_by_norm[_norm_pn(_r.get("prof_name", ""))] = {
-                            "cr": float(_r.get("lab_credits", 0) or 0),
-                            "sess": int(float(_r.get("lab_sessions", 0) or 0)),
-                            "over": bool(_r.get("over_budget", False)),
-                        }
-                    break
-                except Exception:
-                    pass
+        if _ll_csv:
+            try:
+                _ll = pd.read_csv(_ll_csv)
+                for _, _r in _ll.iterrows():
+                    _credit_by_norm[_norm_pn(_r.get("prof_name", ""))] = {
+                        "cr": float(_r.get("lab_credits", 0) or 0),
+                        "sess": int(float(_r.get("lab_sessions", 0) or 0)),
+                        "over": bool(_r.get("over_budget", False)),
+                    }
+            except Exception:
+                pass
 
         st.markdown("**Professors** — subject · eligible teachers · lab credits → sessions "
                     "(1 P credit = 5 sessions)")
@@ -3471,9 +3532,9 @@ elif page == t('nav_integrity'):
             for nm in names:
                 _ci = _credit_by_norm.get(_norm_pn(nm))
                 if _ci and _ci["cr"] > 0:
-                    _flag = " (dépassement)" if _ci["over"] else ""
+                    _flag = " (over budget)" if _ci["over"] else ""
                     _load = (f"<span style='color:#6fb6e8;font-weight:600;'> · "
-                             f"{_ci['cr']:.0f} cr P \u2192 {_ci['sess']} sess{_flag}</span>")
+                             f"{_ci['cr']:.0f} P cr \u2192 {_ci['sess']} sess{_flag}</span>")
                 else:
                     _load = ""
                 chips += (
@@ -3488,12 +3549,23 @@ elif page == t('nav_integrity'):
             if len(_ss):
                 _agg = (_ss.groupby(["day", "time_block"]).size()
                         .sort_values(ascending=False))
-                _parts = [f"{d} {tb} \u00d7{n}" for (d, tb), n in _agg.items()]
+                # Clear, prominent block of one badge per scheduled slot.
+                _slot_chips = "".join(
+                    f"<span style='display:inline-block;background:rgba(111,174,217,0.12);"
+                    f"border:1px solid rgba(111,174,217,0.40);border-radius:999px;"
+                    f"padding:3px 11px;margin:3px 5px 0 0;font-size:0.78rem;font-weight:600;"
+                    f"color:var(--cyan,#6FAED9);'>{d} {tb} "
+                    f"<span style='opacity:0.8;font-weight:500;'>&times;{n}</span></span>"
+                    for (d, tb), n in _agg.items()
+                )
                 _slot_bits = (
-                    "<div style='margin-top:0.45rem;padding-top:0.4rem;"
-                    "border-top:1px solid var(--border,#2c365844);font-size:0.73rem;"
-                    "color:var(--text-secondary,#9fb0c8);'>"
-                    "scheduled sessions: " + " · ".join(_parts) + "</div>"
+                    "<div style='margin-top:0.6rem;padding-top:0.55rem;"
+                    "border-top:1px solid var(--line,#243453);'>"
+                    "<div style='font-family:var(--font-mono,monospace);font-size:0.66rem;"
+                    "letter-spacing:0.12em;text-transform:uppercase;"
+                    "color:var(--text-muted,#6B7E9E);margin-bottom:0.15rem;'>"
+                    "Scheduled sessions</div>"
+                    f"<div>{_slot_chips}</div></div>"
                 )
             st.markdown(
                 f"<div style='padding:0.7rem 0.95rem;border-radius:10px;margin-bottom:0.6rem;"
@@ -3507,17 +3579,12 @@ elif page == t('nav_integrity'):
                 unsafe_allow_html=True,
             )
 
-    # ── Crédits par professeur (table claire et triable) ────────────────
-    section_header("Crédits par professeur")
-    _ll_path = None
-    for _p in ("professor_lab_load.csv",
-               "outputs/optimization/professor_lab_load.csv"):
-        if os.path.exists(_p):
-            _ll_path = _p
-            break
+    # ── Lab credits per professor (clear, sortable table) ───────────────
+    section_header("Lab credits per professor")
+    _ll_path = _find_prof_load_csv()
     if _ll_path is None:
-        st.info("Fichier professor_lab_load.csv introuvable. "
-                "Générez-le pour afficher les crédits par professeur.")
+        st.info("Professor credit data is not available yet. "
+                "Run the optimization to generate it.")
     else:
         try:
             _df = pd.read_csv(_ll_path)
@@ -3528,40 +3595,40 @@ elif page == t('nav_integrity'):
             tot_sess = int(_df_lab["lab_sessions"].fillna(0).sum())
 
             help_tip(
-                "Charge de laboratoire par professeur. Règle validée : "
-                "1 crédit P = 5 sessions de laboratoire. Les dépassements de "
-                "budget sont signalés (jamais bloquants).",
+                "Laboratory teaching load per professor. Validated rule: "
+                "1 P credit = 5 lab sessions. Budget overruns are flagged "
+                "(never blocking).",
                 icon=""
             )
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                stat_card("Professeurs", n_prof, "avec crédits labo")
+                stat_card("Professors", n_prof, "with lab credits")
             with c2:
-                stat_card("Crédits labo", f"{tot_cr:.0f}", "total assigné")
+                stat_card("Lab credits", f"{tot_cr:.0f}", "total assigned")
             with c3:
-                stat_card("Sessions labo", tot_sess, "total (crédits × 5)")
+                stat_card("Lab sessions", tot_sess, "total (credits × 5)")
             with c4:
-                stat_card("Dépassements", n_over, "budget signalé")
+                stat_card("Over budget", n_over, "flagged")
 
             _show = _df_lab.rename(columns={
                 "prof_code": "Code",
-                "prof_name": "Professeur",
-                "lab_credits": "Crédits labo",
-                "lab_sessions": "Sessions labo",
-                "theory_credits": "Crédits théorie",
-                "total_assigned": "Total assigné",
+                "prof_name": "Professor",
+                "lab_credits": "Lab credits",
+                "lab_sessions": "Lab sessions",
+                "theory_credits": "Theory credits",
+                "total_assigned": "Total assigned",
                 "budget": "Budget",
-                "margin": "Marge",
-                "over_budget": "Dépassement",
+                "margin": "Margin",
+                "over_budget": "Over budget",
             })
-            _cols = ["Code", "Professeur", "Crédits labo", "Sessions labo",
-                     "Crédits théorie", "Total assigné", "Budget", "Marge",
-                     "Dépassement"]
+            _cols = ["Code", "Professor", "Lab credits", "Lab sessions",
+                     "Theory credits", "Total assigned", "Budget", "Margin",
+                     "Over budget"]
             _cols = [c for c in _cols if c in _show.columns]
-            _show = _show[_cols].sort_values("Crédits labo", ascending=False)
+            _show = _show[_cols].sort_values("Lab credits", ascending=False)
             st.dataframe(_show, use_container_width=True, hide_index=True)
         except Exception as e:
-            st.warning(f"Impossible d'afficher les crédits par professeur : {e}")
+            st.warning(f"Could not display professor credits: {e}")
 
     st.caption("These are the same checks as verify_flow.py — shown here so no terminal is needed.")
 

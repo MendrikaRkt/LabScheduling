@@ -4447,6 +4447,20 @@ def generate_professor_workbook(results_df):
         print(f"  [WARN]  Professor_Lab_Workload : lecture assignation echouee ({e})")
         return
 
+    # Ecrire aussi professor_lab_load.csv (consomme par la page Integrite de
+    # l'app) a cote des sorties, afin qu'il soit toujours present apres un run.
+    try:
+        _csv_out = _osmod.path.join(OUTPUT_DIR, "professor_lab_load.csv")
+        load.to_csv(_csv_out, index=False)
+        # Copie a la racine du projet (emplacement historique attendu par l'app).
+        try:
+            load.to_csv("professor_lab_load.csv", index=False)
+        except Exception:
+            pass
+        print(f"  [OK] professor_lab_load.csv ecrit ({len(load)} profs)")
+    except Exception as e:
+        print(f"  [WARN]  professor_lab_load.csv non ecrit ({e})")
+
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
