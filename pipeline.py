@@ -4471,6 +4471,34 @@ def generate_professor_workbook(results_df):
         print(f"  [WARN]  Professor_Lab_Workload : lecture assignation echouee ({e})")
         return
 
+    # --- Rafraîchit le cache committé des poids prof (correction définitive N/D) ---
+    # Tant que l'Asignación est présente, on régénère le cache JSON consommé par
+    # la « Teacher View ». Ainsi, même packagée/déployée SANS le xlsx source, la
+    # feuille affiche toujours les vrais professeurs, crédits P et séances.
+    try:
+        import lab_professor_assignment as _LPA
+        _cache_out = _LPA.write_weights_cache(
+            fp, "data_clean/optimizarion/lab_professor_weights.json")
+        print(f"  [OK] cache poids prof rafraichi : {_cache_out}")
+    except Exception as e:
+        print(f"  [WARN]  Rafraichissement cache poids prof echoue : {e}")
+
+    # --- Export CSV de la charge labo par prof (consomme par la page Integridad) ---
+    # Sans ce CSV, la vue professeur affiche "professor_lab_load.csv introuvable" / N/D.
+    # 1 credit P = 5 sessions. Colonnes lues par app.py : prof_name, prof_code,
+    # lab_credits, lab_sessions, theory_credits, total_assigned, budget,
+    # margin, over_budget.
+    try:
+        import os as _oslab
+        _oslab.makedirs(OUTPUT_DIR, exist_ok=True)
+        load.to_csv(f"{OUTPUT_DIR}professor_lab_load.csv", index=False)
+        # copie a la racine du workspace : second emplacement lu par l'app
+        load.to_csv("professor_lab_load.csv", index=False)
+        print(f"  [OK] {OUTPUT_DIR}professor_lab_load.csv "
+              f"({int((load['lab_credits'] > 0).sum())} prof(s) avec charge labo)")
+    except Exception as e:
+        print(f"  [WARN]  Export professor_lab_load.csv echoue : {e}")
+
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter

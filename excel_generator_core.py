@@ -40,6 +40,7 @@ Outputs (in outputs/optimization/Curso_2025_2026/):
 # =============================================================================
 import sys
 import io
+import math
 
 if sys.platform == 'win32':
     try:
@@ -1657,12 +1658,15 @@ def _map_sched_to_asignacion(sched_subject, asignacion_subjects, lab_config):
     return matched
 
 
-def _format_session_timetable(subject_sessions):
+def _format_session_timetable(subject_sessions, sep='\n'):
     """Construit l'horaire détaillé des séances d'une matière, par groupe.
 
     subject_sessions : DataFrame des lignes de planning pour UNE matière.
+    sep              : séparateur entre groupes ('\\n' = un groupe par ligne,
+                       pour un affichage lisible dans une cellule à retour à la
+                       ligne ; ' ; ' pour une chaîne compacte sur une ligne).
     Renvoie une chaîne lisible, p.ex. :
-        « G1 : Lunes 12:30-14:30 (Ciencias Exp. I) — 12 séances ; G2 : Martes ... »
+        « G1 : Lunes 12:30-14:30 (Ciencias Exp. I) — 12 sessions »
 
     On regroupe par (groupe, jour, créneau, salle) pour ne pas répéter chaque
     semaine, et on indique le nombre de séances de ce créneau récurrent.
@@ -1699,7 +1703,7 @@ def _format_session_timetable(subject_sessions):
         except Exception:
             g_disp = g
         parts.append(f"G{g_disp} : " + " / ".join(slot_parts))
-    return " ; ".join(parts)
+    return sep.join(parts)
 
 
 def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
@@ -1735,7 +1739,12 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
     try:
         import lab_professor_assignment as _lpa
         _fp = _find_asignacion_file()
-        if _fp:
+        # Definitive N/D fix: when the raw Asignación xlsx cannot be located
+        # (e.g. packaged / deployed app), the source-derived data is read from
+        # the committed JSON cache instead. `_fp` may therefore be None here and
+        # the LPA functions transparently fall back to the cache.
+        _source_available = bool(_fp) or (_lpa.load_weights_cache() is not None)
+        if _source_available:
             # subjects actually scheduled at this level -> their planned groups
             subject_to_groups = {}
             for _s in subjects:
@@ -1757,12 +1766,22 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                     expected_map[(_r['subject_clean'], _r['prof_name'])] = \
                         float(_r['sessions_expected'])
                 lpa_ok = bool(sgmap)
+        if not lpa_ok:
+            print('    [WARN] Teacher View: neither Asignación file nor weights '
+                  'cache available — per-professor breakdown unavailable')
     except Exception as _exc:
         print(f'    [WARN] Teacher View: per-group assignment unavailable ({_exc})')
 
-    # Legacy credit map (subject-level) kept as a fallback only.
-    if credits_by_subject is None or names_by_subject is None:
+    # Legacy credit map (subject-level) kept as a fallback only. Load it ONLY
+    # when the per-professor (LPA/cache) path did not succeed — this avoids the
+    # misleading "Asignación file not found" warning when the breakdown is in
+    # fact fully available from the committed cache.
+    if not lpa_ok and (credits_by_subject is None or names_by_subject is None):
         credits_by_subject, names_by_subject = _load_professor_lab_credits()
+    if credits_by_subject is None:
+        credits_by_subject = {}
+    if names_by_subject is None:
+        names_by_subject = {}
     lab_config = _get_lab_config()
     asignacion_subjects = list(credits_by_subject.keys())
 
@@ -1784,6 +1803,13 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                     "Asignación file not available.")
     note = worksheet.cell(row=2, column=1, value=note_txt)
     note.font = VP_NOTE_FONT
+    # Merge title + note across all 7 columns and let the note wrap on 2 lines so
+    # it never overflows behind the table.
+    worksheet.merge_cells('A1:G1')
+    worksheet.merge_cells('A2:G2')
+    note.alignment = Alignment(wrap_text=True, vertical='top')
+    worksheet.row_dimensions[1].height = 22
+    worksheet.row_dimensions[2].height = 42
 
     if schedule_df is None or len(schedule_df) == 0:
         worksheet.cell(row=4, column=1,
@@ -1837,8 +1863,12 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
             for pname in sorted(prof_groups):
                 grps = sorted(set(prof_groups[pname]))
                 grp_str = ', '.join(f'G{g}' for g in grps)
-                planned_prof = int(len(subj_sessions[subj_sessions['grupo'].apply(
-                    lambda x: _safe_int(x) in set(grps))]))
+                grp_set = set(grps)
+                prof_sessions = subj_sessions[subj_sessions['grupo'].apply(
+                    lambda x: _safe_int(x) in grp_set)]
+                planned_prof = int(len(prof_sessions))
+                # Schedule restricted to THIS professor's groups (one per line).
+                horaire_prof = _format_session_timetable(prof_sessions, sep='\n')
                 expected = expected_map.get((lpa_key, pname))
                 if expected is None:
                     expected = planned_prof  # no source target -> neutral
@@ -1848,7 +1878,7 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                     credits = round(expected / CREDIT_TO_SESSIONS, 2)
                     state = 'OK' if abs(planned_prof - expected) < 1e-6 else 'Gap'
                 rows.append((pname, matiere_disp, credits, round(expected, 1),
-                             grp_str, planned_prof, horaire, state))
+                             grp_str, planned_prof, horaire_prof, state))
         elif credits_by_subject:
             # Fallback: subject-level credit map (legacy display).
             asig_subs = _map_sched_to_asignacion(sched, asignacion_subjects, lab_config)
@@ -1876,6 +1906,22 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
 
     rows.sort(key=lambda r: (str(r[0]), str(r[1])))
 
+    # ---- Column widths (approx. chars per visual line for wrap estimation) ----
+    widths = [30, 26, 14, 18, 22, 16, 64]
+    # usable chars per line ≈ column width (Calibri 10/11 ~ 1 char per width unit)
+    chars_per_line = {5: 20, 7: 60}
+
+    def _visual_lines(text, col):
+        """Estimate how many visual lines a wrapped cell needs."""
+        if text is None:
+            return 1
+        cpl = chars_per_line.get(col, 9999)
+        total = 0
+        for seg in str(text).split('\n'):
+            seg = seg.rstrip()
+            total += max(1, math.ceil(len(seg) / cpl)) if seg else 1
+        return max(1, total)
+
     # ---- Write rows with per-professor banding ----
     current_row = header_row + 1
     prev_prof = None
@@ -1894,16 +1940,25 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
         values = [prof_label, matiere_disp, cr, expected, grp_str, planned, horaire]
         for j, val in enumerate(values, start=1):
             font = VP_PROF_FONT if j == 1 else VP_CELL_FONT
-            align = WRAP_TOP_ALIGNMENT if j == 7 else (LEFT_ALIGNMENT if j <= 2 or j == 5 else CENTER_ALIGNMENT)
+            # Schedule (7) and assigned groups (5) wrap & align to top so long
+            # multi-line content stays fully readable; other columns centered.
+            if j in (5, 7):
+                align = WRAP_TOP_ALIGNMENT
+            elif j <= 2:
+                align = LEFT_ALIGNMENT
+            else:
+                align = CENTER_ALIGNMENT
             write_bordered_cell(worksheet, current_row, j, val, font, row_fill, align)
         if state_fill:
             for j in (3, 4, 6):
                 worksheet.cell(row=current_row, column=j).fill = state_fill
-        worksheet.row_dimensions[current_row].height = 30
+        # Dynamic height: fit the tallest wrapped cell (schedule or groups).
+        n_lines = max(_visual_lines(horaire, 7), _visual_lines(grp_str, 5))
+        worksheet.row_dimensions[current_row].height = \
+            min(400, max(30, n_lines * 15 + 4))
         current_row += 1
 
     # ---- Column widths + freeze headers ----
-    widths = [30, 26, 14, 18, 22, 16, 64]
     for j, w in enumerate(widths, start=1):
         worksheet.column_dimensions[get_column_letter(j)].width = w
     worksheet.freeze_panes = f'A{header_row + 1}'

@@ -227,15 +227,13 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
     saved = []
     name_map = _load_name_map()  # hash -> real name (local only); empty when names already present
 
-    # Crédits de laboratoire (P) par professeur/matière — chargés UNE SEULE FOIS
-    # par semestre (lecture de l'Asignación), puis réutilisés pour chaque niveau
-    # afin d'alimenter la nouvelle feuille « Vue Professeur » (Partie 1).
-    vp_credits, vp_names = ({}, {})
-    if hasattr(gen, "_load_professor_lab_credits"):
-        try:
-            vp_credits, vp_names = gen._load_professor_lab_credits()
-        except Exception as _e:
-            print(f"  [WARN] Teacher View: credits unavailable ({_e})")
+    # Teacher View now derives the per-professor breakdown from the committed
+    # weights cache (or the Asignación xlsx when present) directly inside
+    # build_vue_professeur_consolidada_sheet. We therefore pass None/None and let
+    # the builder load the LEGACY subject-level credit map only if that primary
+    # path is unavailable — this avoids an eager (and often misleading) "Asignación
+    # not found" warning, and is the definitive fix for the "N/D" display.
+    vp_credits, vp_names = (None, None)
 
     for level_num, level_config in levels.items():
         subjects = level_config["subjects"]
