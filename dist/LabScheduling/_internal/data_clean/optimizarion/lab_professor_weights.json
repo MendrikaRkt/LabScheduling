@@ -1,0 +1,471 @@
+{
+  "generated_from": "Asignacion_2025-2026_v5.xlsx",
+  "convention": "1 P credit = 5 sessions",
+  "weights": {
+    "automatic control": [
+      [
+        "Ierardi, Carmelina",
+        0.5
+      ],
+      [
+        "Merchán Riveros, María Camila",
+        0.5
+      ]
+    ],
+    "automatizacion industrial": [
+      [
+        "Pereira Martín, Mario",
+        2.0
+      ]
+    ],
+    "control de maquinas": [
+      [
+        "Alvarado Barrios, Lázaro",
+        1.0
+      ]
+    ],
+    "electronica y automatica": [
+      [
+        "Salvador Ortíz, Jose Ramón",
+        1.451163
+      ],
+      [
+        "Velarde Rueda, Pablo",
+        1.148837
+      ]
+    ],
+    "electrotecnia": [
+      [
+        "Sandoval Amador, Anderson",
+        3.0
+      ],
+      [
+        "Velarde Rueda, Pablo",
+        2.666667
+      ],
+      [
+        "Sánchez de la Nieta, Agustín",
+        2.333333
+      ]
+    ],
+    "fisica": [
+      [
+        "Patricio Alejandro Venegas Aravena",
+        5.0
+      ],
+      [
+        "Fernández del Castillo, Rafael",
+        3.0
+      ],
+      [
+        "Sandoval Amador, Anderson",
+        3.0
+      ],
+      [
+        "Beatriz Soto Portillo",
+        2.0
+      ],
+      [
+        "Moreno Soto, Javier",
+        2.0
+      ]
+    ],
+    "fisica ii": [
+      [
+        "Patricio Alejandro Venegas Aravena",
+        4.0
+      ],
+      [
+        "Merchán Riveros, María Camila",
+        4.0
+      ],
+      [
+        "Fernández del Castillo, Rafael",
+        3.0
+      ],
+      [
+        "Ferrada Martínez, Pablo",
+        3.0
+      ]
+    ],
+    "informatica y comunicaciones industriales": [
+      [
+        "Blanco Trejo, Sergio",
+        2.0
+      ],
+      [
+        "Sánchez de la Nieta, Agustín",
+        1.0
+      ],
+      [
+        "Pereira Martín, Mario",
+        1.0
+      ]
+    ],
+    "ingenieria de control": [
+      [
+        "Pacheco Viana, Erid Eulogio",
+        0.5
+      ],
+      [
+        "Manuel Gantiva Osorio",
+        0.5
+      ]
+    ],
+    "mecanica de fluidos": [
+      [
+        "Parrales Borrego, Miguel Ángel",
+        8.75
+      ],
+      [
+        "Parody Martín, Álvaro",
+        1.25
+      ]
+    ],
+    "mecanismos": [
+      [
+        "Parody Martín, Álvaro",
+        6.0
+      ]
+    ],
+    "metodos numericos": [
+      [
+        "Blanco Trejo, Sergio",
+        3.0
+      ]
+    ],
+    "modelado de sistemas": [
+      [
+        "Ferrada Martínez, Pablo",
+        2.0
+      ]
+    ],
+    "quimica": [
+      [
+        "Daniel Álvarez Lorenzo",
+        5.235294
+      ],
+      [
+        "Alessio Zuliani",
+        3.846154
+      ],
+      [
+        "Diaz Perez, Manuel Antonio",
+        1.764706
+      ],
+      [
+        "Pérez Sequera, Ana Cristina",
+        1.153846
+      ]
+    ],
+    "regulacion automatica": [
+      [
+        "Velarde Rueda, Pablo",
+        2.0
+      ]
+    ],
+    "resistencia de materiales": [
+      [
+        "Valverde González, Ángel de Jesús",
+        6.0
+      ],
+      [
+        "Beatriz Soto Portillo",
+        3.0
+      ]
+    ],
+    "robotica y automatizacion": [
+      [
+        "Muros Ponce, Francisco Javier",
+        2.586207
+      ],
+      [
+        "Pereira Martín, Mario",
+        1.293103
+      ],
+      [
+        "Blanco Trejo, Sergio",
+        1.12069
+      ]
+    ],
+    "tecnologia electronica": [
+      [
+        "Salvador Ortíz, Jose Ramón",
+        3.0
+      ]
+    ],
+    "tecnologia medio ambiente": [
+      [
+        "Arroyo Caire, Javier",
+        4.0
+      ],
+      [
+        "Mayra Anabel Angulo Lara",
+        3.0
+      ]
+    ],
+    "tecnologias de fabricacion": [
+      [
+        "Ortíz Vásquez, Luisa Fernanda",
+        2.4
+      ],
+      [
+        "Endrino Armenteros, José Luis",
+        1.0
+      ]
+    ],
+    "termodinamica": [
+      [
+        "Parody Martín, Álvaro",
+        9.0
+      ]
+    ]
+  },
+  "expected": {
+    "automatic control": [
+      [
+        "Ierardi, Carmelina",
+        1,
+        5
+      ]
+    ],
+    "control de maquinas": [
+      [
+        "Alvarado Barrios, Lázaro",
+        1,
+        5
+      ]
+    ],
+    "electronica y automatica": [
+      [
+        "Salvador Ortíz, Jose Ramón",
+        2,
+        10
+      ],
+      [
+        "Velarde Rueda, Pablo",
+        1,
+        5
+      ]
+    ],
+    "electrotecnia": [
+      [
+        "Velarde Rueda, Pablo",
+        3,
+        15
+      ],
+      [
+        "Sandoval Amador, Anderson",
+        3,
+        15
+      ],
+      [
+        "Sánchez de la Nieta, Agustín",
+        2,
+        10
+      ]
+    ],
+    "fisica": [
+      [
+        "Patricio Alejandro Venegas Aravena",
+        5,
+        25
+      ],
+      [
+        "Fernández del Castillo, Rafael",
+        3,
+        15
+      ],
+      [
+        "Sandoval Amador, Anderson",
+        3,
+        15
+      ],
+      [
+        "Beatriz Soto Portillo",
+        2,
+        10
+      ],
+      [
+        "Moreno Soto, Javier",
+        2,
+        10
+      ]
+    ],
+    "fisica ii": [
+      [
+        "Patricio Alejandro Venegas Aravena",
+        4,
+        20
+      ],
+      [
+        "Merchán Riveros, María Camila",
+        4,
+        20
+      ],
+      [
+        "Fernández del Castillo, Rafael",
+        3,
+        15
+      ],
+      [
+        "Ferrada Martínez, Pablo",
+        3,
+        15
+      ]
+    ],
+    "informatica y comunicaciones industriales": [
+      [
+        "Blanco Trejo, Sergio",
+        2,
+        10
+      ],
+      [
+        "Sánchez de la Nieta, Agustín",
+        1,
+        5
+      ],
+      [
+        "Pereira Martín, Mario",
+        1,
+        5
+      ]
+    ],
+    "ingenieria de control": [
+      [
+        "Pacheco Viana, Erid Eulogio",
+        1,
+        5
+      ]
+    ],
+    "mecanica de fluidos": [
+      [
+        "Parrales Borrego, Miguel Ángel",
+        9,
+        45
+      ],
+      [
+        "Parody Martín, Álvaro",
+        1,
+        5
+      ]
+    ],
+    "mecanismos": [
+      [
+        "Parody Martín, Álvaro",
+        6,
+        30
+      ]
+    ],
+    "metodos numericos": [
+      [
+        "Blanco Trejo, Sergio",
+        3,
+        15
+      ]
+    ],
+    "modelado de sistemas": [
+      [
+        "Ferrada Martínez, Pablo",
+        2,
+        10
+      ]
+    ],
+    "quimica": [
+      [
+        "Daniel Álvarez Lorenzo",
+        5,
+        25
+      ],
+      [
+        "Alessio Zuliani",
+        4,
+        20
+      ],
+      [
+        "Diaz Perez, Manuel Antonio",
+        2,
+        10
+      ],
+      [
+        "Pérez Sequera, Ana Cristina",
+        1,
+        5
+      ]
+    ],
+    "regulacion automatica": [
+      [
+        "Velarde Rueda, Pablo",
+        2,
+        10
+      ]
+    ],
+    "resistencia de materiales": [
+      [
+        "Valverde González, Ángel de Jesús",
+        6,
+        30
+      ],
+      [
+        "Beatriz Soto Portillo",
+        3,
+        15
+      ]
+    ],
+    "robotica y automatizacion": [
+      [
+        "Muros Ponce, Francisco Javier",
+        3,
+        15
+      ],
+      [
+        "Pereira Martín, Mario",
+        1,
+        5
+      ],
+      [
+        "Blanco Trejo, Sergio",
+        1,
+        5
+      ]
+    ],
+    "tecnologia electronica": [
+      [
+        "Salvador Ortíz, Jose Ramón",
+        3,
+        15
+      ]
+    ],
+    "tecnologia medio ambiente": [
+      [
+        "Arroyo Caire, Javier",
+        4,
+        20
+      ],
+      [
+        "Mayra Anabel Angulo Lara",
+        3,
+        15
+      ]
+    ],
+    "tecnologias de fabricacion": [
+      [
+        "Ortíz Vásquez, Luisa Fernanda",
+        2,
+        10
+      ],
+      [
+        "Endrino Armenteros, José Luis",
+        1,
+        5
+      ]
+    ],
+    "termodinamica": [
+      [
+        "Parody Martín, Álvaro",
+        9,
+        45
+      ]
+    ]
+  }
+}

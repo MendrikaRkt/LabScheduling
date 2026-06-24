@@ -939,6 +939,14 @@ def apply_user_config():
             print(f"     {teacher} : {len(slot_set)} créneau(x) bloqué(s)")
         TEACHER_UNAVAILABILITY = normalised
 
+    # Charger tot les regles souples/signal (preferred_blocks, max jours/sem) afin
+    # qu'elles figurent dans applied_config.json (preuve d'application pour l'app).
+    try:
+        if not TEACHER_RULES:
+            TEACHER_RULES.update(load_teacher_rules())
+    except Exception as _e_rules:
+        print(f"  [RULES][WARN] chargement anticipe echoue : {_e_rules}")
+
     print(f"  [OK] Configuration utilisateur appliquée\n")
 
 
@@ -972,6 +980,15 @@ def write_applied_config():
         },
         'teachers_blocked_slots': {
             t: sorted(list(slots)) for t, slots in TEACHER_UNAVAILABILITY.items()
+        },
+        # Regles souples/signal effectivement chargees (preferred_blocks + max jours/sem).
+        # Permet a l'app de PROUVER que ces parametres ont ete pris en compte.
+        'teacher_rules': {
+            str(name): {
+                k: (sorted(list(v)) if isinstance(v, (set, list, tuple)) else v)
+                for k, v in rules.items()
+            }
+            for name, rules in TEACHER_RULES.items()
         },
 
         'subjects': {
@@ -1353,6 +1370,9 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
     if subject_block_penalty is None:
         subject_block_penalty = {}
 
+    # Reinitialise le suivi des relachements de contrainte (voir plus bas).
+    RELAXED_PROF_CONSTRAINT_SUBJECTS.clear()
+
     all_groups = []
     stats = {'total_assigned': 0, 'total_unassigned': 0}
     slot_room_usage = {}
@@ -1471,6 +1491,10 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
                           f"(professeur occupé)")
                 all_slots = filtered
             else:
+                # La contrainte viderait TOUS les créneaux : on la relâche pour
+                # ne pas rendre la matière impossible (on signale, on ne bloque pas).
+                # La vérification de disponibilité marquera ces cas comme "attendus".
+                RELAXED_PROF_CONSTRAINT_SUBJECTS.add(subject)
                 print(f"    [PROF][WARN] {subject}: la contrainte professeur "
                       f"viderait tous les créneaux — ignorée (à vérifier)")
 
@@ -4447,19 +4471,33 @@ def generate_professor_workbook(results_df):
         print(f"  [WARN]  Professor_Lab_Workload : lecture assignation echouee ({e})")
         return
 
-    # Ecrire aussi professor_lab_load.csv (consomme par la page Integrite de
-    # l'app) a cote des sorties, afin qu'il soit toujours present apres un run.
+    # --- Rafraîchit le cache committé des poids prof (correction définitive N/D) ---
+    # Tant que l'Asignación est présente, on régénère le cache JSON consommé par
+    # la « Teacher View ». Ainsi, même packagée/déployée SANS le xlsx source, la
+    # feuille affiche toujours les vrais professeurs, crédits P et séances.
     try:
-        _csv_out = _osmod.path.join(OUTPUT_DIR, "professor_lab_load.csv")
-        load.to_csv(_csv_out, index=False)
-        # Copie a la racine du projet (emplacement historique attendu par l'app).
-        try:
-            load.to_csv("professor_lab_load.csv", index=False)
-        except Exception:
-            pass
-        print(f"  [OK] professor_lab_load.csv ecrit ({len(load)} profs)")
+        import lab_professor_assignment as _LPA
+        _cache_out = _LPA.write_weights_cache(
+            fp, "data_clean/optimizarion/lab_professor_weights.json")
+        print(f"  [OK] cache poids prof rafraichi : {_cache_out}")
     except Exception as e:
-        print(f"  [WARN]  professor_lab_load.csv non ecrit ({e})")
+        print(f"  [WARN]  Rafraichissement cache poids prof echoue : {e}")
+
+    # --- Export CSV de la charge labo par prof (consomme par la page Integridad) ---
+    # Sans ce CSV, la vue professeur affiche "professor_lab_load.csv introuvable" / N/D.
+    # 1 credit P = 5 sessions. Colonnes lues par app.py : prof_name, prof_code,
+    # lab_credits, lab_sessions, theory_credits, total_assigned, budget,
+    # margin, over_budget.
+    try:
+        import os as _oslab
+        _oslab.makedirs(OUTPUT_DIR, exist_ok=True)
+        load.to_csv(f"{OUTPUT_DIR}professor_lab_load.csv", index=False)
+        # copie a la racine du workspace : second emplacement lu par l'app
+        load.to_csv("professor_lab_load.csv", index=False)
+        print(f"  [OK] {OUTPUT_DIR}professor_lab_load.csv "
+              f"({int((load['lab_credits'] > 0).sum())} prof(s) avec charge labo)")
+    except Exception as e:
+        print(f"  [WARN]  Export professor_lab_load.csv echoue : {e}")
 
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -5028,6 +5066,13 @@ def inject_teacher_unavailability(spb, professor_busy, professors_of_subject):
 
 
 TEACHER_RULES = {}   # {prof: {'max_days_per_week': int, 'preferred_blocks': [int]}} — requete Daniel
+
+# Matieres dont la contrainte de disponibilite professeur a ete RELACHEE pendant
+# la formation des groupes parce qu'elle aurait vide TOUS les creneaux possibles
+# (sinon la matiere serait impossible a planifier). Conforme a la philosophie du
+# projet : on SIGNALE, on ne BLOQUE pas. La verification de disponibilite s'en
+# sert pour expliquer les "violations" attendues (creneau occupe mais inevitable).
+RELAXED_PROF_CONSTRAINT_SUBJECTS = set()
 PREF_BLOCK_PENALTY = 3   # poids retire du score de placement hors franje preferee (SOUPLE)
 
 
@@ -5143,6 +5188,152 @@ def audit_teacher_max_days(all_groups, professors_of_subject):
         names = ', '.join(DAYS[d] for d in sorted(days)) or '—'
         flag = '  /!\\ DEPASSEMENT' if nd > cap else '  OK'
         print(f"    {cfg_name:<32} {nd} jour(s) (max {cap}) : {names}{flag}")
+
+
+def verify_availability_constraints(all_groups, subject_professor_busy,
+                                    professors_of_subject):
+    """PROOF OF ENFORCEMENT — verifies a posteriori that the PRODUCED schedule
+    respects the parameters of 'Teacher Availability Configuration'.
+
+    Writes config/availability_verification.json, read by the Integrity page so the
+    user can ACTUALLY CONFIRM that:
+      1. Unavailable slots (HARD): no scheduled group lands on a slot that is
+         effectively blocked for its subject (= all the subject's professors are
+         unavailable at that slot). Each violation is classified:
+           - 'relaxed' (EXPECTED): the subject is in RELAXED_PROF_CONSTRAINT_SUBJECTS,
+             meaning enforcing the constraint would have left ZERO feasible slots,
+             so it was deliberately relaxed to keep the subject schedulable.
+           - 'unexpected': a violation that is NOT explained by a documented
+             relaxation and would warrant investigation.
+      2. Preferred time range (SOFT): rate of sessions placed INSIDE the range.
+      3. Max lab days / week (SIGNAL): days actually used vs the cap.
+
+    Never blocks: produces a factual, verifiable statement. Consistent with the
+    project principle 'the system validates, it does not decide'.
+    """
+    import json as _json
+    relaxed_subjects = set(RELAXED_PROF_CONSTRAINT_SUBJECTS)
+    report = {
+        'generated_at': datetime.now().isoformat(),
+        'hard_blocked_slots': {'status': 'ok', 'checked_groups': 0,
+                               'violations': [],
+                               'relaxed_count': 0, 'unexpected_count': 0,
+                               'relaxed_subjects': sorted(relaxed_subjects)},
+        'preferred_range': [],
+        'max_days_per_week': [],
+        'requested': {
+            'teacher_unavailability': {
+                t: sorted(list(s)) for t, s in TEACHER_UNAVAILABILITY.items()
+            },
+            'teacher_rules': {
+                str(n): {k: (sorted(list(v)) if isinstance(v, (set, list, tuple))
+                             else v) for k, v in r.items()}
+                for n, r in TEACHER_RULES.items()
+            },
+        },
+    }
+
+    # 1) Unavailable slots — HARD. The solver received subject_professor_busy;
+    #    we prove that no scheduled group lands on a blocked slot. When a group does,
+    #    we classify the violation as 'relaxed' (expected) or 'unexpected'.
+    checked = 0
+    relaxed_count = 0
+    unexpected_count = 0
+    for g in all_groups:
+        blk = subject_professor_busy.get(g['subject'], set())
+        if not blk:
+            continue
+        checked += 1
+        if (g['day_idx'], g['block_id']) in blk:
+            is_relaxed = g['subject'] in relaxed_subjects
+            if is_relaxed:
+                relaxed_count += 1
+            else:
+                unexpected_count += 1
+            report['hard_blocked_slots']['violations'].append({
+                'subject': g['subject'],
+                'group': g.get('group_num'),
+                'day': DAYS[g['day_idx']] if 0 <= g['day_idx'] < len(DAYS) else g['day_idx'],
+                'block': BLOCK_LABELS.get(g['block_id'], g['block_id']),
+                'relaxed': is_relaxed,
+                'reason': ('Constraint relaxed: enforcing it would leave no feasible '
+                           'slot for this subject (signaled, not blocked).'
+                           if is_relaxed else
+                           'Unexpected: not explained by a documented relaxation.'),
+            })
+    report['hard_blocked_slots']['checked_groups'] = checked
+    report['hard_blocked_slots']['relaxed_count'] = relaxed_count
+    report['hard_blocked_slots']['unexpected_count'] = unexpected_count
+    n_viol = len(report['hard_blocked_slots']['violations'])
+    if n_viol == 0:
+        report['hard_blocked_slots']['status'] = 'ok'
+    elif unexpected_count == 0:
+        # All violations are documented relaxations -> expected, not a real breach.
+        report['hard_blocked_slots']['status'] = 'relaxed'
+    else:
+        report['hard_blocked_slots']['status'] = 'violated'
+
+    # match config name -> recognized professor
+    known = set()
+    for profs in professors_of_subject.values():
+        known.update(profs)
+    subj_of_prof = defaultdict(set)
+    for subject, profs in professors_of_subject.items():
+        for p in profs:
+            subj_of_prof[p].add(subject)
+
+    # 2) Preferred time range — SOFT: % of sessions inside the range of the prof's subjects.
+    for cfg_name, rules in TEACHER_RULES.items():
+        pb = rules.get('preferred_blocks')
+        if not pb:
+            continue
+        pid = _match_professor(cfg_name, known) or cfg_name
+        subs = subj_of_prof.get(pid, set())
+        groups = [g for g in all_groups if g['subject'] in subs]
+        total = len(groups)
+        inside = sum(1 for g in groups if g['block_id'] in set(pb))
+        report['preferred_range'].append({
+            'teacher': cfg_name,
+            'recognized': pid in known,
+            'preferred_blocks': [BLOCK_LABELS.get(b, b) for b in pb],
+            'sessions_total': total,
+            'sessions_inside': inside,
+            'pct_inside': round(100.0 * inside / total, 1) if total else None,
+        })
+
+    # 3) Max days / week — SIGNAL.
+    days_by_subject = defaultdict(set)
+    for g in all_groups:
+        days_by_subject[g['subject']].add(g['day_idx'])
+    for cfg_name, rules in TEACHER_RULES.items():
+        cap = rules.get('max_days_per_week')
+        if not cap:
+            continue
+        pid = _match_professor(cfg_name, known) or cfg_name
+        days = set()
+        for sub in subj_of_prof.get(pid, ()):
+            days |= days_by_subject.get(sub, set())
+        nd = len(days)
+        report['max_days_per_week'].append({
+            'teacher': cfg_name,
+            'recognized': pid in known,
+            'cap': cap,
+            'days_used': nd,
+            'days': [DAYS[d] for d in sorted(days) if 0 <= d < len(DAYS)],
+            'status': 'ok' if nd <= cap else 'exceeded',
+        })
+
+    try:
+        os.makedirs('config', exist_ok=True)
+        with open('config/availability_verification.json', 'w', encoding='utf-8') as f:
+            _json.dump(report, f, indent=2, ensure_ascii=False)
+        v = len(report['hard_blocked_slots']['violations'])
+        print(f"  [VERIF] config/availability_verification.json written "
+              f"(HARD slots checked: {checked}, violations: {v} "
+              f"= {relaxed_count} relaxed/expected + {unexpected_count} unexpected)")
+    except Exception as e:
+        print(f"  [VERIF][WARN] write failed: {e}")
+    return report
 
 
 def prepare_professor_constraints(df):
@@ -5348,6 +5539,9 @@ def run_pipeline(df):
             print(f"  [QA][WARN] contrôle qualité ignoré : {exc}")
 
     audit_teacher_max_days(all_groups, professors_of_subject)
+    # Preuve d'application des parametres de disponibilite (page Integridad).
+    verify_availability_constraints(all_groups, subject_professor_busy,
+                                    professors_of_subject)
     results_df = solve(all_groups)
 
     if results_df is None or len(results_df) == 0:

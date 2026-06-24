@@ -40,6 +40,7 @@ Outputs (in outputs/optimization/Curso_2025_2026/):
 # =============================================================================
 import sys
 import io
+import math
 
 if sys.platform == 'win32':
     try:
@@ -1595,7 +1596,7 @@ def _load_professor_lab_credits():
     """
     fp = _find_asignacion_file()
     if not fp:
-        print('    [WARN] Vue Professeur : fichier Asignación introuvable — crédits = N/D')
+        print('    [WARN] Teacher View: Asignación file not found — credits = N/A')
         return {}, {}
     try:
         import professor_credits as _pc
@@ -1603,7 +1604,7 @@ def _load_professor_lab_credits():
         budgets = _pc.load_budgets(fp)         # prof_code -> prof_name
         code_to_name = dict(zip(budgets['prof_code'], budgets['prof_name']))
     except Exception as exc:
-        print(f'    [WARN] Vue Professeur : lecture Asignación impossible ({exc}) — crédits = N/D')
+        print(f'    [WARN] Teacher View: cannot read Asignación ({exc}) — credits = N/A')
         return {}, {}
 
     def _label(code):
@@ -1657,12 +1658,15 @@ def _map_sched_to_asignacion(sched_subject, asignacion_subjects, lab_config):
     return matched
 
 
-def _format_session_timetable(subject_sessions):
+def _format_session_timetable(subject_sessions, sep='\n'):
     """Construit l'horaire détaillé des séances d'une matière, par groupe.
 
     subject_sessions : DataFrame des lignes de planning pour UNE matière.
+    sep              : séparateur entre groupes ('\\n' = un groupe par ligne,
+                       pour un affichage lisible dans une cellule à retour à la
+                       ligne ; ' ; ' pour une chaîne compacte sur une ligne).
     Renvoie une chaîne lisible, p.ex. :
-        « G1 : Lunes 12:30-14:30 (Ciencias Exp. I) — 12 séances ; G2 : Martes ... »
+        « G1 : Lunes 12:30-14:30 (Ciencias Exp. I) — 12 sessions »
 
     On regroupe par (groupe, jour, créneau, salle) pour ne pas répéter chaque
     semaine, et on indique le nombre de séances de ce créneau récurrent.
@@ -1692,14 +1696,14 @@ def _format_session_timetable(subject_sessions):
                 seg = f"{day} {tb}".strip()
                 if room_disp:
                     seg += f" ({room_disp})"
-                seg += f" — {n} séance{'s' if n > 1 else ''}"
+                seg += f" — {n} session{'s' if n > 1 else ''}"
                 slot_parts.append(seg)
         try:
             g_disp = int(float(g))
         except Exception:
             g_disp = g
         parts.append(f"G{g_disp} : " + " / ".join(slot_parts))
-    return " ; ".join(parts)
+    return sep.join(parts)
 
 
 def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
@@ -1721,124 +1725,251 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
     Robustesse : si l'Asignación est absente, les crédits affichent « N/D » et
     aucune exception n'est levée (la feuille reste générée).
     """
-    worksheet = workbook.create_sheet('Vue Professeur')
+    worksheet = workbook.create_sheet('Teacher View')
 
-    # Chargement des crédits si non fournis
-    if credits_by_subject is None or names_by_subject is None:
+    # ---- Per-group professor assignment (recommendation #1) -------------
+    # We link every scheduled lab group to ONE responsible professor, derived
+    # from the official P credits (1 P credit = 5 sessions). This replaces the
+    # previous subject-level "shared co-supervision" display by a precise,
+    # per-professor breakdown. Falls back gracefully to the legacy credit map
+    # (or N/D) if the Asignación source / module is unavailable.
+    sgmap = {}            # {(lpa_subject_key, group_int): prof_name}  actual schedule
+    expected_map = {}     # {(lpa_subject_key, prof_name): sessions_expected}
+    lpa_ok = False
+    try:
+        import lab_professor_assignment as _lpa
+        _fp = _find_asignacion_file()
+        # Definitive N/D fix: when the raw Asignación xlsx cannot be located
+        # (e.g. packaged / deployed app), the source-derived data is read from
+        # the committed JSON cache instead. `_fp` may therefore be None here and
+        # the LPA functions transparently fall back to the cache.
+        _source_available = bool(_fp) or (_lpa.load_weights_cache() is not None)
+        if _source_available:
+            # subjects actually scheduled at this level -> their planned groups
+            subject_to_groups = {}
+            for _s in subjects:
+                if _s not in schedule_df['subject'].unique():
+                    continue
+                _key = _lpa._norm(strip_semester_prefix(_s))
+                _grps = []
+                for _g in schedule_df[schedule_df['subject'] == _s]['grupo'].dropna().unique():
+                    try:
+                        _grps.append(int(float(_g)))
+                    except Exception:
+                        pass
+                if _grps:
+                    subject_to_groups[_key] = sorted(set(_grps))
+            if subject_to_groups:
+                sgmap = _lpa.assign_schedule_groups(_fp, subject_to_groups)
+                _exp = _lpa.expected_sessions(_fp)
+                for _, _r in _exp.iterrows():
+                    expected_map[(_r['subject_clean'], _r['prof_name'])] = \
+                        float(_r['sessions_expected'])
+                lpa_ok = bool(sgmap)
+        if not lpa_ok:
+            print('    [WARN] Teacher View: neither Asignación file nor weights '
+                  'cache available — per-professor breakdown unavailable')
+    except Exception as _exc:
+        print(f'    [WARN] Teacher View: per-group assignment unavailable ({_exc})')
+
+    # Legacy credit map (subject-level) kept as a fallback only. Load it ONLY
+    # when the per-professor (LPA/cache) path did not succeed — this avoids the
+    # misleading "Asignación file not found" warning when the breakdown is in
+    # fact fully available from the committed cache.
+    if not lpa_ok and (credits_by_subject is None or names_by_subject is None):
         credits_by_subject, names_by_subject = _load_professor_lab_credits()
-
+    if credits_by_subject is None:
+        credits_by_subject = {}
+    if names_by_subject is None:
+        names_by_subject = {}
     lab_config = _get_lab_config()
     asignacion_subjects = list(credits_by_subject.keys())
 
-    # ---- Titre + note méthodologique ----
+    # ---- Title + methodology note (English) ----
     title = worksheet.cell(row=1, column=1,
-                           value='Vue Professeur — répartition des séances de laboratoire')
+                           value='Teacher View — lab session breakdown by professor')
     title.font = VP_TITLE_FONT
-    note = worksheet.cell(
-        row=2, column=1,
-        value=("Convention : 1 crédit de laboratoire (P) = 5 séances. "
-               "Les séances et l'horaire sont au niveau de la MATIÈRE (co-encadrement fréquent : "
-               "l'optimiseur garantit qu'un professeur habilité est libre, sans nommer un encadrant par séance). "
-               "Crédits « N/D » = fichier Asignación non disponible."))
+    if lpa_ok:
+        note_txt = ("Convention: 1 lab credit (P) = 5 sessions. Each lab group is "
+                    "assigned to ONE responsible professor, allocated in proportion "
+                    "to the official P credits (source: Asignación docente). "
+                    "\"Expected sessions\" = P credits x 5; \"Planned sessions\" counts "
+                    "the sessions actually scheduled for that professor's groups. "
+                    "Volume gaps are flagged, never blocking.")
+    else:
+        note_txt = ("Convention: 1 lab credit (P) = 5 sessions. Sessions and schedule "
+                    "are shown at SUBJECT level (the Asignación source was not found, "
+                    "so per-professor allocation is unavailable). Credits \"N/A\" = "
+                    "Asignación file not available.")
+    note = worksheet.cell(row=2, column=1, value=note_txt)
     note.font = VP_NOTE_FONT
+    # Merge title + note across all 7 columns and let the note wrap on 2 lines so
+    # it never overflows behind the table.
+    worksheet.merge_cells('A1:G1')
+    worksheet.merge_cells('A2:G2')
+    note.alignment = Alignment(wrap_text=True, vertical='top')
+    worksheet.row_dimensions[1].height = 22
+    worksheet.row_dimensions[2].height = 42
 
     if schedule_df is None or len(schedule_df) == 0:
         worksheet.cell(row=4, column=1,
-                       value='Aucune séance planifiée pour ce niveau.').font = VP_CELL_FONT
+                       value='No sessions scheduled for this level.').font = VP_CELL_FONT
         worksheet.column_dimensions['A'].width = 60
         return
 
-    # ---- En-têtes du tableau ----
+    # ---- Table headers (English) ----
     headers = [
-        'Professeur', 'Matière', 'Crédits assignés (P)', 'Sessions attendues (créd×5)',
-        'Nº groupes', 'Sessions planifiées (matière)', 'Horaire des séances (jour / heure / salle)',
+        'Professor', 'Subject', 'Lab credits (P)', 'Expected sessions (cred x5)',
+        'Assigned groups', 'Planned sessions (professor)',
+        'Schedule (day / time / room)',
     ]
     header_row = 4
     for j, h in enumerate(headers, start=1):
-        c = write_bordered_cell(worksheet, header_row, j, h,
-                                VP_HEADER_FONT, VP_HEADER_FILL, CENTER_ALIGNMENT)
+        write_bordered_cell(worksheet, header_row, j, h,
+                            VP_HEADER_FONT, VP_HEADER_FILL, CENTER_ALIGNMENT)
 
-    # ---- Construire les lignes (professeur, matière) ----
-    # Pour chaque matière planifiée du niveau, retrouver les profs P et leurs crédits.
-    # IMPORTANT : « Sessions planifiées » est un total AU NIVEAU DE LA MATIÈRE (les
-    # séances sont partagées entre les co-encadrants). L'état OK / Écart est donc
-    # calculé au niveau de la MATIÈRE : (Σ crédits P de la matière × 5) vs planifié.
-    # Chaque ligne professeur affiche SES crédits et SES séances attendues, mais la
-    # couleur OK/Écart reflète la cohérence globale de la matière (identique pour
-    # tous les professeurs de cette matière), ce qui évite un faux « écart » par ligne.
-    rows = []  # (prof_label, matiere_disp, credits, expected, n_groups, planned, horaire, etat)
+    # ---- Build rows ----
+    # rows: (prof, subject, credits, expected, groups_str, planned, horaire, state)
+    rows = []
     scheduled_present = sorted(set(s for s in subjects
                                    if s in schedule_df['subject'].unique()))
     for sched in scheduled_present:
         subj_sessions = schedule_df[schedule_df['subject'] == sched]
-        planned = int(len(subj_sessions))
+        planned_total = int(len(subj_sessions))
         n_groups = int(subj_sessions['grupo'].nunique()) if 'grupo' in subj_sessions.columns else 0
         horaire = _format_session_timetable(subj_sessions)
         matiere_disp = strip_semester_prefix(sched)
+        lpa_key = None
+        try:
+            import lab_professor_assignment as _lpa2
+            lpa_key = _lpa2._norm(matiere_disp)
+        except Exception:
+            lpa_key = None
 
-        asig_subs = _map_sched_to_asignacion(sched, asignacion_subjects, lab_config)
-        # agrège les crédits P par professeur sur l'ensemble des matières Asignación liées
-        prof_credits = defaultdict(float)
-        for asub in asig_subs:
-            for prof_label, cr in credits_by_subject.get(asub, {}).items():
-                prof_credits[prof_label] += cr
+        # group -> prof for this subject's actually scheduled groups
+        prof_groups = defaultdict(list)
+        if lpa_ok and lpa_key is not None:
+            for _g in subj_sessions['grupo'].dropna().unique():
+                try:
+                    gi = int(float(_g))
+                except Exception:
+                    continue
+                pname = sgmap.get((lpa_key, gi))
+                if pname:
+                    prof_groups[pname].append(gi)
 
-        # État au niveau matière : Σ crédits P × 5 comparé au planifié
-        subj_total_credits = sum(prof_credits.values())
-        subj_expected = subj_total_credits * CREDIT_TO_SESSIONS
-        if prof_credits:
-            subj_etat = 'OK' if abs(planned - subj_expected) < 1e-6 else 'Écart'
-            for prof_label in sorted(prof_credits):
-                cr = prof_credits[prof_label]
-                expected = cr * CREDIT_TO_SESSIONS
-                rows.append((prof_label, matiere_disp, round(cr, 2),
-                             round(expected, 1), n_groups, planned, horaire, subj_etat))
+        if prof_groups:
+            # One row per responsible professor with their precise figures.
+            for pname in sorted(prof_groups):
+                grps = sorted(set(prof_groups[pname]))
+                grp_str = ', '.join(f'G{g}' for g in grps)
+                grp_set = set(grps)
+                prof_sessions = subj_sessions[subj_sessions['grupo'].apply(
+                    lambda x: _safe_int(x) in grp_set)]
+                planned_prof = int(len(prof_sessions))
+                # Schedule restricted to THIS professor's groups (one per line).
+                horaire_prof = _format_session_timetable(prof_sessions, sep='\n')
+                expected = expected_map.get((lpa_key, pname))
+                if expected is None:
+                    expected = planned_prof  # no source target -> neutral
+                    credits = round(expected / CREDIT_TO_SESSIONS, 2)
+                    state = ''
+                else:
+                    credits = round(expected / CREDIT_TO_SESSIONS, 2)
+                    state = 'OK' if abs(planned_prof - expected) < 1e-6 else 'Gap'
+                rows.append((pname, matiere_disp, credits, round(expected, 1),
+                             grp_str, planned_prof, horaire_prof, state))
         elif credits_by_subject:
-            # Pas de crédit P trouvé (matière budgétée en théorie) : on l'indique.
-            rows.append(('— (aucun crédit P assigné)', matiere_disp, 0.0, 0.0,
-                         n_groups, planned, horaire, 'Sans crédit P'))
+            # Fallback: subject-level credit map (legacy display).
+            asig_subs = _map_sched_to_asignacion(sched, asignacion_subjects, lab_config)
+            prof_credits = defaultdict(float)
+            for asub in asig_subs:
+                for prof_label, cr in credits_by_subject.get(asub, {}).items():
+                    prof_credits[prof_label] += cr
+            subj_expected = sum(prof_credits.values()) * CREDIT_TO_SESSIONS
+            if prof_credits:
+                subj_state = 'OK' if abs(planned_total - subj_expected) < 1e-6 else 'Gap'
+                for prof_label in sorted(prof_credits):
+                    cr = prof_credits[prof_label]
+                    rows.append((prof_label, matiere_disp, round(cr, 2),
+                                 round(cr * CREDIT_TO_SESSIONS, 1),
+                                 f'{n_groups} group(s)', planned_total, horaire,
+                                 subj_state))
+            else:
+                rows.append(('- (no P credit assigned)', matiere_disp, 0.0, 0.0,
+                             f'{n_groups} group(s)', planned_total, horaire,
+                             'No P credit'))
         else:
-            # Asignación indisponible : crédits N/D
-            rows.append(('N/D', matiere_disp, 'N/D', 'N/D',
-                         n_groups, planned, horaire, ''))
+            # Asignación unavailable: credits N/A
+            rows.append(('N/A', matiere_disp, 'N/A', 'N/A',
+                         f'{n_groups} group(s)', planned_total, horaire, ''))
 
-    # Tri : par professeur puis matière
     rows.sort(key=lambda r: (str(r[0]), str(r[1])))
 
-    # ---- Écriture des lignes, avec alternance de bande par professeur ----
+    # ---- Column widths (approx. chars per visual line for wrap estimation) ----
+    widths = [30, 26, 14, 18, 22, 16, 64]
+    # usable chars per line ≈ column width (Calibri 10/11 ~ 1 char per width unit)
+    chars_per_line = {5: 20, 7: 60}
+
+    def _visual_lines(text, col):
+        """Estimate how many visual lines a wrapped cell needs."""
+        if text is None:
+            return 1
+        cpl = chars_per_line.get(col, 9999)
+        total = 0
+        for seg in str(text).split('\n'):
+            seg = seg.rstrip()
+            total += max(1, math.ceil(len(seg) / cpl)) if seg else 1
+        return max(1, total)
+
+    # ---- Write rows with per-professor banding ----
     current_row = header_row + 1
     prev_prof = None
     band = False
-    for (prof_label, matiere_disp, cr, expected, n_groups, planned, horaire, etat) in rows:
+    for (prof_label, matiere_disp, cr, expected, grp_str, planned, horaire, state) in rows:
         if prof_label != prev_prof:
             band = not band
             prev_prof = prof_label
         row_fill = VP_BAND_FILL if band else None
-        # cellule d'état pilote la couleur (OK vert / écart orange)
-        etat_fill = None
-        if etat == 'OK':
-            etat_fill = VP_OK_FILL
-        elif etat in ('Écart', 'Sans crédit P'):
-            etat_fill = VP_WARN_FILL
+        state_fill = None
+        if state == 'OK':
+            state_fill = VP_OK_FILL
+        elif state in ('Gap', 'No P credit'):
+            state_fill = VP_WARN_FILL
 
-        values = [prof_label, matiere_disp, cr, expected, n_groups, planned, horaire]
+        values = [prof_label, matiere_disp, cr, expected, grp_str, planned, horaire]
         for j, val in enumerate(values, start=1):
             font = VP_PROF_FONT if j == 1 else VP_CELL_FONT
-            align = WRAP_TOP_ALIGNMENT if j == 7 else (LEFT_ALIGNMENT if j <= 2 else CENTER_ALIGNMENT)
-            fill = row_fill
-            write_bordered_cell(worksheet, current_row, j, val, font, fill, align)
-        # surligne légèrement les colonnes chiffrées en cas d'écart
-        if etat_fill:
+            # Schedule (7) and assigned groups (5) wrap & align to top so long
+            # multi-line content stays fully readable; other columns centered.
+            if j in (5, 7):
+                align = WRAP_TOP_ALIGNMENT
+            elif j <= 2:
+                align = LEFT_ALIGNMENT
+            else:
+                align = CENTER_ALIGNMENT
+            write_bordered_cell(worksheet, current_row, j, val, font, row_fill, align)
+        if state_fill:
             for j in (3, 4, 6):
-                worksheet.cell(row=current_row, column=j).fill = etat_fill
-        worksheet.row_dimensions[current_row].height = 30
+                worksheet.cell(row=current_row, column=j).fill = state_fill
+        # Dynamic height: fit the tallest wrapped cell (schedule or groups).
+        n_lines = max(_visual_lines(horaire, 7), _visual_lines(grp_str, 5))
+        worksheet.row_dimensions[current_row].height = \
+            min(400, max(30, n_lines * 15 + 4))
         current_row += 1
 
-    # ---- Largeurs de colonnes + figeage des en-têtes ----
-    widths = [30, 28, 16, 16, 10, 16, 70]
+    # ---- Column widths + freeze headers ----
     for j, w in enumerate(widths, start=1):
         worksheet.column_dimensions[get_column_letter(j)].width = w
     worksheet.freeze_panes = f'A{header_row + 1}'
+
+
+def _safe_int(x):
+    """Best-effort int conversion for group numbers (returns None on failure)."""
+    try:
+        return int(float(x))
+    except Exception:
+        return None
 
 
 # =============================================================================
