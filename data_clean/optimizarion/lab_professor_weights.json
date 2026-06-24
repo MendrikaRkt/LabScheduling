@@ -12,13 +12,13 @@
         0.5
       ]
     ],
-    "automatizacion industrial": [
+    "automatizacion de sistemas de produccion": [
       [
         "Pereira Martín, Mario",
         2.0
       ]
     ],
-    "control de maquinas": [
+    "control de maquinas y accionamientos electricos": [
       [
         "Alvarado Barrios, Lázaro",
         1.0
@@ -48,7 +48,7 @@
         2.333333
       ]
     ],
-    "fisica": [
+    "fisica i": [
       [
         "Patricio Alejandro Venegas Aravena",
         5.0
@@ -112,7 +112,7 @@
         0.5
       ]
     ],
-    "mecanica de fluidos": [
+    "mecanica y maquinas de fluidos": [
       [
         "Parrales Borrego, Miguel Ángel",
         8.75
@@ -122,25 +122,25 @@
         1.25
       ]
     ],
-    "mecanismos": [
+    "mecanismos y elementos de maquinas": [
       [
         "Parody Martín, Álvaro",
         6.0
       ]
     ],
-    "metodos numericos": [
+    "metodos numericos en ingenieria": [
       [
         "Blanco Trejo, Sergio",
         3.0
       ]
     ],
-    "modelado de sistemas": [
+    "modelado de sistemas fisicos ii": [
       [
         "Ferrada Martínez, Pablo",
         2.0
       ]
     ],
-    "quimica": [
+    "quimica general": [
       [
         "Daniel Álvarez Lorenzo",
         5.235294
@@ -174,7 +174,7 @@
         3.0
       ]
     ],
-    "robotica y automatizacion": [
+    "robotica y automatizacion industrial": [
       [
         "Muros Ponce, Francisco Javier",
         2.586207
@@ -194,7 +194,7 @@
         3.0
       ]
     ],
-    "tecnologia medio ambiente": [
+    "tecnologia del medio ambiente": [
       [
         "Arroyo Caire, Javier",
         4.0
@@ -214,7 +214,7 @@
         1.0
       ]
     ],
-    "termodinamica": [
+    "termodinamica y transferencia de calor": [
       [
         "Parody Martín, Álvaro",
         9.0
@@ -229,7 +229,7 @@
         5
       ]
     ],
-    "control de maquinas": [
+    "control de maquinas y accionamientos electricos": [
       [
         "Alvarado Barrios, Lázaro",
         1,
@@ -265,7 +265,7 @@
         10
       ]
     ],
-    "fisica": [
+    "fisica i": [
       [
         "Patricio Alejandro Venegas Aravena",
         5,
@@ -338,7 +338,7 @@
         5
       ]
     ],
-    "mecanica de fluidos": [
+    "mecanica y maquinas de fluidos": [
       [
         "Parrales Borrego, Miguel Ángel",
         9,
@@ -350,28 +350,28 @@
         5
       ]
     ],
-    "mecanismos": [
+    "mecanismos y elementos de maquinas": [
       [
         "Parody Martín, Álvaro",
         6,
         30
       ]
     ],
-    "metodos numericos": [
+    "metodos numericos en ingenieria": [
       [
         "Blanco Trejo, Sergio",
         3,
         15
       ]
     ],
-    "modelado de sistemas": [
+    "modelado de sistemas fisicos ii": [
       [
         "Ferrada Martínez, Pablo",
         2,
         10
       ]
     ],
-    "quimica": [
+    "quimica general": [
       [
         "Daniel Álvarez Lorenzo",
         5,
@@ -412,7 +412,7 @@
         15
       ]
     ],
-    "robotica y automatizacion": [
+    "robotica y automatizacion industrial": [
       [
         "Muros Ponce, Francisco Javier",
         3,
@@ -429,14 +429,7 @@
         5
       ]
     ],
-    "tecnologia electronica": [
-      [
-        "Salvador Ortíz, Jose Ramón",
-        3,
-        15
-      ]
-    ],
-    "tecnologia medio ambiente": [
+    "tecnologia del medio ambiente": [
       [
         "Arroyo Caire, Javier",
         4,
@@ -444,6 +437,13 @@
       ],
       [
         "Mayra Anabel Angulo Lara",
+        3,
+        15
+      ]
+    ],
+    "tecnologia electronica": [
+      [
+        "Salvador Ortíz, Jose Ramón",
         3,
         15
       ]
@@ -460,12 +460,17 @@
         5
       ]
     ],
-    "termodinamica": [
+    "termodinamica y transferencia de calor": [
       [
         "Parody Martín, Álvaro",
         9,
         45
       ]
+    ]
+  },
+  "theory": {
+    "estructuras": [
+      "Valverde González, Ángel de Jesús"
     ]
   }
 }
