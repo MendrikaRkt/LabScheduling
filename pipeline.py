@@ -2728,97 +2728,43 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
         # ────────────────────────────────────────────────────────────────
         # Filet de sécurité final (philosophie : « le système signale, il
         # ne bloque pas »). À ce stade, les étudiants encore non placés ont
-        # bien des créneaux libres, mais (a) tous les groupes compatibles
-        # sont saturés ET (b) ils sont trop peu nombreux (< MIN_GROUP_SIZE)
-        # pour former un groupe « normal ». Plutôt que de les laisser sans
-        # place, on les rattrape en deux temps.
+        # bien des créneaux libres, mais TOUS les groupes compatibles sont
+        # saturés (capacité salle/groupe atteinte) et ils sont trop peu
+        # nombreux pour former un groupe « normal ».
+        #
+        # On les rattrape SANS jamais créer de conflit : on les ajoute à un
+        # groupe EXISTANT de la matière dont le créneau est LIBRE pour
+        # l'étudiant (aucun double-booking). On vise le groupe le moins
+        # rempli pour limiter le dépassement, et on signale le surplus de
+        # capacité via _manual_override (« à confirmer par Daniel »).
+        # Aucun petit groupe n'est créé (pas de pénalité de fiabilité).
         if unassigned:
-            # 4bis-a — créer un PETIT groupe (sous le seuil habituel) dans
-            #          une salle alternative, sur un créneau commun libre.
-            while unassigned:
-                best_slot = None; best_free = []; best_room = None
-                best_score = -1
-                for slot in all_slots:
-                    day_idx = slot[0]
-                    if original_curso in [1, 3]:
-                        if slot[1] in [4, 5] and not ALLOW_AFTERNOON_Y1Y3:
-                            continue
-                    else:
-                        if slot[1] in [1, 2, 3] and not ALLOW_MORNING_Y2Y4:
-                            continue
-                    for room in candidate_rooms:
-                        if not can_fit_new_group(room, sem, day_idx, slot[1],
-                                                  min_week, max_week,
-                                                  num_sessions, current_load,
-                                                  subject=subject,
-                                                  subject_load=subject_load):
-                            continue
-                        free = []
-                        for sid in unassigned:
-                            busy = student_busy.get(sid, set())
-                            own_slots = student_subject_slots.get(sid, {}).get(subject, set())
-                            if slot not in (busy - own_slots) and slot not in student_lab_busy.get(sid, set()):
-                                free.append(sid)
-                        if not free:
-                            continue
-                        room_key = (room, sem, slot[0], slot[1])
-                        usage_penalty = current_load.get(room_key, 0) * 2
-                        score = len(free) - usage_penalty - friday_placement_penalty(
-                            slot[0], num_sessions, day_session_load[FRIDAY_IDX])
-                        if score > best_score:
-                            best_score = score
-                            best_slot = slot; best_free = free; best_room = room
-                if best_slot is None:
-                    break
-                members = best_free[:max_per_group]
-                day_idx, block_id = best_slot
-                group = {
-                    'subject': subject, 'semester': sem,
-                    'curso_num': original_curso, 'group_num': next_group_num,
-                    'program': 'RECOVERED', 'day_idx': day_idx, 'day': DAYS[day_idx],
-                    'block_id': block_id, 'block_label': BLOCK_LABELS[block_id],
-                    'student_ids': members, 'nb_students': len(members),
-                    'num_sessions': num_sessions, 'max_students': max_per_group,
-                    'lab_rooms': best_room, 'min_week': min_week, 'max_week': max_week,
-                    '_recovered': True, '_undersized': True,
-                }
-                all_groups.append(group)
-                next_group_num += 1
-                room_key = (best_room, sem, day_idx, block_id)
-                current_load[room_key] = current_load.get(room_key, 0) + num_sessions
-                subj_key = (subject, sem, day_idx, block_id)
-                subject_load[subj_key] = subject_load.get(subj_key, 0) + num_sessions
-                slot_room_usage[room_key] = slot_room_usage.get(room_key, 0) + num_sessions
-                for sid in members:
+            sec_groups_final = [g for g in all_groups if g['subject'] == subject]
+            if sec_groups_final:
+                for sid in list(unassigned):
+                    busy = student_busy.get(sid, set())
+                    own_slots = student_subject_slots.get(sid, {}).get(subject, set())
+                    effective_busy = busy - own_slots
+                    # UNIQUEMENT les groupes dont le créneau est libre pour
+                    # cet étudiant — garantit l'absence de double-booking.
+                    compatible = [
+                        g for g in sec_groups_final
+                        if (g['day_idx'], g['block_id']) not in effective_busy
+                        and (g['day_idx'], g['block_id']) not in student_lab_busy.get(sid, set())
+                    ]
+                    if not compatible:
+                        # Aucun créneau commun libre : impossible de placer
+                        # sans créer un conflit → on laisse non placé (signal).
+                        continue
+                    # Groupe le moins rempli (limite le surplus de capacité).
+                    target = min(compatible, key=lambda g: g['nb_students'])
+                    target['student_ids'].append(sid)
+                    target['nb_students'] += 1
+                    target['_manual_override'] = target.get('_manual_override', 0) + 1
+                    target.setdefault('_override_sids', set()).add(sid)
+                    _propagate_busy_one(sid, target)
                     unassigned.discard(sid)
-                sec_recovery_count += len(members)
-
-            # 4bis-b — ultime filet : s'il reste des étudiants (aucune salle
-            #          ni créneau commun disponible), on les place dans un
-            #          groupe existant de la matière (créneau libre si
-            #          possible), en signalant un dépassement de capacité
-            #          « à confirmer par Daniel ».
-            if unassigned:
-                sec_groups_final = [g for g in all_groups if g['subject'] == subject]
-                if sec_groups_final:
-                    for sid in list(unassigned):
-                        busy = student_busy.get(sid, set())
-                        own_slots = student_subject_slots.get(sid, {}).get(subject, set())
-                        effective_busy = busy - own_slots
-                        compatible = [
-                            g for g in sec_groups_final
-                            if (g['day_idx'], g['block_id']) not in effective_busy
-                            and (g['day_idx'], g['block_id']) not in student_lab_busy.get(sid, set())
-                        ]
-                        pool = compatible if compatible else sec_groups_final
-                        target = max(pool, key=lambda g: g['nb_students'])
-                        target['student_ids'].append(sid)
-                        target['nb_students'] += 1
-                        target['_manual_override'] = target.get('_manual_override', 0) + 1
-                        target.setdefault('_override_sids', set()).add(sid)
-                        _propagate_busy_one(sid, target)
-                        unassigned.discard(sid)
-                        sec_recovery_count += 1
+                    sec_recovery_count += 1
 
     if sec_recovery_count > 0:
         print(f"    [OK] {sec_recovery_count} étudiants secondaires récupérés")
