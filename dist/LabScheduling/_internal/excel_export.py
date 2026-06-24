@@ -227,6 +227,16 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
     saved = []
     name_map = _load_name_map()  # hash -> real name (local only); empty when names already present
 
+    # Crédits de laboratoire (P) par professeur/matière — chargés UNE SEULE FOIS
+    # par semestre (lecture de l'Asignación), puis réutilisés pour chaque niveau
+    # afin d'alimenter la nouvelle feuille « Vue Professeur » (Partie 1).
+    vp_credits, vp_names = ({}, {})
+    if hasattr(gen, "_load_professor_lab_credits"):
+        try:
+            vp_credits, vp_names = gen._load_professor_lab_credits()
+        except Exception as _e:
+            print(f"  [WARN] Vue Professeur : crédits indisponibles ({_e})")
+
     for level_num, level_config in levels.items():
         subjects = level_config["subjects"]
         programs = level_config["programs"]
@@ -256,6 +266,13 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
             name_map=name_map,
         )
         gen.build_vista_profesor_sheet(wb, level_schedule, subjects)
+
+        # NOUVELLE feuille consolidée centrée professeur (Partie 1).
+        if hasattr(gen, "build_vue_professeur_consolidada_sheet"):
+            gen.build_vue_professeur_consolidada_sheet(
+                wb, level_schedule, subjects,
+                credits_by_subject=vp_credits, names_by_subject=vp_names,
+            )
 
         folder = os.path.join(out_base, level_config["label"], SEMESTER_FOLDER[semester])
         os.makedirs(folder, exist_ok=True)

@@ -367,7 +367,6 @@
    'ABACUS '
    'AI\\LabScheduling\\.venv\\Lib\\site-packages\\_distutils_hack\\override.py',
    'PYMODULE'),
-  ('_ios_support', 'C:\\Python314\\Lib\\_ios_support.py', 'PYMODULE'),
   ('_opcode_metadata', 'C:\\Python314\\Lib\\_opcode_metadata.py', 'PYMODULE'),
   ('_py_abc', 'C:\\Python314\\Lib\\_py_abc.py', 'PYMODULE'),
   ('_py_warnings', 'C:\\Python314\\Lib\\_py_warnings.py', 'PYMODULE'),
@@ -1315,6 +1314,10 @@
    'PYMODULE'),
   ('ctypes.util', 'C:\\Python314\\Lib\\ctypes\\util.py', 'PYMODULE'),
   ('ctypes.wintypes', 'C:\\Python314\\Lib\\ctypes\\wintypes.py', 'PYMODULE'),
+  ('data_quality',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS AI\\LabScheduling\\data_quality.py',
+   'PYMODULE'),
   ('dataclasses', 'C:\\Python314\\Lib\\dataclasses.py', 'PYMODULE'),
   ('datetime', 'C:\\Python314\\Lib\\datetime.py', 'PYMODULE'),
   ('dateutil',
@@ -2225,6 +2228,10 @@
    'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
    'ABACUS '
    'AI\\LabScheduling\\.venv\\Lib\\site-packages\\jsonschema_specifications\\_core.py',
+   'PYMODULE'),
+  ('kpi_report',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS AI\\LabScheduling\\kpi_report.py',
    'PYMODULE'),
   ('logging', 'C:\\Python314\\Lib\\logging\\__init__.py', 'PYMODULE'),
   ('logging.config', 'C:\\Python314\\Lib\\logging\\config.py', 'PYMODULE'),
@@ -6755,6 +6762,7 @@
    'PYMODULE'),
   ('pathlib', 'C:\\Python314\\Lib\\pathlib\\__init__.py', 'PYMODULE'),
   ('pathlib._os', 'C:\\Python314\\Lib\\pathlib\\_os.py', 'PYMODULE'),
+  ('pathlib.types', 'C:\\Python314\\Lib\\pathlib\\types.py', 'PYMODULE'),
   ('pdb', 'C:\\Python314\\Lib\\pdb.py', 'PYMODULE'),
   ('persistence',
    'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
@@ -6769,6 +6777,10 @@
   ('pkgutil', 'C:\\Python314\\Lib\\pkgutil.py', 'PYMODULE'),
   ('platform', 'C:\\Python314\\Lib\\platform.py', 'PYMODULE'),
   ('pprint', 'C:\\Python314\\Lib\\pprint.py', 'PYMODULE'),
+  ('professor_credits',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS AI\\LabScheduling\\professor_credits.py',
+   'PYMODULE'),
   ('psutil',
    'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
    'ABACUS AI\\LabScheduling\\.venv\\Lib\\site-packages\\psutil\\__init__.py',
