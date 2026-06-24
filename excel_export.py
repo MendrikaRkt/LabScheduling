@@ -235,7 +235,7 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
         try:
             vp_credits, vp_names = gen._load_professor_lab_credits()
         except Exception as _e:
-            print(f"  [WARN] Vue Professeur : crédits indisponibles ({_e})")
+            print(f"  [WARN] Teacher View: credits unavailable ({_e})")
 
     for level_num, level_config in levels.items():
         subjects = level_config["subjects"]
