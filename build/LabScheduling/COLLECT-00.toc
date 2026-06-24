@@ -292,6 +292,14 @@
    'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
    'ABACUS AI\\LabScheduling\\data_clean\\optimizarion\\subject_professors.csv',
    'DATA'),
+  ('data_clean\\optimization\\lab_enrollments.csv',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS AI\\LabScheduling\\data_clean\\optimization\\lab_enrollments.csv',
+   'DATA'),
+  ('data_clean\\optimization\\professor_busy.csv',
+   'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
+   'ABACUS AI\\LabScheduling\\data_clean\\optimization\\professor_busy.csv',
+   'DATA'),
   ('dateutil\\zoneinfo\\dateutil-zoneinfo.tar.gz',
    'C:\\Users\\Mendrika\\Documents\\Loyola Universidad\\Internship\\Projets '
    'ABACUS '
