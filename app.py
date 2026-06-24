@@ -360,7 +360,7 @@ LANGS = {
         'preview': 'Preview',
         'both_loaded': 'Both files loaded successfully',
         'upload_help_1': 'revisionAulario.xlsx — course timetables',
-        'upload_help_2': 'report_AlumnosGrupos.xlsx — enrollments',
+        'upload_help_2': 'report_AlumnosGrupos.xlsx — enrolments',
         'config_title': 'Configuration',
         'config_sub': 'System parameters and per-subject overrides',
         'global_params': 'Global parameters',
@@ -1013,7 +1013,7 @@ def _load_report_json(rel):
 
 def render_quality_panel(show_solver=True):
     """Surface the compliance data produced by the pipeline:
-    data quality control, schedule KPIs, unplaced enrollments
+    data quality control, schedule KPIs, unplaced enrolments
     (with detailed diagnostic) and the CP-SAT solver log.
 
     Everything is read from the JSON reports (reports/*.json). Each block degrades
@@ -1037,7 +1037,7 @@ def render_quality_panel(show_solver=True):
         ok = integ.get("ok")
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            stat_card("Integrity", "OK" if ok else "To review",
+            stat_card("Integrity", "OK" if ok else "Review",
                       "data structure")
         with c2:
             stat_card("Rows", f"{integ.get('n_rows', '—'):,}".replace(",", " ")
@@ -1049,7 +1049,7 @@ def render_quality_panel(show_solver=True):
             gp = grp.get("global_placement_pct")
             stat_card("Placement rate",
                       f"{gp:.1f}%" if isinstance(gp, (int, float)) else "—",
-                      f"{grp.get('total_placed', '—')}/{grp.get('total_enrolled', '—')} enrollments")
+                      f"{grp.get('total_placed', '—')}/{grp.get('total_enrolled', '—')} enrolments")
 
         per_subj = grp.get("per_subject") or []
         if per_subj:
@@ -1059,20 +1059,20 @@ def render_quality_panel(show_solver=True):
                     "subject": "Subject", "enrolled": "Enrolled",
                     "placed": "Placed", "unplaced": "Unplaced",
                     "placement_pct": "Rate (%)"})
-                with st.expander("Detail per subject"):
+                with st.expander("Breakdown by subject"):
                     st.dataframe(df_subj, use_container_width=True, hide_index=True)
             except Exception:
                 pass
 
     # -- Schedule KPIs --
     if kpi:
-        section_header("Schedule indicators (KPIs)")
+        section_header("Schedule KPIs")
         groups = kpi.get("groups", {}) or {}
         plc = kpi.get("placement", {}) or {}
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             stat_card("Groups", groups.get("total", "—"),
-                      f"incl. {groups.get('overflow', 0)} overflow")
+                      f"with {groups.get('overflow', 0)} overflow")
         with c2:
             stat_card("Average size",
                       groups.get("size_mean", "—"),
@@ -1090,15 +1090,15 @@ def render_quality_panel(show_solver=True):
                 order = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
                 s = pd.Series(day_bal)
                 s = s.reindex([d for d in order if d in s.index])
-                st.caption("Session distribution per day")
+                st.caption("Sessions per day")
                 st.bar_chart(s)
             except Exception:
                 pass
 
-    # -- Unplaced enrollments (diagnostic) --
-    section_header("Unplaced enrollments")
+    # -- Unplaced enrolments (diagnostic) --
+    section_header("Unplaced enrolments")
     if not unplaced:
-        st.success("All enrollments were placed (0 unplaced).")
+        st.success("All enrolments were placed (0 unplaced).")
     else:
         help_tip(
             "Automatic diagnostic of each unplaced enrollment: number of "
@@ -1112,14 +1112,14 @@ def render_quality_panel(show_solver=True):
                 "student_name": "Student", "subject": "Subject",
                 "n_free_slots": "Free slots",
                 "n_compatible_slots": "Subject-compatible",
-                "n_compatible_with_room": "Compatible with seat",
+                "n_compatible_with_room": "With free seat",
                 "verdict": "Reason",
             }
             keep = [c for c in cols if c in df_u.columns]
             df_u = df_u[keep].rename(columns=cols)
             st.dataframe(df_u, use_container_width=True, hide_index=True)
         except Exception as e:
-            st.warning(f"Unable to display the detail: {e}")
+            st.warning(f"Could not display details: {e}")
 
     # -- Solver log --
     if show_solver and solver:
