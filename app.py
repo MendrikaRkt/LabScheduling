@@ -3563,6 +3563,103 @@ elif page == t('nav_integrity'):
         except Exception as e:
             st.warning(f"Impossible d'afficher les crédits par professeur : {e}")
 
+    # ── Comment les crédits labo sont calculés et répartis ──────────────
+    with st.expander("Comment les crédits de laboratoire sont-ils calculés et répartis ?"):
+        st.markdown(
+            """
+**Source de vérité.** Le fichier `Asignacion_2025-2026_v5.xlsx`, feuille
+*« Asignación docente »*, liste pour chaque couple (matière, groupe) jusqu'à
+**4 professeurs**, chacun avec un nombre de crédits et un caractère :
+**T** = théorie (cours magistral) ou **P** = pratique (laboratoire).
+
+**Règle de conversion validée.** `1 crédit P = 5 sessions de laboratoire`.
+Exemple : un professeur avec **3P** doit encadrer **15 sessions** de labo.
+Seuls les crédits **P** génèrent des sessions de laboratoire ; les crédits
+**T** sont comptés à part (colonne *Crédits théorie*).
+
+**Répartition.** Les sessions sont réparties par matière/groupe selon les
+professeurs déclarés sur la feuille. La colonne *Total assigné* additionne
+théorie + labo, comparée au *Budget* du professeur pour calculer la *Marge*.
+
+**Dépassements.** Lorsque la charge dépasse le budget, le système le
+**signale** (colonne *Dépassement*) mais **ne bloque jamais** la génération :
+le système valide, il ne décide pas. Dans les données officielles, environ
+**17 professeurs sur 127** sont déjà au-dessus de leur budget — c'est un
+constat factuel laissé à l'appréciation de la coordination.
+            """
+        )
+
+    # ── Vérification de la disponibilité des enseignants (preuve) ───────
+    section_header("Disponibilité des enseignants — vérification")
+    help_tip(
+        "Preuve a posteriori que le planning produit respecte les paramètres "
+        "de « Teacher Availability Configuration ». Généré par le pipeline "
+        "(config/availability_verification.json) à chaque exécution.",
+        icon=""
+    )
+    _verif = None
+    for _vp in ("config/availability_verification.json",
+                "outputs/optimization/config/availability_verification.json"):
+        if os.path.exists(_vp):
+            try:
+                with open(_vp, "r", encoding="utf-8") as _vf:
+                    _verif = json.load(_vf)
+                break
+            except Exception:
+                _verif = None
+    if _verif is None:
+        st.info("Aucune vérification disponible pour le moment. Lancez le "
+                "pipeline pour générer la preuve d'application des "
+                "disponibilités (config/availability_verification.json).")
+    else:
+        # 1) Créneaux indisponibles (contrainte DURE)
+        _hbs = _verif.get("hard_blocked_slots", {})
+        _viol = _hbs.get("violations", [])
+        if _hbs.get("status") == "ok":
+            st.success(
+                f"Créneaux indisponibles : **0 violation** "
+                f"({_hbs.get('checked_groups', 0)} groupes contraints vérifiés). "
+                "Aucune session n'est placée sur un créneau bloqué."
+            )
+        else:
+            st.error(
+                f"Créneaux indisponibles : **{len(_viol)} violation(s)** détectée(s)."
+            )
+            if _viol:
+                st.dataframe(pd.DataFrame(_viol), use_container_width=True,
+                             hide_index=True)
+
+        # 2) Franje horaire préférée (contrainte SOUPLE)
+        _pref = _verif.get("preferred_range", [])
+        if _pref:
+            st.markdown("**Franje horaire préférée** (souple — taux de respect)")
+            _pdf = pd.DataFrame(_pref).rename(columns={
+                "teacher": "Enseignant",
+                "recognized": "Reconnu",
+                "preferred_blocks": "Créneaux préférés",
+                "sessions_total": "Sessions",
+                "sessions_inside": "Dans la franje",
+                "pct_inside": "% dans la franje",
+            })
+            st.dataframe(_pdf, use_container_width=True, hide_index=True)
+
+        # 3) Max jours labo / semaine (SIGNAL)
+        _mdw = _verif.get("max_days_per_week", [])
+        if _mdw:
+            st.markdown("**Nombre maximum de jours de labo / semaine** (signal)")
+            _mdf = pd.DataFrame(_mdw).rename(columns={
+                "teacher": "Enseignant",
+                "recognized": "Reconnu",
+                "cap": "Plafond",
+                "days_used": "Jours utilisés",
+                "days": "Jours",
+                "status": "Statut",
+            })
+            st.dataframe(_mdf, use_container_width=True, hide_index=True)
+
+        if _verif.get("generated_at"):
+            st.caption(f"Vérification générée le {_verif['generated_at']}")
+
     st.caption("These are the same checks as verify_flow.py — shown here so no terminal is needed.")
 
 
