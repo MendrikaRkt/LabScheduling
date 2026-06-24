@@ -1021,9 +1021,9 @@ def _find_prof_load_csv():
 
 
 def _load_report_json(rel):
-    """Charge un rapport JSON écrit par le pipeline (reports/*.json) de façon
-    défensive. Résout le chemin via app_paths quand disponible, sinon relatif.
-    Renvoie None si le fichier est absent ou illisible."""
+    """Load a JSON report written by the pipeline (reports/*.json) defensively.
+    Resolves the path via app_paths when available, otherwise relative.
+    Returns None if the file is absent or unreadable."""
     candidates = [rel]
     try:
         if PATHS_OK:
@@ -1043,12 +1043,12 @@ def _load_report_json(rel):
 
 
 def render_quality_panel(show_solver=True):
-    """Surface les données de conformité produites par le pipeline :
-    contrôle qualité des données, KPIs du planning, inscriptions non placées
-    (avec diagnostic détaillé) et journal du solveur CP-SAT.
+    """Surface the compliance data produced by the pipeline:
+    data quality control, schedule KPIs, unplaced enrollments
+    (with detailed diagnostic) and the CP-SAT solver log.
 
-    Tout est lu depuis les rapports JSON (reports/*.json). Chaque bloc dégrade
-    proprement si son rapport est absent — rien n'est codé en dur.
+    Everything is read from the JSON reports (reports/*.json). Each block degrades
+    gracefully if its report is absent — nothing is hardcoded.
     """
     kpi = _load_report_json("reports/kpi_report.json")
     dq = _load_report_json("reports/data_quality_report.json")
@@ -1056,6 +1056,11 @@ def render_quality_panel(show_solver=True):
     solver = _load_report_json("reports/solver_stats.json")
 
     if not any([kpi, dq, unplaced is not None, solver]):
+        st.info("Compliance reports are not available yet. "
+                "Run the optimization to generate them.")
+        return
+
+    # -- Data quality control --
         st.info("Conformance reports are not available yet. "
                 "Run the optimization to generate them.")
         return
@@ -1068,6 +1073,7 @@ def render_quality_panel(show_solver=True):
         ok = integ.get("ok")
         c1, c2, c3, c4 = st.columns(4)
         with c1:
+            stat_card("Integrity", "OK" if ok else "To review",
             stat_card("Integrity", "OK" if ok else "Review",
                       "data structure")
         with c2:
@@ -1080,6 +1086,7 @@ def render_quality_panel(show_solver=True):
             gp = grp.get("global_placement_pct")
             stat_card("Placement rate",
                       f"{gp:.1f}%" if isinstance(gp, (int, float)) else "—",
+                      f"{grp.get('total_placed', '—')}/{grp.get('total_enrolled', '—')} enrollments")
                       f"{grp.get('total_placed', '—')}/{grp.get('total_enrolled', '—')} enrolments")
 
         per_subj = grp.get("per_subject") or []
@@ -1090,11 +1097,15 @@ def render_quality_panel(show_solver=True):
                     "subject": "Subject", "enrolled": "Enrolled",
                     "placed": "Placed", "unplaced": "Unplaced",
                     "placement_pct": "Rate (%)"})
+                with st.expander("Detail per subject"):
                 with st.expander("Breakdown by subject"):
                     st.dataframe(df_subj, use_container_width=True, hide_index=True)
             except Exception:
                 pass
 
+    # -- Schedule KPIs --
+    if kpi:
+        section_header("Schedule indicators (KPIs)")
     # ── Schedule KPIs ───────────────────────────────────────────────────
     if kpi:
         section_header("Schedule KPIs")
@@ -1103,6 +1114,7 @@ def render_quality_panel(show_solver=True):
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             stat_card("Groups", groups.get("total", "—"),
+                      f"incl. {groups.get('overflow', 0)} overflow")
                       f"{groups.get('overflow', 0)} in overflow")
         with c2:
             stat_card("Average size",
@@ -1121,11 +1133,21 @@ def render_quality_panel(show_solver=True):
                 order = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
                 s = pd.Series(day_bal)
                 s = s.reindex([d for d in order if d in s.index])
+                st.caption("Session distribution per day")
                 st.caption("Sessions per day")
                 st.bar_chart(s)
             except Exception:
                 pass
 
+    # -- Unplaced enrollments (diagnostic) --
+    section_header("Unplaced enrollments")
+    if not unplaced:
+        st.success("All enrollments were placed (0 unplaced).")
+    else:
+        help_tip(
+            "Automatic diagnostic of each unplaced enrollment: number of "
+            "slots where the student is free, how many are compatible with the "
+            "subject, how many still have a seat, and the determined reason.",
     # ── Unplaced enrolments (diagnostics) ───────────────────────────────
     section_header("Unplaced enrolments")
     if not unplaced:
@@ -1143,6 +1165,7 @@ def render_quality_panel(show_solver=True):
                 "student_name": "Student", "subject": "Subject",
                 "n_free_slots": "Free slots",
                 "n_compatible_slots": "Subject-compatible",
+                "n_compatible_with_room": "Compatible with seat",
                 "n_compatible_with_room": "With free seat",
                 "verdict": "Reason",
             }
@@ -1150,6 +1173,9 @@ def render_quality_panel(show_solver=True):
             df_u = df_u[keep].rename(columns=cols)
             st.dataframe(df_u, use_container_width=True, hide_index=True)
         except Exception as e:
+            st.warning(f"Unable to display the detail: {e}")
+
+    # -- Solver log --
             st.warning(f"Could not display details: {e}")
 
     # ── CP-SAT solver log ───────────────────────────────────────────────
@@ -2517,7 +2543,7 @@ elif page == t('nav_optimize'):
         prev_label="Configuration", prev_page='config',
         next_label="View results", next_page='results',
         next_disabled=not st.session_state.pipeline_ran,
-        next_disabled_reason="Lancez d'abord le pipeline",
+        next_disabled_reason="Run the pipeline first",
     )
 
 # ════════════════════════════════════════════════════════════
@@ -2742,7 +2768,7 @@ elif page == t('nav_dashboard'):
             <div class="stat-card">
                 <div class="stat-label">Conflicts detected</div>
                 <div class="stat-value" style="color: {conf_color};">{n_conf}</div>
-                <div class="stat-desc">C1: {n_c1} · C4: {n_c4} · Étu: {n_stud}</div>
+                <div class="stat-desc">C1: {n_c1} · C4: {n_c4} · Stu: {n_stud}</div>
             </div>
         """, unsafe_allow_html=True)
     with em_col3:
@@ -2869,7 +2895,7 @@ elif page == t('nav_dashboard'):
                     status = "Low"
                 room_data.append({
                     'Room':          r.get('room', '?'),
-                    'Semestre':      f"S{r.get('semester', '?')}",
+                    'Semester':      f"S{r.get('semester', '?')}",
                     'Occupation':    f"{util:.1f}%",
                     'Sessions':      r.get('sessions_used', 0),
                     'Available slots': r.get('slots_available', 0),
@@ -2931,7 +2957,7 @@ elif page == t('nav_dashboard'):
             for entry in ov['examples'][:10]:
                 top_data.append({
                     'Student':     entry.get('student', '?'),
-                    'Semestre':     f"S{entry.get('semester', '?')}",
+                    'Semester':     f"S{entry.get('semester', '?')}",
                     'Week':      f"W{entry.get('week', '?')}",
                     'Labs this week': entry.get('count', 0),
                 })
@@ -3010,8 +3036,8 @@ elif page == t('nav_dashboard'):
                 'Groups':           entry.get('groups', 0),
                 'Sessions':         entry.get('sessions', 0),
                 'Daniel ref (stu.)': ref_students if ref_students is not None else '—',
-                'Écart':            f"{deviation_pct:+.1f}%" if deviation_pct is not None else '—',
-                'Statut':           status_icon,
+                'Deviation':        f"{deviation_pct:+.1f}%" if deviation_pct is not None else '—',
+                'Status':           status_icon,
             })
         st.dataframe(pd.DataFrame(cov_data), use_container_width=True, hide_index=True)
 
@@ -3034,7 +3060,7 @@ elif page == t('nav_dashboard'):
     # ───────────────────────────────────────────────────────
     # 5. EXPORT
     # ───────────────────────────────────────────────────────
-    section_header("Exporter le rapport")
+    section_header("Export the report")
 
     col_e1, col_e2 = st.columns(2)
     with col_e1:
@@ -3579,6 +3605,17 @@ elif page == t('nav_integrity'):
                 unsafe_allow_html=True,
             )
 
+    # -- Credits per professor (clear, sortable table) --
+    section_header("Credits per professor")
+    _ll_path = None
+    for _p in ("professor_lab_load.csv",
+               "outputs/optimization/professor_lab_load.csv"):
+        if os.path.exists(_p):
+            _ll_path = _p
+            break
+    if _ll_path is None:
+        st.info("File professor_lab_load.csv not found. "
+                "Run the pipeline to display credits per professor.")
     # ── Lab credits per professor (clear, sortable table) ───────────────
     section_header("Lab credits per professor")
     _ll_path = _find_prof_load_csv()
@@ -3595,6 +3632,9 @@ elif page == t('nav_integrity'):
             tot_sess = int(_df_lab["lab_sessions"].fillna(0).sum())
 
             help_tip(
+                "Lab load per professor. Validated rule: "
+                "1 P credit = 5 lab sessions. Budget overruns are "
+                "signaled (never blocking).",
                 "Laboratory teaching load per professor. Validated rule: "
                 "1 P credit = 5 lab sessions. Budget overruns are flagged "
                 "(never blocking).",
@@ -3606,6 +3646,9 @@ elif page == t('nav_integrity'):
             with c2:
                 stat_card("Lab credits", f"{tot_cr:.0f}", "total assigned")
             with c3:
+                stat_card("Lab sessions", tot_sess, "total (credits x 5)")
+            with c4:
+                stat_card("Overruns", n_over, "budget signaled")
                 stat_card("Lab sessions", tot_sess, "total (credits × 5)")
             with c4:
                 stat_card("Over budget", n_over, "flagged")
@@ -3628,40 +3671,41 @@ elif page == t('nav_integrity'):
             _show = _show[_cols].sort_values("Lab credits", ascending=False)
             st.dataframe(_show, use_container_width=True, hide_index=True)
         except Exception as e:
+            st.warning(f"Unable to display credits per professor: {e}")
             st.warning(f"Could not display professor credits: {e}")
 
-    # ── Comment les crédits labo sont calculés et répartis ──────────────
-    with st.expander("Comment les crédits de laboratoire sont-ils calculés et répartis ?"):
+    # -- How lab credits are computed and distributed --
+    with st.expander("How are lab credits computed and distributed?"):
         st.markdown(
             """
-**Source de vérité.** Le fichier `Asignacion_2025-2026_v5.xlsx`, feuille
-*« Asignación docente »*, liste pour chaque couple (matière, groupe) jusqu'à
-**4 professeurs**, chacun avec un nombre de crédits et un caractère :
-**T** = théorie (cours magistral) ou **P** = pratique (laboratoire).
+**Source of truth.** The file `Asignacion_2025-2026_v5.xlsx`, sheet
+*"Asignación docente"*, lists for each (subject, group) pair up to
+**4 professors**, each with a credit count and a character:
+**T** = theory (lecture) or **P** = practice (lab).
 
-**Règle de conversion validée.** `1 crédit P = 5 sessions de laboratoire`.
-Exemple : un professeur avec **3P** doit encadrer **15 sessions** de labo.
-Seuls les crédits **P** génèrent des sessions de laboratoire ; les crédits
-**T** sont comptés à part (colonne *Crédits théorie*).
+**Validated conversion rule.** `1 P credit = 5 lab sessions`.
+Example: a professor with **3P** must supervise **15 lab sessions**.
+Only **P** credits generate lab sessions; **T** credits are counted
+separately (column *Theory credits*).
 
-**Répartition.** Les sessions sont réparties par matière/groupe selon les
-professeurs déclarés sur la feuille. La colonne *Total assigné* additionne
-théorie + labo, comparée au *Budget* du professeur pour calculer la *Marge*.
+**Distribution.** Sessions are distributed per subject/group according to the
+professors declared on the sheet. The *Total assigned* column adds
+theory + lab, compared to the professor's *Budget* to compute the *Margin*.
 
-**Dépassements.** Lorsque la charge dépasse le budget, le système le
-**signale** (colonne *Dépassement*) mais **ne bloque jamais** la génération :
-le système valide, il ne décide pas. Dans les données officielles, environ
-**17 professeurs sur 127** sont déjà au-dessus de leur budget — c'est un
-constat factuel laissé à l'appréciation de la coordination.
+**Overruns.** When the load exceeds the budget, the system **signals** it
+(column *Over budget*) but **never blocks** generation:
+the system validates, it does not decide. In the official data, around
+**17 professors out of 127** are already above their budget — this is a
+factual statement left to the coordination's discretion.
             """
         )
 
-    # ── Vérification de la disponibilité des enseignants (preuve) ───────
-    section_header("Disponibilité des enseignants — vérification")
+    # ── Teacher availability verification (proof) ──────────────────────
+    section_header("Teacher availability — verification")
     help_tip(
-        "Preuve a posteriori que le planning produit respecte les paramètres "
-        "de « Teacher Availability Configuration ». Généré par le pipeline "
-        "(config/availability_verification.json) à chaque exécution.",
+        "A posteriori proof that the produced schedule respects the parameters "
+        "of 'Teacher Availability Configuration'. Generated by the pipeline "
+        "(config/availability_verification.json) on every run.",
         icon=""
     )
     _verif = None
@@ -3675,57 +3719,83 @@ constat factuel laissé à l'appréciation de la coordination.
             except Exception:
                 _verif = None
     if _verif is None:
-        st.info("Aucune vérification disponible pour le moment. Lancez le "
-                "pipeline pour générer la preuve d'application des "
-                "disponibilités (config/availability_verification.json).")
+        st.info("No verification available yet. Run the "
+                "pipeline to generate the availability enforcement proof "
+                "(config/availability_verification.json).")
     else:
-        # 1) Créneaux indisponibles (contrainte DURE)
+        # 1) Unavailable slots (HARD constraint)
         _hbs = _verif.get("hard_blocked_slots", {})
         _viol = _hbs.get("violations", [])
-        if _hbs.get("status") == "ok":
+        _relaxed_n = int(_hbs.get("relaxed_count", 0))
+        _unexpected_n = int(_hbs.get("unexpected_count", 0))
+        _status = _hbs.get("status")
+        if _status == "ok":
             st.success(
-                f"Créneaux indisponibles : **0 violation** "
-                f"({_hbs.get('checked_groups', 0)} groupes contraints vérifiés). "
-                "Aucune session n'est placée sur un créneau bloqué."
+                f"Unavailable slots: **0 violation** "
+                f"({_hbs.get('checked_groups', 0)} constrained groups checked). "
+                "No session is placed on a blocked slot."
+            )
+        elif _status == "relaxed":
+            st.warning(
+                f"Unavailable slots: **{len(_viol)} expected violation(s)** "
+                f"({_relaxed_n} relaxed, 0 unexpected). These placements are "
+                "EXPECTED: for these subjects, enforcing the unavailability would "
+                "leave **no feasible slot**, so the constraint was deliberately "
+                "relaxed to keep the subject schedulable. Per the project "
+                "principle, the system **signals** but **never blocks**."
             )
         else:
             st.error(
-                f"Créneaux indisponibles : **{len(_viol)} violation(s)** détectée(s)."
+                f"Unavailable slots: **{len(_viol)} violation(s)** detected "
+                f"({_relaxed_n} relaxed/expected, {_unexpected_n} unexpected). "
+                "The unexpected ones warrant investigation."
             )
-            if _viol:
-                st.dataframe(pd.DataFrame(_viol), use_container_width=True,
-                             hide_index=True)
+        if _viol:
+            _vdf = pd.DataFrame(_viol).rename(columns={
+                "subject": "Subject",
+                "group": "Group",
+                "day": "Day",
+                "block": "Slot",
+                "relaxed": "Relaxed (expected)",
+                "reason": "Reason",
+            })
+            st.dataframe(_vdf, use_container_width=True, hide_index=True)
+            st.caption(
+                "Relaxed = expected: enforcing the unavailability would leave no "
+                "feasible slot for this subject. To remove it, relax a teacher's "
+                "unavailability, add a room/slot, or accept it."
+            )
 
-        # 2) Franje horaire préférée (contrainte SOUPLE)
+        # 2) Preferred time range (SOFT constraint)
         _pref = _verif.get("preferred_range", [])
         if _pref:
-            st.markdown("**Franje horaire préférée** (souple — taux de respect)")
+            st.markdown("**Preferred time range** (soft — compliance rate)")
             _pdf = pd.DataFrame(_pref).rename(columns={
-                "teacher": "Enseignant",
-                "recognized": "Reconnu",
-                "preferred_blocks": "Créneaux préférés",
+                "teacher": "Teacher",
+                "recognized": "Recognized",
+                "preferred_blocks": "Preferred slots",
                 "sessions_total": "Sessions",
-                "sessions_inside": "Dans la franje",
-                "pct_inside": "% dans la franje",
+                "sessions_inside": "Inside range",
+                "pct_inside": "% inside range",
             })
             st.dataframe(_pdf, use_container_width=True, hide_index=True)
 
-        # 3) Max jours labo / semaine (SIGNAL)
+        # 3) Max lab days / week (SIGNAL)
         _mdw = _verif.get("max_days_per_week", [])
         if _mdw:
-            st.markdown("**Nombre maximum de jours de labo / semaine** (signal)")
+            st.markdown("**Maximum lab days / week** (signal)")
             _mdf = pd.DataFrame(_mdw).rename(columns={
-                "teacher": "Enseignant",
-                "recognized": "Reconnu",
-                "cap": "Plafond",
-                "days_used": "Jours utilisés",
-                "days": "Jours",
-                "status": "Statut",
+                "teacher": "Teacher",
+                "recognized": "Recognized",
+                "cap": "Cap",
+                "days_used": "Days used",
+                "days": "Days",
+                "status": "Status",
             })
             st.dataframe(_mdf, use_container_width=True, hide_index=True)
 
         if _verif.get("generated_at"):
-            st.caption(f"Vérification générée le {_verif['generated_at']}")
+            st.caption(f"Verification generated on {_verif['generated_at']}")
 
     st.caption("These are the same checks as verify_flow.py — shown here so no terminal is needed.")
 
@@ -3828,7 +3898,7 @@ elif page == t('nav_history'):
             <div class="stat-card">
                 <div class="stat-label">Space used</div>
                 <div class="stat-value">{size_display}</div>
-                <div class="stat-desc">sur disque</div>
+                <div class="stat-desc">on disk</div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -3961,7 +4031,7 @@ elif page == t('nav_history'):
         with ac3:
             with st.popover("Delete", use_container_width=True):
                 st.warning(f"Permanently delete: **{selected_snap.get('description', '?')}**?")
-                if st.button("Confirmer la suppression",
+                if st.button("Confirm deletion",
                              type="primary",
                              key=f"confirm_del_{selected_id}"):
                     if vm.delete_snapshot(selected_id):
@@ -4007,7 +4077,7 @@ elif page == t('nav_history'):
                 diff = vm.compare_snapshots(id_a, id_b)
 
             if diff is None:
-                st.error("Impossible de comparer ces deux versions")
+                st.error("Unable to compare these two versions")
             else:
                 d1, d2, d3 = st.columns(3)
                 with d1:
@@ -4451,8 +4521,8 @@ elif page == t('nav_edit'):
                 if n_warning > n_total * 0.6 and not show_all_weeks:
                     st.info(
                         f"Week W{target_week} produces many warnings "
-                        f"({n_warning}/{n_total}). C'est souvent normal — les avertissements "
-                        f"sont non-bloquants."
+                        f"({n_warning}/{n_total}). This is often normal — the warnings "
+                        f"are non-blocking."
                     )
 
                 st.markdown(
@@ -5419,8 +5489,8 @@ elif page == t('nav_student'):
                         st.rerun()
 
     note = st.text_area(
-        "Notes / contexte (optionnel)",
-        placeholder="Ex: 'Repêchage de Física 1ère année', 'Stage le mardi'",
+        "Notes / context (optional)",
+        placeholder="Ex: 'Resit for Física 1st year', 'Internship on Tuesday'",
         key=f'note_{selected_sid}',
         height=80,
     )
@@ -5648,7 +5718,7 @@ elif page == t('nav_student'):
             )
         with ca2:
             if st.button(
-                "Ouvrir Édition manuelle",
+                "Open Manual Editing",
                 use_container_width=True,
                 help=(
                     "Go to the Edit page to add the student "
@@ -5667,7 +5737,7 @@ elif page == t('nav_student'):
         "Afficher :",
         options=[
             "Solutions only",
-            "Tous les groupes",
+            "All groups",
             "Conflicts only",
         ],
         horizontal=True,
@@ -5776,7 +5846,7 @@ elif page == t('nav_student'):
 # PAGE: UPDATES (apply Python patches, show version)
 # ════════════════════════════════════════════════════════════
 elif page == t('nav_updates'):
-    page_header(t('nav_updates'), "Version & correctifs")
+    page_header(t('nav_updates'), "Version & patches")
 
     try:
         import update_manager as _upd
@@ -5847,12 +5917,12 @@ elif page == t('nav_updates'):
                         )
                         st.balloons()
                     else:
-                        st.error(f"Échec : {res['error']}")
+                        st.error(f"Failed: {res['error']}")
 
         # History of applied patches
         if applied:
             st.markdown("---")
-            section_header("Historique des correctifs")
+            section_header("Patch history")
             _rows = [{
                 "Version": p.get("version", "?"),
                 "Date": (p.get("applied_at", "") or "")[:16].replace("T", " "),
