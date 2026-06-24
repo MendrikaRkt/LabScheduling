@@ -361,7 +361,7 @@ LANGS = {
         'preview': 'Preview',
         'both_loaded': 'Both files loaded successfully',
         'upload_help_1': 'revisionAulario.xlsx — course timetables',
-        'upload_help_2': 'report_AlumnosGrupos.xlsx — enrollments',
+        'upload_help_2': 'report_AlumnosGrupos.xlsx — enrolments',
         'config_title': 'Configuration',
         'config_sub': 'System parameters and per-subject overrides',
         'global_params': 'Global parameters',
@@ -1044,7 +1044,7 @@ def _load_report_json(rel):
 
 def render_quality_panel(show_solver=True):
     """Surface the compliance data produced by the pipeline:
-    data quality control, schedule KPIs, unplaced enrollments
+    data quality control, schedule KPIs, unplaced enrolments
     (with detailed diagnostic) and the CP-SAT solver log.
 
     Everything is read from the JSON reports (reports/*.json). Each block degrades
@@ -1139,10 +1139,10 @@ def render_quality_panel(show_solver=True):
             except Exception:
                 pass
 
-    # -- Unplaced enrollments (diagnostic) --
-    section_header("Unplaced enrollments")
+    # -- Unplaced enrolments (diagnostic) --
+    section_header("Unplaced enrolments")
     if not unplaced:
-        st.success("All enrollments were placed (0 unplaced).")
+        st.success("All enrolments were placed (0 unplaced).")
     else:
         help_tip(
             "Automatic diagnostic of each unplaced enrollment: number of "
@@ -1173,7 +1173,7 @@ def render_quality_panel(show_solver=True):
             df_u = df_u[keep].rename(columns=cols)
             st.dataframe(df_u, use_container_width=True, hide_index=True)
         except Exception as e:
-            st.warning(f"Unable to display the detail: {e}")
+            st.warning(f"Could not display details: {e}")
 
     # -- Solver log --
             st.warning(f"Could not display details: {e}")
