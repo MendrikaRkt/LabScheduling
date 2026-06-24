@@ -107,6 +107,34 @@ def _norm(s):
     return "".join(c for c in s if not unicodedata.combining(c)).lower().strip()
 
 
+# Cache interne : clé d'alias normalisée -> nom de matière SOURCE normalisé.
+_ALIAS_TO_SOURCE = None
+
+
+def _alias_to_source():
+    """Construit {alias_normalisé: source_normalisée} à partir de SUBJECT_ALIASES."""
+    global _ALIAS_TO_SOURCE
+    if _ALIAS_TO_SOURCE is None:
+        _ALIAS_TO_SOURCE = {_norm(k): _norm(v) for k, v in SUBJECT_ALIASES.items()}
+    return _ALIAS_TO_SOURCE
+
+
+def canonical_subject_key(name):
+    """Clé canonique STABLE et robuste aux variantes de libellé d'une matière.
+
+    Les fichiers générés emploient parfois un libellé court (« Informática y
+    Com. Industriales ») là où la source utilise le libellé complet
+    (« Informática y Comunicaciones Industriales »). Plusieurs alias peuvent
+    donc désigner la même matière. Cette fonction renvoie une clé UNIQUE par
+    matière (le nom source normalisé) quelle que soit l'orthographe d'entrée,
+    de sorte que la « Teacher View » et le cache concordent toujours.
+
+    Pour une matière hors SUBJECT_ALIASES, renvoie simplement son nom normalisé.
+    """
+    n = _norm(name)
+    return _alias_to_source().get(n, n)
+
+
 def _to_num(x):
     if x is None:
         return 0.0
@@ -184,6 +212,9 @@ def write_weights_cache(fp, out_path=None):
         "weights": {s: [[n, round(float(v), 6)] for n, v in lst]
                     for s, lst in weights.items()},
         "expected": expected,
+        # Repli prof de théorie pour les matières sans aucun crédit P (ex.
+        # « Estructuras ») : évite « N/A » quand un labo a malgré tout été planifié.
+        "theory": theory_professors(fp),
     }
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:
@@ -424,7 +455,7 @@ def expected_sessions(fp=None):
     if not fp or not os.path.exists(str(fp)):
         cache = load_weights_cache()
         if cache and cache.get("expected"):
-            rows = [{"subject_clean": s, "prof_name": p,
+            rows = [{"subject_clean": canonical_subject_key(s), "prof_name": p,
                      "groups": int(g), "sessions_expected": int(sess)}
                     for s, lst in cache["expected"].items()
                     for p, g, sess in lst]
@@ -437,7 +468,8 @@ def expected_sessions(fp=None):
     gmap = build_group_professor_map(fp)
     agg = {}
     for (subj, _g), prof in gmap.items():
-        agg[(subj, prof)] = agg.get((subj, prof), 0) + 1
+        agg[(canonical_subject_key(subj), prof)] = \
+            agg.get((canonical_subject_key(subj), prof), 0) + 1
     rows = [{"subject_clean": s, "prof_name": p, "groups": n,
              "sessions_expected": n * SESSIONS_PER_GROUP}
             for (s, p), n in agg.items()]
@@ -460,7 +492,8 @@ def subject_professor_weights(fp=None):
     if not fp or not os.path.exists(str(fp)):
         cache = load_weights_cache()
         if cache and cache.get("weights"):
-            return {s: [(n, float(v)) for n, v in lst]
+            # Re-clé par clé canonique : robustesse aux variantes de libellé.
+            return {canonical_subject_key(s): [(n, float(v)) for n, v in lst]
                     for s, lst in cache["weights"].items()}
         return {}
     off = parse_lab_offerings(fp)
@@ -477,7 +510,8 @@ def subject_professor_weights(fp=None):
             eff = effective_p_credits(rows, budget)
             for r, e in zip(rows, eff):
                 acc[r["prof_name"]] = acc.get(r["prof_name"], 0.0) + e
-        weights[clean] = sorted(acc.items(), key=lambda kv: kv[1], reverse=True)
+        weights[canonical_subject_key(clean)] = \
+            sorted(acc.items(), key=lambda kv: kv[1], reverse=True)
     return weights
 
 
@@ -494,11 +528,14 @@ def assign_schedule_groups(fp, subject_to_groups):  # fp peut être None -> cach
     PROPORTION des crédits P est respectée et l'écart de volume est signalé par
     le rapport de validation.
     """
-    weights = subject_professor_weights(fp)
+    weights = subject_professor_weights(fp)  # déjà re-clé en canonique
     gmap = {}
     for subj, groups in subject_to_groups.items():
         groups = sorted(set(groups))
-        w = weights.get(subj)
+        # `subj` peut être un libellé court ; on le canonicalise pour retrouver
+        # les poids (et on conserve `subj` comme clé de sortie, attendue par
+        # l'appelant de la Teacher View).
+        w = weights.get(subj) or weights.get(canonical_subject_key(subj))
         if not w or not groups:
             continue
         names = [n for n, _ in w]
@@ -510,6 +547,51 @@ def assign_schedule_groups(fp, subject_to_groups):  # fp peut être None -> cach
                 gmap[(subj, groups[idx])] = name
                 idx += 1
     return gmap
+
+
+def theory_professors(fp=None):
+    """Professeurs de THÉORIE par matière, en REPLI pour les matières dont la
+    source n'attribue AUCUN crédit P/TP (ex. « Estructuras » : seul un bloc « T »
+    existe). Permet à la Teacher View d'afficher un responsable plausible au lieu
+    de « N/A » lorsqu'un planning de labo a malgré tout été produit.
+
+    Renvoie {clé_canonique: [noms de professeurs]} et ne contient QUE les
+    matières sans aucun bloc de pratiques (sinon les crédits P font autorité).
+    Lit le cache committé si le xlsx source est absent (correction « N/D »).
+    """
+    if not fp or not os.path.exists(str(fp)):
+        cache = load_weights_cache()
+        if cache and cache.get("theory"):
+            return {canonical_subject_key(s): list(v)
+                    for s, v in cache["theory"].items()}
+        return {}
+    xls = pd.ExcelFile(fp)
+    sheet = _find_sheet(xls, "asignaci", "docente")
+    raw = pd.read_excel(fp, sheet_name=sheet, header=0, dtype=str)
+    raw.columns = [str(c).strip() for c in raw.columns]
+    code2name = _load_code_to_name(fp)
+    src_to_clean = {_norm(v): k for k, v in SUBJECT_ALIASES.items()}
+    blocks = [(f"Prof. {i}", f"Tipo Asig. {i}") for i in (1, 2, 3, 4)]
+    out = {}
+    has_practice = {}
+    for _, r in raw.iterrows():
+        subj = str(r.get("Asignatura") or "").strip()
+        if not subj or _norm(subj) not in src_to_clean:
+            continue
+        key = canonical_subject_key(src_to_clean[_norm(subj)])
+        for pcol, kcol in blocks:
+            name = r.get(pcol)
+            if not name or str(name).strip().lower() in ("", "nan", "0", "none"):
+                continue
+            char = str(r.get(kcol)).strip().upper()
+            if "P" in char:
+                has_practice[key] = True
+            else:
+                nm = code2name.get(str(name).strip(), str(name).strip())
+                out.setdefault(key, [])
+                if nm not in out[key]:
+                    out[key].append(nm)
+    return {k: v for k, v in out.items() if not has_practice.get(k)}
 
 
 def declared_p_credits(fp):

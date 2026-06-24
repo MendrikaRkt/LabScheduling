@@ -1735,6 +1735,7 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
     # (or N/D) if the Asignación source / module is unavailable.
     sgmap = {}            # {(lpa_subject_key, group_int): prof_name}  actual schedule
     expected_map = {}     # {(lpa_subject_key, prof_name): sessions_expected}
+    theory_map = {}       # {lpa_subject_key: [prof_name, ...]}  repli sans crédit P
     lpa_ok = False
     try:
         import lab_professor_assignment as _lpa
@@ -1750,7 +1751,7 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
             for _s in subjects:
                 if _s not in schedule_df['subject'].unique():
                     continue
-                _key = _lpa._norm(strip_semester_prefix(_s))
+                _key = _lpa.canonical_subject_key(strip_semester_prefix(_s))
                 _grps = []
                 for _g in schedule_df[schedule_df['subject'] == _s]['grupo'].dropna().unique():
                     try:
@@ -1766,7 +1767,14 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                     expected_map[(_r['subject_clean'], _r['prof_name'])] = \
                         float(_r['sessions_expected'])
                 lpa_ok = bool(sgmap)
-        if not lpa_ok:
+            # Theory-professor fallback for subjects with NO P credit in the
+            # source (e.g. "Estructuras") so the row shows a real teacher name
+            # instead of N/A when a lab was nonetheless scheduled.
+            try:
+                theory_map = _lpa.theory_professors(_fp) or {}
+            except Exception:
+                theory_map = {}
+        if not lpa_ok and not theory_map:
             print('    [WARN] Teacher View: neither Asignación file nor weights '
                   'cache available — per-professor breakdown unavailable')
     except Exception as _exc:
@@ -1776,7 +1784,8 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
     # when the per-professor (LPA/cache) path did not succeed — this avoids the
     # misleading "Asignación file not found" warning when the breakdown is in
     # fact fully available from the committed cache.
-    if not lpa_ok and (credits_by_subject is None or names_by_subject is None):
+    if (not lpa_ok and not theory_map
+            and (credits_by_subject is None or names_by_subject is None)):
         credits_by_subject, names_by_subject = _load_professor_lab_credits()
     if credits_by_subject is None:
         credits_by_subject = {}
@@ -1789,7 +1798,7 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
     title = worksheet.cell(row=1, column=1,
                            value='Teacher View — lab session breakdown by professor')
     title.font = VP_TITLE_FONT
-    if lpa_ok:
+    if lpa_ok or theory_map:
         note_txt = ("Convention: 1 lab credit (P) = 5 sessions. Each lab group is "
                     "assigned to ONE responsible professor, allocated in proportion "
                     "to the official P credits (source: Asignación docente). "
@@ -1842,7 +1851,7 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
         lpa_key = None
         try:
             import lab_professor_assignment as _lpa2
-            lpa_key = _lpa2._norm(matiere_disp)
+            lpa_key = _lpa2.canonical_subject_key(matiere_disp)
         except Exception:
             lpa_key = None
 
@@ -1899,6 +1908,17 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                 rows.append(('- (no P credit assigned)', matiere_disp, 0.0, 0.0,
                              f'{n_groups} group(s)', planned_total, horaire,
                              'No P credit'))
+        elif lpa_key is not None and theory_map.get(lpa_key):
+            # No P credit in the source for this subject (e.g. "Estructuras"),
+            # but a lab was scheduled: show the THEORY professor(s) as the
+            # plausible responsible, with credits "—" and an explicit flag.
+            # Conforms to "signal, don't decide": we surface, never fabricate a
+            # P allocation.
+            tprofs = theory_map.get(lpa_key) or []
+            prof_label = ', '.join(tprofs) if tprofs else '—'
+            rows.append((prof_label, matiere_disp, '—', '—',
+                         f'{n_groups} group(s)', planned_total, horaire,
+                         'No P credit'))
         else:
             # Asignación unavailable: credits N/A
             rows.append(('N/A', matiere_disp, 'N/A', 'N/A',
