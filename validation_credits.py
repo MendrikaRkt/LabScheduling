@@ -48,7 +48,10 @@ import pandas as pd
 
 import professor_credits as pc
 
-CREDIT_TO_SESSIONS = 5  # 1 crédit P = 5 séances de labo (convention coordinateur)
+# Constante métier centralisée dans lab_constants.py (réexportée ici pour
+# conserver la compatibilité avec le code qui référence
+# validation_credits.CREDIT_TO_SESSIONS).
+from lab_constants import CREDIT_TO_SESSIONS  # noqa: F401
 
 DEFAULT_ASIGNACION = "Asignacion_2025-2026_v5.xlsx"
 DEFAULT_OUTPUT = "validation_credits_professeurs.xlsx"

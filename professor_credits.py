@@ -28,7 +28,11 @@ import sys
 import unicodedata
 import pandas as pd
 
-CREDIT_TO_SESSIONS = 5
+# Constante métier centralisée dans lab_constants.py (réexportée ici pour
+# conserver la compatibilité avec le code qui référence
+# professor_credits.CREDIT_TO_SESSIONS).
+from lab_constants import CREDIT_TO_SESSIONS  # noqa: F401
+
 DEFAULT_FP = "Asignacion_2025-2026_v5.xlsx"
 
 def _find_asignacion_file():

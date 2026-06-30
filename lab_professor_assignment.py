@@ -46,8 +46,10 @@ import os
 import unicodedata
 import pandas as pd
 
-CREDIT_TO_SESSIONS = 5
-SESSIONS_PER_GROUP = 5  # chaque groupe de pratiques = 5 séances
+# Constantes métier centralisées dans lab_constants.py (réexportées ici pour
+# conserver la compatibilité avec le code existant qui référence
+# lab_professor_assignment.CREDIT_TO_SESSIONS / .SESSIONS_PER_GROUP).
+from lab_constants import CREDIT_TO_SESSIONS, SESSIONS_PER_GROUP  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Committed cache (definitive N/D fix)
@@ -547,6 +549,98 @@ def assign_schedule_groups(fp, subject_to_groups):  # fp peut être None -> cach
                 gmap[(subj, groups[idx])] = name
                 idx += 1
     return gmap
+
+
+def _strip_semester_prefix(subject_name):
+    """Retire un préfixe de semestre « S1_ » / « S2_ » d'un libellé de matière.
+
+    Les plannings produits par le solveur préfixent chaque matière par son
+    semestre (« S1_Física »). La source d'affectation, elle, ignore le semestre.
+    Ce helper aligne donc les deux mondes AVANT canonicalisation.
+
+    Exemple : « S1_Física » -> « Física ».
+    """
+    s = str(subject_name)
+    for pref in ("S1_", "S2_"):
+        if s.startswith(pref):
+            return s[len(pref):]
+    return s
+
+
+def assign_professors_to_schedule_df(schedule_df, fp=None,
+                                     subject_col="subject", group_col="grupo"):
+    """Affecte UN professeur responsable à CHAQUE séance d'un planning.
+
+    C'est le point d'entrée « niveau planning » de l'affectation par groupe
+    (recommandation P0.1 de la comparaison fonctionnelle) : il persiste, ligne
+    par ligne, le professeur déduit des crédits P officiels (1 crédit P = 5
+    séances), de façon strictement cohérente avec la « Teacher View ».
+
+    Philosophie « signaler, ne pas décider » : la fonction n'altère JAMAIS le
+    planning et ne lève aucune exception métier. Lorsque l'affectation est
+    inconnue (matière hors source, groupe non parsable…), la valeur renvoyée est
+    une chaîne vide — l'écart est visible mais non bloquant.
+
+    Args:
+        schedule_df : DataFrame du planning (préfixes S1_/S2_ autorisés sur la
+            colonne matière). Doit contenir ``subject_col`` et ``group_col``.
+        fp          : chemin du fichier Asignación, ou None pour utiliser le
+            cache JSON committé (load_weights_cache).
+        subject_col : nom de la colonne matière (défaut « subject »).
+        group_col   : nom de la colonne groupe (défaut « grupo »).
+
+    Returns:
+        list[str] : noms de professeurs alignés sur ``schedule_df`` (même ordre,
+        même longueur). Chaîne vide quand l'affectation est indéterminée.
+    """
+    n = 0 if schedule_df is None else len(schedule_df)
+    if n == 0:
+        return []
+    if subject_col not in schedule_df.columns or group_col not in schedule_df.columns:
+        return [""] * n
+
+    # 1) matière planifiée -> groupes réellement planifiés (clé canonique)
+    subject_to_groups = {}
+    for _s in schedule_df[subject_col].dropna().unique():
+        key = canonical_subject_key(_strip_semester_prefix(_s))
+        grps = []
+        for _g in schedule_df[schedule_df[subject_col] == _s][group_col].dropna().unique():
+            try:
+                grps.append(int(float(_g)))
+            except (TypeError, ValueError):
+                pass
+        if grps:
+            subject_to_groups.setdefault(key, [])
+            subject_to_groups[key] = sorted(set(subject_to_groups[key]) | set(grps))
+
+    # 2) affectation par groupe au prorata des crédits P (avec repli cache)
+    try:
+        sgmap = assign_schedule_groups(fp, subject_to_groups) or {}
+    except Exception:
+        sgmap = {}
+
+    # 3) repli « théorie » pour les matières SANS crédit P (ex. Estructuras)
+    try:
+        theory_map = theory_professors(fp) or {}
+    except Exception:
+        theory_map = {}
+
+    # 4) projection ligne par ligne
+    out = []
+    for _s, _g in zip(schedule_df[subject_col].tolist(), schedule_df[group_col].tolist()):
+        key = canonical_subject_key(_strip_semester_prefix(_s))
+        try:
+            gi = int(float(_g))
+        except (TypeError, ValueError):
+            gi = None
+        name = sgmap.get((key, gi)) if gi is not None else None
+        if not name:
+            theo = theory_map.get(key)
+            if theo:
+                # un seul responsable -> son nom ; plusieurs -> liste jointe
+                name = theo[0] if len(theo) == 1 else "; ".join(theo)
+        out.append(name or "")
+    return out
 
 
 def theory_professors(fp=None):

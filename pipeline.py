@@ -5589,6 +5589,23 @@ def run_pipeline(df):
         print("\n  [FAIL] Aucune solution generee.")
         return True
 
+    # --- Affectation du professeur responsable par séance (P0.1) ---------
+    # On PERSISTE, dès le planning, le professeur déduit des crédits P officiels
+    # (1 crédit P = 5 séances), de façon strictement cohérente avec la
+    # « Teacher View ». La colonne est ainsi disponible dans
+    # optimized_schedule_v5.csv et pour tous les exports en aval (Vista
+    # profesor, etc.). Philosophie « signaler, ne pas décider » : en cas
+    # d'indisponibilité de la source, la colonne reste vide sans bloquer.
+    try:
+        import lab_professor_assignment as _lpa
+        results_df['professor'] = _lpa.assign_professors_to_schedule_df(results_df)
+        _n_assigned = int((results_df['professor'].astype(str).str.len() > 0).sum())
+        print(f"  [PROF] Professeur affecté pour {_n_assigned}/{len(results_df)} séances")
+    except Exception as exc:  # ne casse jamais le pipeline
+        print(f"  [PROF][WARN] affectation professeur par séance ignorée : {exc}")
+        if 'professor' not in results_df.columns:
+            results_df['professor'] = ''
+
     # --- Mesure de la qualité du planning (Étape 6.6) --------------------
     # KPIs objectifs à chaque exécution (placement, équilibrage, salles,
     # solveur). Écrit reports/kpi_report.{json,txt}. Généré AVANT les exports
