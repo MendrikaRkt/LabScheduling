@@ -1,0 +1,31 @@
+# Streamlit configuration for production / Streamlit Community Cloud.
+# Values here are safe defaults; environment variables (STREAMLIT_*) override
+# them at runtime in containers.
+
+[server]
+# Bind on all interfaces so the app is reachable from outside the container.
+address = "0.0.0.0"
+port = 8501
+# Run without trying to open a local browser (servers are headless).
+headless = true
+# Enable CORS/XSRF protection for production.
+enableCORS = true
+enableXsrfProtection = true
+# Reasonable upload cap (MB) aligned with the security module.
+maxUploadSize = 25
+
+[browser]
+# Do not send anonymous usage statistics.
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#1f6feb"
+
+[logger]
+level = "info"
+
+[client]
+# Hide tracebacks from end users; details are written to the server logs.
+showErrorDetails = false
+toolbarMode = "minimal"

@@ -1,0 +1,35 @@
+# systemd unit for the University Lab Scheduler (traditional server deployment).
+#
+# Install:
+#   sudo cp deploy/lab-scheduler.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now lab-scheduler
+#
+# Adjust User, WorkingDirectory and the venv path to match your server.
+
+[Unit]
+Description=University Lab Scheduler (Streamlit)
+After=network.target
+
+[Service]
+Type=simple
+User=labscheduler
+Group=labscheduler
+WorkingDirectory=/opt/lab-scheduler
+Environment=LOG_LEVEL=INFO
+Environment=STREAMLIT_SERVER_PORT=8501
+Environment=STREAMLIT_SERVER_ADDRESS=0.0.0.0
+Environment=STREAMLIT_SERVER_HEADLESS=true
+Environment=STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+ExecStart=/opt/lab-scheduler/.venv/bin/streamlit run presentation/app.py
+Restart=on-failure
+RestartSec=5
+
+# Hardening.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

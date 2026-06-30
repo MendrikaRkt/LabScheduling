@@ -1,0 +1,49 @@
+# Logging configuration (dictConfig format).
+# Loaded by infrastructure/logging_config.py via setup_logging().
+# Override the level at runtime with the LOG_LEVEL environment variable.
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  standard:
+    format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    datefmt: "%Y-%m-%d %H:%M:%S"
+  detailed:
+    format: "%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno)d): %(message)s"
+    datefmt: "%Y-%m-%d %H:%M:%S"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: standard
+    stream: ext://sys.stdout
+
+  file:
+    class: logging.handlers.RotatingFileHandler
+    level: INFO
+    formatter: detailed
+    filename: logs/app.log
+    maxBytes: 5242880        # 5 MB per file
+    backupCount: 5
+    encoding: utf8
+
+  error_file:
+    class: logging.handlers.RotatingFileHandler
+    level: ERROR
+    formatter: detailed
+    filename: logs/error.log
+    maxBytes: 5242880
+    backupCount: 5
+    encoding: utf8
+
+loggers:
+  # Application loggers (domain, application, infrastructure, presentation).
+  lab_scheduler:
+    level: INFO
+    handlers: [console, file, error_file]
+    propagate: false
+
+root:
+  level: INFO
+  handlers: [console, file, error_file]

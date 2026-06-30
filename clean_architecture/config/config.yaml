@@ -1,0 +1,412 @@
+# =============================================================================
+# Externalized configuration for the laboratory scheduler
+# Universidad Loyola Sevilla
+#
+# This file replaces the former hard-coded LAB_CONFIG in pipeline.py.
+# Any change to the schedule (subjects, sessions, rooms, time windows,
+# solver parameters) is made HERE, without touching the code.
+# =============================================================================
+
+# --- Core business rule --------------------------------------------------------
+credit_system:
+  # 1 practice (P) credit = N laboratory sessions
+  sessions_per_credit: 5
+
+# --- CP-SAT solver parameters -------------------------------------------------
+solver:
+  random_seed: 42            # fixed seed -> reproducible results
+  relative_gap: 0.02         # stop at 2% of the proven optimum
+  time_limit_seconds: 300
+  num_workers: 8
+  log_progress: false
+
+# --- Objectives (weights of the minimization function) ------------------------
+objective_weights:
+  anchor_start: 100          # anchor the first sessions near min_week
+  anchor_end: 100            # anchor the last sessions near max_week
+  even_spacing: 200          # even spacing vs ideal gap
+  parity: 50                 # alternate even/odd weeks
+  reservation: 100000        # reserved-slot occupancy (near-hard)
+
+# --- Calendar ------------------------------------------------------------------
+calendar:
+  semester_1_weeks: 14
+  semester_2_weeks: 20
+  days: ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+  time_blocks:
+    - {id: 1, label: "08:30-10:30", start: 510,  end: 630,  period: morning}
+    - {id: 2, label: "10:30-12:30", start: 630,  end: 750,  period: morning}
+    - {id: 3, label: "12:30-14:30", start: 750,  end: 870,  period: morning}
+    - {id: 4, label: "15:00-17:00", start: 900,  end: 1020, period: afternoon}
+    - {id: 5, label: "17:00-19:00", start: 1020, end: 1140, period: afternoon}
+    - {id: 6, label: "19:00-21:00", start: 1140, end: 1260, period: evening}
+
+# --- Per-year time policy ------------------------------------------------------
+schedule_policy:
+  allow_afternoon_year1_year3: false   # odd years -> morning
+  allow_morning_year2_year4: false     # even years -> afternoon/evening
+
+# --- Friday bottleneck mitigation (SOFT constraint) ---------------------------
+friday_policy:
+  soft_cap: 125        # soft cap targeted on Friday (sessions)
+  base_penalty: 8      # constant penalty for shifting toward Mon->Thu
+  overcap_weight: 10   # escalation per session above the cap
+
+# --- Parity (even/odd alternation across groups) ------------------------------
+parity:
+  enabled: true
+  penalty_weight: 50
+
+# --- Group-formation constraints ----------------------------------------------
+group_sizes:
+  preferred: 12
+  max: 15
+  min: 7
+  recovery_min: 7
+  max_extra_groups: 3
+  computer_lab_max: 24
+  reduced_max: 12
+
+# --- Holidays / unavailable days (semester -> [[week, day_idx, label]])
+# day_idx: 0=Lunes .. 4=Viernes
+holidays:
+  1:
+    - [7, 0, "Día de la Hispanidad"]
+  2:
+    - [6, 4, "Blue Day"]
+    - [7, 0, "Canonización de San Ignacio"]
+    - [9, 0, "Semana Santa"]
+    - [9, 1, "Semana Santa"]
+    - [9, 2, "Semana Santa"]
+    - [9, 3, "Semana Santa"]
+    - [9, 4, "Semana Santa"]
+    - [12, 3, "Feria de Abril"]
+    - [12, 4, "Feria de Abril"]
+    - [13, 4, "Día del Trabajador"]
+
+# --- Reserved slots per subject (external activity occupying a room) ----------
+# key: "semester|subject" ; value: list of [week, day_idx, block_id]
+subject_blocked_slots:
+  blocked_label: "Festivo / No disponible"
+  slots:
+    "1|S1_Química":
+      weeks: [7, 8, 11, 12]
+      days: [2, 3]
+      blocks: [2, 3]
+
+# --- Known identifiers / programs ---------------------------------------------
+known_programs: [IOI, IMR, GITI, GITIADE, MAT, AERO, IBIO, IEM, PIIA, IINFTV]
+
+include_real_names: true
+
+# --- Paths ---------------------------------------------------------------------
+paths:
+  master_schedule: "data_clean/master_schedule.csv"
+  output_dir: "outputs/optimization/"
+  report: "reports/pipeline_v5_report.txt"
+  user_config: "config/user_config.json"
+
+# =============================================================================
+# Laboratory subjects configuration (former LAB_CONFIG)
+#
+# Each subject:
+#   curso_num         : year (1,2,3) -> determines morning/afternoon
+#   semester          : 1 or 2
+#   num_sessions      : number of sessions per group
+#   min_week/max_week : allowed time window
+#   max_students      : maximum group size
+#   lab_rooms         : usable rooms
+#   keywords          : matching keywords in the master schedule
+#   keyword_exclude   : exclusion keywords
+#   group_by_program  : homogeneous groups per program/titulación (first year)
+#   shared_group      : groups shared across subjects (e.g. Física/Química)
+# =============================================================================
+subjects:
+  S1_Física:
+    curso_num: 1
+    semester: 1
+    num_sessions: 5
+    min_week: 4
+    max_week: 14
+    max_students: 12
+    lab_rooms: ["Ciencias Experimentales I", "Ciencias Experimentales II"]
+    simultaneous_rooms: false
+    keywords: ["física i", "física"]
+    keyword_exclude: ["física ii", "computacional", "simulación", "simulacion"]
+    shared_group: "S1_1er_anno"
+    group_by_program: true
+    intro_session_paired: true
+
+  S1_Química:
+    curso_num: 1
+    semester: 1
+    num_sessions: 4
+    min_week: 4
+    max_week: 14
+    max_students: 12
+    lab_rooms: ["Ciencias Experimentales I"]
+    simultaneous_rooms: false
+    keywords: ["química general"]
+    keyword_exclude: []
+    shared_group: "S1_1er_anno"
+    group_by_program: true
+
+  S1_Electrotecnia:
+    curso_num: 2
+    semester: 1
+    num_sessions: 5
+    min_week: 4
+    max_week: 14
+    max_students: 15
+    lab_rooms: ["Lab. Eléctrica"]
+    simultaneous_rooms: false
+    keywords: ["electrotecnia"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S1_Mecanismos:
+    curso_num: 2
+    semester: 1
+    num_sessions: 5
+    min_week: 4
+    max_week: 14
+    max_students: 12
+    lab_rooms: ["Lab. Telemática"]
+    simultaneous_rooms: false
+    keywords: ["mecanismos y elementos"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S1_Termodinámica:
+    curso_num: 2
+    semester: 1
+    num_sessions: 5
+    min_week: 4
+    max_week: 14
+    max_students: 12
+    lab_rooms: ["Lab. Termodinámica"]
+    simultaneous_rooms: false
+    keywords: ["termodinámica"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S1_Tecnologías de Fabricación:
+    curso_num: 3
+    semester: 1
+    num_sessions: 2
+    min_week: 3
+    max_week: 14
+    max_students: 12
+    lab_rooms: ["Lab. Telemática"]
+    simultaneous_rooms: false
+    keywords: ["tecnologías de fabricación"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S1_Robótica y Automatización:
+    curso_num: 3
+    semester: 1
+    num_sessions: 3
+    min_week: 3
+    max_week: 14
+    max_students: 12
+    lab_rooms: ["Lab. Robótica"]
+    simultaneous_rooms: false
+    keywords: ["robótica y automatización"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S1_Automatización Industrial:
+    curso_num: 3
+    semester: 1
+    num_sessions: 4
+    min_week: 3
+    max_week: 14
+    max_students: 12
+    lab_rooms: ["Lab. Robótica"]
+    simultaneous_rooms: false
+    keywords: ["automatización industrial", "instrumentación"]
+    keyword_exclude: ["robótica"]
+    group_by_program: false
+
+  S2_Física II:
+    curso_num: 1
+    semester: 2
+    num_sessions: 5
+    min_week: 9
+    max_week: 19
+    max_students: 12
+    lab_rooms: ["Ciencias Experimentales I", "Ciencias Experimentales II"]
+    simultaneous_rooms: false
+    keywords: ["física ii"]
+    keyword_exclude: []
+    group_by_program: true
+
+  S2_Tecnología Medio Ambiente:
+    curso_num: 1
+    semester: 2
+    num_sessions: 2
+    min_week: 11
+    max_week: 19
+    max_students: 12
+    lab_rooms: ["Ciencias Experimentales I"]
+    simultaneous_rooms: false
+    keywords: ["tecnología del medio ambiente", "medio ambiente"]
+    keyword_exclude: []
+    group_by_program: true
+
+  S2_Resistencia de Materiales:
+    curso_num: 2
+    semester: 2
+    num_sessions: 4
+    min_week: 10
+    max_week: 18
+    max_students: 12
+    lab_rooms: ["Automoción y Resistencia de Mat."]
+    simultaneous_rooms: false
+    keywords: ["resistencia de materiales"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S2_Mecánica de Fluidos:
+    curso_num: 2
+    semester: 2
+    num_sessions: 4
+    min_week: 9
+    max_week: 18
+    max_students: 12
+    lab_rooms: ["Mecánica de Fluidos"]
+    simultaneous_rooms: false
+    keywords: ["mecánica de fluido", "mecánica y máquinas de fluido"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S2_Regulación Automática:
+    curso_num: 2
+    semester: 2
+    num_sessions: 5
+    min_week: 9
+    max_week: 19
+    max_students: 12
+    lab_rooms: ["Robótica y Automática"]
+    simultaneous_rooms: false
+    keywords: ["regulación automática"]
+    keyword_exclude: ["automatic control"]
+    group_by_program: false
+
+  S2_Tecnología Electrónica:
+    curso_num: 2
+    semester: 2
+    num_sessions: 3
+    min_week: 8
+    max_week: 18
+    max_students: 12
+    lab_rooms: ["Electrónica"]
+    simultaneous_rooms: false
+    keywords: ["tecnología electrónica"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S2_Electrónica y Automática:
+    curso_num: 2
+    semester: 2
+    num_sessions: 3
+    min_week: 9
+    max_week: 18
+    max_students: 12
+    lab_rooms: ["Electrónica", "Robótica y Automática"]
+    simultaneous_rooms: false
+    keywords: ["electrónica y automática"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S2_Informática y Com. Industriales:
+    curso_num: 2
+    semester: 2
+    num_sessions: 4
+    min_week: 8
+    max_week: 18
+    max_students: 12
+    lab_rooms: ["Robótica y Automática"]
+    simultaneous_rooms: false
+    keywords: ["informática y comunicaciones industriales"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S2_Métodos Numéricos:
+    curso_num: 2
+    semester: 2
+    num_sessions: 4
+    min_week: 9
+    max_week: 18
+    max_students: 12
+    lab_rooms: ["Laboratorio de Ingeniería Telemática"]
+    simultaneous_rooms: false
+    keywords: ["métodos numéricos"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S2_Modelado de Sistemas:
+    curso_num: 2
+    semester: 2
+    num_sessions: 5
+    min_week: 7
+    max_week: 18
+    max_students: 12
+    lab_rooms: ["Laboratorio de Ingeniería Telemática"]
+    simultaneous_rooms: false
+    keywords: ["modelado simulación", "modelado y simulación"]
+    keyword_exclude: ["modelado de sistemas físicos", "modelado de sistemas fís"]
+    group_by_program: false
+
+  S2_Automatic Control:
+    curso_num: 2
+    semester: 2
+    num_sessions: 5
+    min_week: 10
+    max_week: 19
+    max_students: 12
+    lab_rooms: ["Robótica y Automática"]
+    simultaneous_rooms: false
+    keywords: ["automatic control"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S2_Ingeniería de Control:
+    curso_num: 3
+    semester: 2
+    num_sessions: 5
+    min_week: 8
+    max_week: 19
+    max_students: 12
+    lab_rooms: ["Robótica y Automática"]
+    simultaneous_rooms: false
+    keywords: ["ingeniería de control"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S2_Control de Máquinas:
+    curso_num: 3
+    semester: 2
+    num_sessions: 5
+    min_week: 13
+    max_week: 20
+    max_students: 12
+    lab_rooms: ["Eléctrica"]
+    simultaneous_rooms: false
+    keywords: ["control de máquinas"]
+    keyword_exclude: []
+    group_by_program: false
+
+  S2_Estructuras:
+    curso_num: 3
+    semester: 2
+    num_sessions: 1
+    min_week: 16
+    max_week: 19
+    max_students: 12
+    lab_rooms: ["Automoción y Resistencia de Mat."]
+    simultaneous_rooms: false
+    keywords: ["estructuras"]
+    keyword_exclude: []
+    group_by_program: false
