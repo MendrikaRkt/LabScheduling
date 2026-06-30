@@ -64,6 +64,13 @@ datas += [
     ("excel_generator_core.py", "."),
     ("update_manager.py", "."),
     ("config_verify.py", "."),
+    ("monitoring.py", "."),
+    ("lab_professor_assignment.py", "."),
+    ("professor_credits.py", "."),
+    ("lab_constants.py", "."),
+    ("data_quality.py", "."),
+    ("kpi_report.py", "."),
+    ("validation_credits.py", "."),
     ("VERSION.txt", "."),
 ]
 
@@ -104,6 +111,8 @@ hidden += [
     "persistence", "manual_edit", "app_paths", "excel_export",
     "excel_generator_core",
     "loyola_theme", "update_manager", "config_verify",
+    "monitoring", "lab_professor_assignment", "professor_credits",
+    "lab_constants", "data_quality", "kpi_report", "validation_credits",
     "streamlit.runtime.scriptrunner.magic_funcs",
 ]
 
