@@ -1537,6 +1537,7 @@ VP_PROF_FONT    = Font(name='Calibri', size=10, bold=True)
 VP_CELL_FONT    = Font(name='Calibri', size=9)
 VP_OK_FILL      = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
 VP_WARN_FILL    = PatternFill(start_color='FCE4D6', end_color='FCE4D6', fill_type='solid')
+VP_OVER_FILL    = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
 VP_BAND_FILL    = PatternFill(start_color='F2F6FC', end_color='F2F6FC', fill_type='solid')
 
 
@@ -1727,6 +1728,13 @@ def _format_session_timetable(subject_sessions, sep='\n', detailed=False):
 
         if detailed:
             # ---- Mode détaillé : une ligne par séance (P2.1) ----
+            # Séparateur visuel entre groupes : une ligne de tirets insérée AVANT
+            # les séances de chaque groupe (sauf le premier) afin que les
+            # créneaux de chaque groupe soient nettement distingués dans la
+            # cellule « Schedule ». Compté automatiquement par _visual_lines
+            # (basé sur les '\n'), donc la hauteur de ligne reste correcte.
+            if parts:
+                parts.append('─' * 22)
             def _sort_key(rec):
                 wk = pd.to_numeric(rec.get('week'), errors='coerce')
                 se = pd.to_numeric(rec.get('session'), errors='coerce')
@@ -1772,6 +1780,42 @@ def _format_session_timetable(subject_sessions, sep='\n', detailed=False):
                 slot_parts.append(seg)
         parts.append(f"G{g_disp} : " + " / ".join(slot_parts))
     return sep.join(parts)
+
+
+def _vp_credit_state(planned, expected):
+    """État de conformité (3 valeurs) des séances planifiées vis-à-vis du
+    plafond de crédits P.
+
+    NB métier (demande explicite) : « les sessions attribuées à chaque
+    professeur ne doivent PAS excéder les crédits qui leur sont attribués ».
+    On distingue donc :
+        - 'OK'    : planned == expected (exactement aligné) ;
+        - 'Under' : planned <  expected (sous le plafond → CONFORME) ;
+        - 'Over'  : planned >  expected (dépasse les crédits → À CORRIGER).
+    Renvoie '' si la comparaison est impossible (données non numériques).
+    """
+    try:
+        d = float(planned) - float(expected)
+    except Exception:
+        return ''
+    if abs(d) < 1e-6:
+        return 'OK'
+    return 'Under' if d < 0 else 'Over'
+
+
+def _vp_planned_display(planned, expected, state):
+    """Valeur affichée pour « Planned sessions » avec l'écart Δ entre
+    parenthèses (p.ex. « 14 (-6) » en dessous du plafond, « 22 (+2) » au
+    dessus). Renvoie la valeur brute quand l'écart est nul ou non calculable,
+    afin que la cellule reste numérique dans Excel.
+    """
+    try:
+        d = int(round(float(planned) - float(expected)))
+    except Exception:
+        return planned
+    if d == 0:
+        return planned
+    return f"{planned} ({'+' if d > 0 else '-'}{abs(d)})"
 
 
 def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
@@ -1871,8 +1915,12 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                     "assigned to ONE responsible professor, allocated in proportion "
                     "to the official P credits (source: Asignación docente). "
                     "\"Expected sessions\" = P credits x 5; \"Planned sessions\" counts "
-                    "the sessions actually scheduled for that professor's groups. "
-                    "Volume gaps are flagged, never blocking.")
+                    "the sessions actually scheduled for that professor's groups "
+                    "(Δ vs expected shown in brackets). Colour code: GREEN = planned "
+                    "within the credit ceiling (planned ≤ expected, compliant — covers "
+                    "exact match and under-use); RED = planned EXCEEDS the assigned "
+                    "credits (planned > expected, must be reviewed); ORANGE = no P "
+                    "credit in the source. Gaps are flagged, never blocking.")
     else:
         note_txt = ("Convention: 1 lab credit (P) = 5 sessions. Sessions and schedule "
                     "are shown at SUBJECT level (the Asignación source was not found, "
@@ -1880,13 +1928,13 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                     "Asignación file not available.")
     note = worksheet.cell(row=2, column=1, value=note_txt)
     note.font = VP_NOTE_FONT
-    # Merge title + note across all 7 columns and let the note wrap on 2 lines so
-    # it never overflows behind the table.
+    # Merge title + note across all 7 columns and let the note wrap so it never
+    # overflows behind the table (the colour legend makes the note longer).
     worksheet.merge_cells('A1:G1')
     worksheet.merge_cells('A2:G2')
     note.alignment = Alignment(wrap_text=True, vertical='top')
     worksheet.row_dimensions[1].height = 22
-    worksheet.row_dimensions[2].height = 42
+    worksheet.row_dimensions[2].height = 64
 
     if schedule_df is None or len(schedule_df) == 0:
         worksheet.cell(row=4, column=1,
@@ -1953,11 +2001,15 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                     expected = planned_prof  # no source target -> neutral
                     credits = round(expected / CREDIT_TO_SESSIONS, 2)
                     state = ''
+                    planned_disp = planned_prof
                 else:
                     credits = round(expected / CREDIT_TO_SESSIONS, 2)
-                    state = 'OK' if abs(planned_prof - expected) < 1e-6 else 'Gap'
+                    # NB : conforme tant que planned <= expected (sous le plafond
+                    # de crédits) ; dépassement = à corriger.
+                    state = _vp_credit_state(planned_prof, expected)
+                    planned_disp = _vp_planned_display(planned_prof, expected, state)
                 rows.append((pname, matiere_disp, credits, round(expected, 1),
-                             grp_str, planned_prof, horaire_prof, state))
+                             grp_str, planned_disp, horaire_prof, state))
         elif credits_by_subject:
             # Fallback: subject-level credit map (legacy display).
             asig_subs = _map_sched_to_asignacion(sched, asignacion_subjects, lab_config)
@@ -1967,12 +2019,16 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                     prof_credits[prof_label] += cr
             subj_expected = sum(prof_credits.values()) * CREDIT_TO_SESSIONS
             if prof_credits:
-                subj_state = 'OK' if abs(planned_total - subj_expected) < 1e-6 else 'Gap'
+                # NB : conforme tant que le total planifié reste sous le plafond
+                # de crédits de la matière (planned <= expected).
+                subj_state = _vp_credit_state(planned_total, subj_expected)
+                planned_disp = _vp_planned_display(planned_total, subj_expected,
+                                                   subj_state)
                 for prof_label in sorted(prof_credits):
                     cr = prof_credits[prof_label]
                     rows.append((prof_label, matiere_disp, round(cr, 2),
                                  round(cr * CREDIT_TO_SESSIONS, 1),
-                                 f'{n_groups} group(s)', planned_total, horaire,
+                                 f'{n_groups} group(s)', planned_disp, horaire,
                                  subj_state))
             else:
                 rows.append(('- (no P credit assigned)', matiere_disp, 0.0, 0.0,
@@ -2021,9 +2077,18 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
             band = not band
             prev_prof = prof_label
         row_fill = VP_BAND_FILL if band else None
+        # Code couleur (NB métier) :
+        #   • VERT  : planned <= expected (sous le plafond de crédits → conforme),
+        #             ce qui couvre l'alignement exact ('OK') ET le sous-emploi
+        #             ('Under') ;
+        #   • ROUGE : planned >  expected ('Over' → dépasse les crédits, à revoir) ;
+        #   • ORANGE: pas de crédit P dans la source ('No P credit'), ou ancien
+        #             libellé 'Gap' conservé par sécurité.
         state_fill = None
-        if state == 'OK':
+        if state in ('OK', 'Under'):
             state_fill = VP_OK_FILL
+        elif state == 'Over':
+            state_fill = VP_OVER_FILL
         elif state in ('Gap', 'No P credit'):
             state_fill = VP_WARN_FILL
 

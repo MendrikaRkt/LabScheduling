@@ -182,6 +182,7 @@ LANGS = {
         'nav_results': 'Resultados',
         'nav_dashboard': 'Fiabilidad',
         'nav_integrity': 'Integridad',
+        'nav_monitoring': 'Monitoreo',
         'nav_history': 'Historial',
         'nav_edit': 'Editar plan',
         'nav_groups': 'Grupos',
@@ -312,6 +313,7 @@ LANGS = {
         'nav_results': 'Results',
         'nav_dashboard': 'Reliability',
         'nav_integrity': 'Integrity',
+        'nav_monitoring': 'Monitoring',
         'nav_history': 'History',
         'nav_edit': 'Edit plan',
         'nav_groups': 'Groups',
@@ -434,6 +436,7 @@ LANGS = {
         'nav_results': 'Résultats',
         'nav_dashboard': 'Fiabilité',
         'nav_integrity': 'Intégrité',
+        'nav_monitoring': 'Supervision',
         'nav_history': 'Historique',
         'nav_edit': 'Édition manuelle',
         'nav_groups': 'Groupes',
@@ -643,7 +646,7 @@ with st.sidebar:
     # Navigation
     nav_options = [
         t('nav_home'), t('nav_data'), t('nav_config'), t('nav_optimize'),
-        t('nav_results'), t('nav_dashboard'), t('nav_integrity'), t('nav_history'), t('nav_edit'), t('nav_groups'), t('nav_compare'), t('nav_export'),
+        t('nav_results'), t('nav_dashboard'), t('nav_integrity'), t('nav_monitoring'), t('nav_history'), t('nav_edit'), t('nav_groups'), t('nav_compare'), t('nav_export'),
         t('nav_student'), t('nav_updates')
     ]
 
@@ -658,6 +661,7 @@ with st.sidebar:
             'results': t('nav_results'),
             'dashboard': t('nav_dashboard'),
             'integrity': t('nav_integrity'),
+            'monitoring': t('nav_monitoring'),
             'history': t('nav_history'),
             'edit': t('nav_edit'),
             'groups': t('nav_groups'),
@@ -3790,6 +3794,30 @@ factual statement left to the coordination's discretion.
             st.caption(f"Verification generated on {_verif['generated_at']}")
 
     st.caption("These are the same checks as verify_flow.py — shown here so no terminal is needed.")
+
+
+# ════════════════════════════════════════════════════════════
+# PAGE: MONITORING (control tower)
+# Centralized verification & supervision of the whole pipeline:
+# constraints, variables, inputs, weights, conflicts, free/busy
+# slots, infeasibility and scenarios — to scale and maintain the
+# optimization reliably over time.
+# ════════════════════════════════════════════════════════════
+elif page == t('nav_monitoring'):
+    try:
+        import monitoring
+        monitoring.render(
+            st,
+            helpers={
+                'page_header': page_header,
+                'section_header': section_header,
+                'stat_card': stat_card,
+                'safe_error': safe_error,
+            },
+            t=t,
+        )
+    except Exception as _mon_exc:
+        safe_error("Unable to render the monitoring page", _mon_exc)
 
 
 # ════════════════════════════════════════════════════════════
