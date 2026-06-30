@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "university-lab-scheduler"
+version = "1.0.0"
+description = "AI-powered laboratory scheduling system for engineering schools using CP-SAT optimization"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "MendrikaRkt" }]
+keywords = ["scheduling", "optimization", "cp-sat", "or-tools", "education", "clean-architecture"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "streamlit>=1.40",
+    "ortools>=9.12",
+    "openpyxl>=3.1",
+    "pandas>=2.2",
+    "PyYAML>=6.0",
+    "plotly>=5.20",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/MendrikaRkt/university-lab-scheduler"
+Repository = "https://github.com/MendrikaRkt/university-lab-scheduler"
+Issues = "https://github.com/MendrikaRkt/university-lab-scheduler/issues"
+
+[tool.setuptools]
+packages = ["domain", "application", "infrastructure", "presentation"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["F401"]

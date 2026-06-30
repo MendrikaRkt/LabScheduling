@@ -1,0 +1,42 @@
+# Reference workflow for the Clean Architecture module (clean_architecture/).
+#
+# GitHub Apps cannot push files under .github/workflows/ without the dedicated
+# "workflows" permission, so this file is kept here as a reference. To activate
+# it, copy it to .github/workflows/clean-architecture-lint.yml at the
+# repository root (see clean_architecture/ci/CI_SETUP.md).
+#
+# Actions are pinned to v6, which runs on Node.js 24.
+name: Clean Architecture - Lint
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'clean_architecture/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'clean_architecture/**'
+  workflow_dispatch: {}
+
+defaults:
+  run:
+    working-directory: clean_architecture
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+
+    - name: Install ruff
+      run: pip install ruff
+
+    - name: Run ruff
+      run: ruff check .
