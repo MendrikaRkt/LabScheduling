@@ -1,7 +1,0 @@
-# Development and test dependencies.
-# Install the runtime dependencies first: pip install -r requirements.txt
--r requirements.txt
-
-pytest>=8.0
-pytest-cov>=4.0
-ruff>=0.6
