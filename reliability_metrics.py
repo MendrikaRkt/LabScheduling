@@ -550,14 +550,18 @@ def detect_conflicts(schedule_df: pd.DataFrame,
     Returns dict with:
         c1_violations:     count of (subject, week, day, block) with > 1 session
         c4_violations:     count of (room, week, day, block) with > 1 session
+        c5_violations:     count of (subject, grupo) whose sessions are NOT in
+                           strictly increasing chronological (week) order
         student_conflicts: count of students with overlapping sessions
         examples_c1:       sample violations
         examples_c4:       sample violations
+        examples_c5:       sample violations
     """
     if len(schedule_df) == 0:
         return {
-            'c1_violations': 0, 'c4_violations': 0, 'student_conflicts': 0,
-            'examples_c1': [], 'examples_c4': [],
+            'c1_violations': 0, 'c4_violations': 0, 'c5_violations': 0,
+            'student_conflicts': 0,
+            'examples_c1': [], 'examples_c4': [], 'examples_c5': [],
         }
 
     # C1: same subject, week, day, block
@@ -680,12 +684,52 @@ def detect_conflicts(schedule_df: pd.DataFrame,
             if any(len(sg_set) > 1 for sg_set in slot_map.values()):
                 student_conflicts += 1
 
+    # C5: chronological order (recommendation P2.2).
+    # The solver enforces week(session k+1) > week(session k) for each
+    # (subject, grupo) ordered by session number. We RE-VERIFY it post-solve,
+    # symmetrically to C1/C4. A violation = a group whose successive sessions
+    # are NOT in strictly increasing week order. We collapse to one week per
+    # distinct session number (first seen) so exact-duplicate rows from join
+    # artefacts do not raise false positives.
+    c5_violations = 0
+    examples_c5 = []
+    needed_c5 = {'subject', 'semester', 'grupo', 'session', 'week'}
+    if needed_c5.issubset(set(schedule_df.columns)):
+        for key, grp in schedule_df.groupby(['subject', 'semester', 'grupo']):
+            sess_to_week = {}
+            ok = True
+            for _s, _w in zip(grp['session'].tolist(), grp['week'].tolist()):
+                try:
+                    s_num = int(float(_s))
+                    wk = int(float(_w))
+                except (TypeError, ValueError):
+                    ok = False
+                    break
+                sess_to_week.setdefault(s_num, wk)
+            if not ok or len(sess_to_week) < 2:
+                continue
+            ordered_sessions = sorted(sess_to_week)
+            ordered_weeks = [sess_to_week[s] for s in ordered_sessions]
+            if any(ordered_weeks[i + 1] <= ordered_weeks[i]
+                   for i in range(len(ordered_weeks) - 1)):
+                c5_violations += 1
+                if len(examples_c5) < 5:
+                    examples_c5.append({
+                        'subject':  key[0],
+                        'semester': int(key[1]),
+                        'grupo':    int(key[2]),
+                        'sessions': ordered_sessions,
+                        'weeks':    ordered_weeks,
+                    })
+
     return {
         'c1_violations':      int(c1_violations),
         'c4_violations':      int(c4_violations),
+        'c5_violations':      int(c5_violations),
         'student_conflicts':  int(student_conflicts),
         'examples_c1':        examples_c1,
         'examples_c4':        examples_c4,
+        'examples_c5':        examples_c5,
     }
 
 
@@ -723,6 +767,9 @@ def compute_health_score(metrics: Dict) -> Tuple[int, str, List[str]]:
     if conflicts.get('c4_violations', 0) > 0:
         score -= 50
         issues.append(f"{conflicts['c4_violations']} violation(s) C4 (salle en double)")
+    if conflicts.get('c5_violations', 0) > 0:
+        score -= 50
+        issues.append(f"{conflicts['c5_violations']} violation(s) C5 (séances hors ordre chronologique)")
     if conflicts.get('student_conflicts', 0) > 0:
         score -= 30
         issues.append(f"{conflicts['student_conflicts']} étudiant(s) avec conflit horaire")
@@ -912,6 +959,7 @@ def main():
     cf = metrics['conflicts']
     print(f"    C1 violations: {cf['c1_violations']}")
     print(f"    C4 violations: {cf['c4_violations']}")
+    print(f"    C5 violations: {cf.get('c5_violations', 0)}")
     print(f"    Student conflicts: {cf['student_conflicts']}")
 
 

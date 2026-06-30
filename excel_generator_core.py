@@ -61,6 +61,10 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+# Constante métier centralisée (1 crédit P = 5 séances). Importée tôt afin
+# d'être disponible dans tout le module sous excel_generator_core.CREDIT_TO_SESSIONS.
+from lab_constants import CREDIT_TO_SESSIONS  # noqa: F401
+
 
 # =============================================================================
 # FILE PATHS
@@ -608,16 +612,22 @@ def format_lab_session_label(sessions_at_slot, subject, professor_lookup=None):
         Práctica N <subject>
         Grupo M
         Sala: <lab room>
-        Prof.: <assigned / eligible professor(s)>
+        Prof.: <responsible professor(s)>
+
+    Professor display (recommendation P1.1 — unified professor display):
+        If the schedule rows carry a per-group ``professor`` column (now
+        persisted upstream by the pipeline, 1 P credit = 5 sessions), that FIXED
+        responsible professor is shown — exactly the same person as in the
+        "Teacher View". The previous "rotating + (+N)" indicative display is
+        only used as a BACKWARD-COMPAT fallback, when the schedule predates the
+        ``professor`` column and we only have the subject-level eligible list.
 
     Args:
         sessions_at_slot: pandas DataFrame rows (sessions at the same week+day+block)
         subject: full subject name (e.g., "S1_Física")
         professor_lookup: optional dict {subject_full_name: "Prof A; Prof B"} used
-            to display the professor(s) responsible for the subject. The pipeline
-            does not assign a single named professor per group (it only enforces
-            that at least one eligible professor is free), so this shows the
-            eligible professor(s) for the subject.
+            ONLY as a fallback when rows have no ``professor`` column. It lists
+            the eligible professor(s) for the subject.
 
     Returns:
         str: the label text to display in the cell.
@@ -657,10 +667,30 @@ def format_lab_session_label(sessions_at_slot, subject, professor_lookup=None):
         i = int(rot) % len(names)
         return f"{names[i]} (+{len(names) - 1})"
 
+    def _row_profs(rows):
+        """Professeur(s) FIXE(S) issus de la colonne `professor` persistée par le
+        pipeline (P0.1). Renvoie les noms DISTINCTS (jointure « ; ») présents sur
+        les lignes fournies, ou None si la colonne est absente/vide. C'est la
+        source d'affichage prioritaire (cohérente avec la Teacher View)."""
+        try:
+            if 'professor' not in rows.columns:
+                return None
+        except AttributeError:
+            return None
+        seen = []
+        for val in rows['professor'].tolist():
+            name = str(val).strip()
+            if name and name.lower() != 'nan' and name not in seen:
+                seen.append(name)
+        if not seen:
+            return None
+        return "; ".join(seen)
+
     # Single session: standard display + room + professor
     if len(sessions_at_slot) == 1:
         first = sessions_at_slot.iloc[0]
-        prof_line = _profs(int(first['session']) + int(first['grupo']))
+        # Priorité au professeur fixe persisté (P0.1) ; repli rotation sinon.
+        prof_line = _row_profs(sessions_at_slot) or _profs(int(first['session']) + int(first['grupo']))
         lines = [
             f"Práctica {int(first['session'])} {subject_clean}",
             f"Grupo {int(first['grupo'])}",
@@ -681,8 +711,8 @@ def format_lab_session_label(sessions_at_slot, subject, professor_lookup=None):
 
         if is_session_one and is_consecutive and is_odd_first:
             first = sessions_at_slot.iloc[0]
-            # Rotate on the group pair so paired-intro slots vary too.
-            prof_line = _profs(groups[0] + groups[1] + 1)
+            # Professeurs fixes des 2 groupes (P0.1) ; repli rotation sinon.
+            prof_line = _row_profs(sessions_at_slot) or _profs(groups[0] + groups[1] + 1)
             lines = [
                 f"Práctica 1 {subject_clean}",
                 f"Grupos {groups[0]} & {groups[1]}",
@@ -694,7 +724,8 @@ def format_lab_session_label(sessions_at_slot, subject, professor_lookup=None):
 
     # Fallback: more than 1 session but not a recognized pattern
     first = sessions_at_slot.iloc[0]
-    prof_line = _profs(int(first['session']) + int(first['grupo']))
+    # Professeur(s) fixe(s) persisté(s) (P0.1) ; repli rotation sinon.
+    prof_line = _row_profs(sessions_at_slot) or _profs(int(first['session']) + int(first['grupo']))
     lines = [
         f"Práctica {int(first['session'])} {subject_clean}",
         f"Grupo {int(first['grupo'])}",
@@ -1494,7 +1525,8 @@ def build_vista_profesor_sheet(workbook, schedule_df, subjects, professor_lookup
 # est rappelée dans l'en-tête de la feuille.
 # =============================================================================
 
-CREDIT_TO_SESSIONS = 5  # 1 crédit de laboratoire (P) = 5 séances (convention coordinateur)
+# NB : CREDIT_TO_SESSIONS (1 crédit de laboratoire P = 5 séances) est désormais
+# importé depuis lab_constants en tête de module (plus de redéfinition locale).
 
 # En-têtes et styles dédiés à la Vue Professeur (palette sobre, lisible)
 VP_HEADER_FILL  = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
@@ -1658,18 +1690,24 @@ def _map_sched_to_asignacion(sched_subject, asignacion_subjects, lab_config):
     return matched
 
 
-def _format_session_timetable(subject_sessions, sep='\n'):
+def _format_session_timetable(subject_sessions, sep='\n', detailed=False):
     """Construit l'horaire détaillé des séances d'une matière, par groupe.
 
     subject_sessions : DataFrame des lignes de planning pour UNE matière.
     sep              : séparateur entre groupes ('\\n' = un groupe par ligne,
                        pour un affichage lisible dans une cellule à retour à la
                        ligne ; ' ; ' pour une chaîne compacte sur une ligne).
-    Renvoie une chaîne lisible, p.ex. :
-        « G1 : Lunes 12:30-14:30 (Ciencias Exp. I) — 12 sessions »
+    detailed         : mode d'affichage de l'horaire (recommandation P2.1).
+                       - False (défaut, rétro-compatible) : créneaux AGRÉGÉS,
+                         p.ex. « G1 : Lunes 12:30-14:30 (Ciencias Exp. I) — 12 sessions ».
+                       - True : CHAQUE séance détaillée individuellement, p.ex.
+                         « G1 Session 1: Lunes 12:30-14:30 (Ciencias Exp. I) [Sem 3] »
+                         (une séance par ligne), à la manière de la Clean Arch.
 
-    On regroupe par (groupe, jour, créneau, salle) pour ne pas répéter chaque
-    semaine, et on indique le nombre de séances de ce créneau récurrent.
+    En mode agrégé on regroupe par (groupe, jour, créneau, salle) pour ne pas
+    répéter chaque semaine, et on indique le nombre de séances du créneau
+    récurrent. En mode détaillé on trie par (semaine, n° de séance) et on liste
+    chaque séance séparément.
     """
     if len(subject_sessions) == 0:
         return ''
@@ -1682,6 +1720,40 @@ def _format_session_timetable(subject_sessions, sep='\n'):
         groups = list(subject_sessions['grupo'].dropna().unique())
     for g in groups:
         gs = subject_sessions[subject_sessions['grupo'] == g]
+        try:
+            g_disp = int(float(g))
+        except Exception:
+            g_disp = g
+
+        if detailed:
+            # ---- Mode détaillé : une ligne par séance (P2.1) ----
+            def _sort_key(rec):
+                wk = pd.to_numeric(rec.get('week'), errors='coerce')
+                se = pd.to_numeric(rec.get('session'), errors='coerce')
+                wk = 1e9 if pd.isna(wk) else float(wk)
+                se = 1e9 if pd.isna(se) else float(se)
+                return (wk, se)
+            records = sorted((r for _, r in gs.iterrows()), key=_sort_key)
+            for rec in records:
+                day = str(rec.get('day', '')).strip()
+                tb = str(rec.get('time_block', '')).strip()
+                room = str(rec.get('lab_rooms', '')).strip()
+                room_disp = display_lab_name(room) if room and room.lower() != 'nan' else ''
+                try:
+                    s_disp = int(float(rec.get('session')))
+                    s_lbl = f"Session {s_disp}"
+                except Exception:
+                    s_lbl = "Session"
+                seg = f"G{g_disp} {s_lbl}: {day} {tb}".rstrip()
+                if room_disp:
+                    seg += f" ({room_disp})"
+                wk = pd.to_numeric(rec.get('week'), errors='coerce')
+                if not pd.isna(wk):
+                    seg += f" [Sem {int(wk)}]"
+                parts.append(seg)
+            continue
+
+        # ---- Mode agrégé (défaut, rétro-compatible) ----
         slot_parts = []
         # créneaux récurrents distincts pour ce groupe
         grouping_cols = [c for c in ('day', 'time_block', 'lab_rooms') if c in gs.columns]
@@ -1698,10 +1770,6 @@ def _format_session_timetable(subject_sessions, sep='\n'):
                     seg += f" ({room_disp})"
                 seg += f" — {n} session{'s' if n > 1 else ''}"
                 slot_parts.append(seg)
-        try:
-            g_disp = int(float(g))
-        except Exception:
-            g_disp = g
         parts.append(f"G{g_disp} : " + " / ".join(slot_parts))
     return sep.join(parts)
 
@@ -1846,7 +1914,8 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
         subj_sessions = schedule_df[schedule_df['subject'] == sched]
         planned_total = int(len(subj_sessions))
         n_groups = int(subj_sessions['grupo'].nunique()) if 'grupo' in subj_sessions.columns else 0
-        horaire = _format_session_timetable(subj_sessions)
+        # P2.1 : horaire DÉTAILLÉ (une ligne par séance) dans la Teacher View.
+        horaire = _format_session_timetable(subj_sessions, detailed=True)
         matiere_disp = strip_semester_prefix(sched)
         lpa_key = None
         try:
@@ -1876,8 +1945,9 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                 prof_sessions = subj_sessions[subj_sessions['grupo'].apply(
                     lambda x: _safe_int(x) in grp_set)]
                 planned_prof = int(len(prof_sessions))
-                # Schedule restricted to THIS professor's groups (one per line).
-                horaire_prof = _format_session_timetable(prof_sessions, sep='\n')
+                # Schedule restricted to THIS professor's groups, DETAILED per
+                # session (P2.1): one session per line instead of "— N sessions".
+                horaire_prof = _format_session_timetable(prof_sessions, sep='\n', detailed=True)
                 expected = expected_map.get((lpa_key, pname))
                 if expected is None:
                     expected = planned_prof  # no source target -> neutral
