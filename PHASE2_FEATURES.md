@@ -53,8 +53,9 @@ soft_constraints:
   "extreme configuration" warning in the UI.
 
 ### Using the UI
-Open the app (`streamlit run app.py`) and select **Configuration Solveur** in
-the sidebar:
+Open the app (`streamlit run app.py`), go to the **Configuration** page and
+open the **"Contraintes du solveur"** tab (the solver settings are consolidated
+into the single Configuration page, component `ui_solver_constraints.py`):
 1. Click a profile button (Strict / Equilibre / Detendu) to apply a preset.
 2. Fine-tune individual constraints with the toggles and sliders.
 3. Review the live preview (effective weights + enabled state).
@@ -85,15 +86,21 @@ altering the real optimization. It reuses the same capacity model as the
 solver's infeasibility diagnostic.
 
 ### Using the UI
-Open **Simulateur Infaisabilite** in the sidebar. Three sections:
+Open **Simulateur Infaisabilite** in the sidebar
+(`pages/4_Simulateur_Infaisabilite.py`). The page starts with an at-a-glance
+summary of the latest run (estimated feasibility, bottleneck count, unplaced
+students, data freshness), then offers three sections:
 
-1. **Exclure des groupes** — select groups to drop, run the simulation, and see
-   the feasibility change, overflow reduction, removed sessions and affected
-   students. A real CP-SAT feasibility dry-run confirms the verdict.
-2. **Ajouter des ressources** — enter an extra `(room, day, block, weeks)` slot
-   and test whether it relieves the bottlenecks.
-3. **Suggestions automatiques** — analyse detected bottlenecks and propose which
-   groups to exclude or which resources to add, with one-click apply.
+1. **Suggestions automatiques** — analysed first (and auto-run when the latest
+   run is infeasible): proposes which groups to exclude or which resources to
+   add, ranked by impact.
+2. **Exclure des groupes (manuel)** — select groups to drop, run the simulation,
+   and see the feasibility change, overflow reduction, removed sessions and
+   affected students. A real CP-SAT feasibility dry-run confirms the verdict.
+3. **Ajouter des ressources (manuel)** — enter an extra `(room, day, block,
+   weeks)` slot and test whether it relieves the bottlenecks.
+
+Suggested exclusions can be applied in one click for immediate simulation.
 
 All results are clearly labelled as **estimations** and never modify real data.
 

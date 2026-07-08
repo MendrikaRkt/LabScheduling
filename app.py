@@ -1604,12 +1604,14 @@ elif page == t('nav_config'):
             "(`config/user_config.json`) but no override is active in this session."
         )
 
-    # 4 tabs (rolled back from 3-tab version per Daniel feedback)
-    tab1, tab2, tab3, tab4 = st.tabs([
+    # 5 tabs: the 4 validated tabs + the consolidated solver-constraints tab
+    # (Phase 2 feature merged here so there is a single Configuration page).
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         f"{t('global_params')}",
         f"{t('per_subject')}",
         f"{t('year_pref_title')}",
         f"{t('teacher_title')}",
+        "Contraintes du solveur",
     ])
 
     # Load LAB_CONFIG once for tabs 1-2. The pipeline module may live at the
@@ -2241,6 +2243,16 @@ elif page == t('nav_config'):
                         st.rerun()
         else:
             st.info("No teacher preferences configured")
+
+    # ════════════════════════════════════════
+    # TAB 5: Solver soft constraints (Phase 2, consolidated here)
+    # ════════════════════════════════════════
+    with tab5:
+        try:
+            from ui_solver_constraints import render_solver_constraints_section
+            render_solver_constraints_section()
+        except Exception as _scfg_exc:
+            st.error(f"Solver constraints panel unavailable: {_scfg_exc}")
 
     # ─── Wizard navigation ───
     n_overrides_nav = len(st.session_state.advanced_config.get('subject_overrides', {}))
@@ -5306,6 +5318,17 @@ elif page == t('nav_export'):
                 )
     else:
         st.info("No files generated yet")
+
+    # ════════════════════════════════════════
+    # ADVANCED EXPORTS (Phase 3, consolidated here)
+    # Enhanced workbooks generated directly from the same results.
+    # ════════════════════════════════════════
+    section_header("Exports avances (classeurs enrichis)")
+    try:
+        from ui_advanced_exports import render_advanced_exports_section
+        render_advanced_exports_section()
+    except Exception as _advx_exc:
+        st.error(f"Advanced exports panel unavailable: {_advx_exc}")
 
     # ─── Wizard navigation ───
     wizard_nav(
