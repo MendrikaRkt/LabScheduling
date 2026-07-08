@@ -1065,10 +1065,10 @@ def _render_oversubscription(st, section_header, stat_card, report):
                   "groups planned > budget")
     with c2:
         stat_card("Single-prof critical", os.get("single_prof_count", 0),
-                  "unavoidable without hiring/provisioning", color="orange")
+                  "unavoidable without hiring/provisioning")
     with c3:
         stat_card("Total capacity gap", os.get("total_gap_groups", 0),
-                  "extra groups beyond budget", color="red")
+                  "extra groups beyond budget")
     
     st.warning(
         f"**{os['count']} courses are over-subscribed**: student enrollment has generated "
