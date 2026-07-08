@@ -383,6 +383,90 @@ def test_build_report_flags_constraint_error():
 
 
 # ---------------------------------------------------------------------------
+# collect_solver_diagnostics — interprétation du comportement solveur
+# ---------------------------------------------------------------------------
+
+def test_collect_solver_diagnostics_empty(tmp_path):
+    # Aucun run enregistré -> structure vide, jamais d'exception.
+    missing = str(tmp_path / "nope.json")
+    sd = mon.collect_solver_diagnostics(solver_stats_path=missing,
+                                        unplaced_path=missing)
+    assert sd["available"] is False
+    assert sd["n_runs"] == 0
+    assert sd["overall_tone"] == "ok"
+    assert sd["runs"] == []
+    assert sd["unplaced"]["count"] == 0
+
+
+def test_collect_solver_diagnostics_optimal(tmp_path):
+    runs = [{"semester": 1, "label": "S1", "status": "OPTIMAL",
+             "n_sessions": 295, "recovered": False, "wall_time_s": 2.8,
+             "gap": 0.0}]
+    stats = tmp_path / "solver_stats.json"
+    stats.write_text(json.dumps(runs), encoding="utf-8")
+    sd = mon.collect_solver_diagnostics(solver_stats_path=str(stats),
+                                        unplaced_path=str(tmp_path / "x.json"))
+    assert sd["available"] is True
+    assert sd["n_runs"] == 1
+    assert sd["overall_tone"] == "ok"
+    r = sd["runs"][0]
+    assert r["status"] == "OPTIMAL"
+    assert r["tone"] == "ok"
+    assert "optimal" in r["headline"].lower()
+    assert r["why"] and r["action"]
+
+
+def test_collect_solver_diagnostics_infeasible_and_recovered(tmp_path):
+    runs = [
+        {"semester": 1, "label": "S1", "status": "INFEASIBLE",
+         "n_sessions": 100, "recovered": True, "wall_time_s": 5.0},
+        {"semester": 2, "label": "S2", "status": "INFEASIBLE",
+         "n_sessions": 80, "recovered": False, "wall_time_s": 3.0},
+    ]
+    stats = tmp_path / "solver_stats.json"
+    stats.write_text(json.dumps(runs), encoding="utf-8")
+    sd = mon.collect_solver_diagnostics(solver_stats_path=str(stats),
+                                        unplaced_path=str(tmp_path / "x.json"))
+    # Un run non récupéré -> ton global 'error'.
+    assert sd["overall_tone"] == "error"
+    tones = {r["label"]: r["tone"] for r in sd["runs"]}
+    assert tones["S1"] == "warning"   # récupéré -> warning
+    assert tones["S2"] == "error"     # non récupéré -> error
+    assert "still infeasible" in sd["overall"]
+
+
+def test_collect_solver_diagnostics_unplaced_aggregation(tmp_path):
+    stats = tmp_path / "solver_stats.json"
+    stats.write_text(json.dumps(
+        [{"semester": 1, "label": "S1", "status": "OPTIMAL",
+          "recovered": False}]), encoding="utf-8")
+    unplaced = tmp_path / "unplaced.json"
+    unplaced.write_text(json.dumps([
+        {"student_id": "1", "verdict": "Conflit total"},
+        {"student_id": "2", "verdict": "Conflit total"},
+        {"student_id": "3", "verdict": "Groupes saturés"},
+    ]), encoding="utf-8")
+    sd = mon.collect_solver_diagnostics(solver_stats_path=str(stats),
+                                        unplaced_path=str(unplaced))
+    assert sd["unplaced"]["count"] == 3
+    assert sd["unplaced"]["by_verdict"]["Conflit total"] == 2
+    assert sd["unplaced"]["by_verdict"]["Groupes saturés"] == 1
+    assert "3 unplaced student(s)" in sd["overall"]
+
+
+def test_collect_solver_diagnostics_on_real_data():
+    # Sur les vraies stats du pipeline : 2 runs OPTIMAL, aucun non placé.
+    if not os.path.exists("reports/solver_stats.json"):
+        pytest.skip("solver_stats.json absent")
+    sd = mon.collect_solver_diagnostics()
+    assert sd["available"] is True
+    assert sd["n_runs"] >= 1
+    for r in sd["runs"]:
+        assert r["headline"] and r["why"] and r["action"]
+        assert r["tone"] in ("ok", "warning", "error")
+
+
+# ---------------------------------------------------------------------------
 # Smoke test du rendu Streamlit
 # ---------------------------------------------------------------------------
 # Ce test instancie de FAUX helpers dont les signatures reproduisent EXACTEMENT

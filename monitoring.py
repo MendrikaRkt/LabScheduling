@@ -46,6 +46,7 @@ DEFAULT_SCHEDULE_PATH = "outputs/optimization/optimized_schedule_v5.csv"
 DEFAULT_GROUPS_PATH = "outputs/optimization/group_composition.csv"
 DEFAULT_CONFIG_PATH = "config/user_config.json"
 DEFAULT_SOLVER_STATS_PATH = "reports/solver_stats.json"
+DEFAULT_UNPLACED_PATH = "reports/unplaced_students.json"
 DEFAULT_REPORTS_DIR = "reports"
 
 
@@ -750,6 +751,154 @@ def collect_infeasibility(reports_dir=DEFAULT_REPORTS_DIR,
     return out
 
 
+def load_unplaced_students(path=DEFAULT_UNPLACED_PATH):
+    """Renvoie la liste des diagnostics d'étudiants non placés (ou [])."""
+    data = _read_json(path)
+    return data if isinstance(data, list) else []
+
+
+def _interpret_solver_run(run):
+    """Traduit UN run solveur en langage clair : pourquoi ce statut et quoi
+    faire. Pur et défensif ; renvoie {status, headline, why, action, tone}.
+
+    tone ∈ {ok, warning, error} pour piloter l'affichage sans y décider.
+    """
+    status = str(run.get("status", "UNKNOWN")).upper()
+    gap = run.get("gap")
+    recovered = bool(run.get("recovered"))
+    wall = run.get("wall_time_s")
+
+    if status == "OPTIMAL":
+        return {
+            "status": status, "tone": "ok",
+            "headline": "Proven optimal",
+            "why": ("The solver explored the search space and proved no better "
+                    "week assignment exists for this semester "
+                    f"(gap = {gap if gap is not None else 0})."),
+            "action": "Nothing to do — this is the best possible solution.",
+        }
+    if status == "FEASIBLE":
+        return {
+            "status": status, "tone": "warning",
+            "headline": "Valid but not proven optimal",
+            "why": ("A valid schedule was found, but optimality was not proven "
+                    f"before the time limit (gap = {gap if gap is not None else 'n/a'}"
+                    f", solved in {wall}s)." ),
+            "action": ("Usually safe to ship. To tighten, raise the solver time "
+                       "limit or relax the relative gap in Configuration."),
+        }
+    if status == "INFEASIBLE":
+        base = ("No valid week assignment exists: sessions are physically forced "
+                "into the same room/slot across too few available weeks.")
+        if recovered:
+            return {
+                "status": status, "tone": "warning",
+                "headline": "Infeasible then auto-recovered",
+                "why": base + (" The pipeline dropped the over-saturated groups "
+                               "and re-solved successfully."),
+                "action": ("Review the dropped groups and the bottleneck report. "
+                           "Open a slot/room, widen the week window, or reduce "
+                           "parallel groups to place them without dropping."),
+            }
+        return {
+            "status": status, "tone": "error",
+            "headline": "Infeasible — no solution",
+            "why": base,
+            "action": ("Read the infeasibility bottlenecks below. Open an extra "
+                       "slot/room, widen [min_week, max_week], or reduce the "
+                       "number of parallel groups."),
+        }
+    return {
+        "status": status or "UNKNOWN", "tone": "warning",
+        "headline": "Inconclusive",
+        "why": "The solver stopped without a conclusive result (e.g. time limit).",
+        "action": "Increase the solver time limit and inspect the bottlenecks.",
+    }
+
+
+def collect_solver_diagnostics(solver_stats_path=DEFAULT_SOLVER_STATS_PATH,
+                               unplaced_path=DEFAULT_UNPLACED_PATH):
+    """Interprète le comportement du solveur : POURQUOI le statut obtenu et
+    COMMENT réagir, plus l'agrégat des étudiants non placés par cause.
+
+    Réutilise les sources de vérité existantes (solver_stats.json écrit par
+    pipeline.record_solver_run, unplaced_students.json écrit par
+    pipeline.diagnose_unplaced_students) — ne relance jamais le solveur.
+
+    Renvoie :
+        {
+          available: bool,
+          n_runs: int,
+          overall_tone: 'ok'|'warning'|'error',
+          overall: str,                # verdict global lisible
+          runs: [ {semester, label, status, gap, wall_time_s, n_sessions,
+                   recovered, headline, why, action, tone}, ... ],
+          unplaced: {count, by_verdict: {verdict: n}, items: [...]},
+        }
+    """
+    runs = load_solver_runs(solver_stats_path)
+    out = {
+        "available": bool(runs),
+        "n_runs": len(runs) if isinstance(runs, list) else 0,
+        "overall_tone": "ok",
+        "overall": "",
+        "runs": [],
+        "unplaced": {"count": 0, "by_verdict": {}, "items": []},
+    }
+
+    tone_rank = {"ok": 0, "warning": 1, "error": 2}
+    worst = "ok"
+    for r in runs or []:
+        interp = _interpret_solver_run(r)
+        out["runs"].append({
+            "semester": r.get("semester"),
+            "label": r.get("label", ""),
+            "status": interp["status"],
+            "gap": r.get("gap"),
+            "wall_time_s": r.get("wall_time_s"),
+            "n_sessions": r.get("n_sessions"),
+            "recovered": bool(r.get("recovered")),
+            "headline": interp["headline"],
+            "why": interp["why"],
+            "action": interp["action"],
+            "tone": interp["tone"],
+        })
+        if tone_rank[interp["tone"]] > tone_rank[worst]:
+            worst = interp["tone"]
+    out["overall_tone"] = worst
+
+    # Agrégat des étudiants non placés par verdict (cause).
+    unplaced = load_unplaced_students(unplaced_path)
+    by_verdict = {}
+    for u in unplaced or []:
+        v = str(u.get("verdict", "Unknown")).strip()
+        by_verdict[v] = by_verdict.get(v, 0) + 1
+    out["unplaced"] = {
+        "count": len(unplaced) if isinstance(unplaced, list) else 0,
+        "by_verdict": by_verdict,
+        "items": unplaced or [],
+    }
+
+    # Verdict global lisible.
+    if not out["available"]:
+        out["overall"] = "No solver run recorded yet."
+    else:
+        n = out["n_runs"]
+        n_opt = sum(1 for r in out["runs"] if r["status"] == "OPTIMAL")
+        n_rec = sum(1 for r in out["runs"] if r["recovered"])
+        n_inf = sum(1 for r in out["runs"]
+                    if r["status"] == "INFEASIBLE" and not r["recovered"])
+        parts = [f"{n} solver run(s): {n_opt} optimal"]
+        if n_rec:
+            parts.append(f"{n_rec} auto-recovered")
+        if n_inf:
+            parts.append(f"{n_inf} still infeasible")
+        if out["unplaced"]["count"]:
+            parts.append(f"{out['unplaced']['count']} unplaced student(s)")
+        out["overall"] = ", ".join(parts) + "."
+    return out
+
+
 # =============================================================================
 # Agrégateur — tour de contrôle (résumé d'anomalies)
 # =============================================================================
@@ -776,6 +925,7 @@ def build_report(schedule_df, groups_df, config_path=DEFAULT_CONFIG_PATH,
         "frequency": collect_frequency(schedule_df),
         "enrollment": collect_enrollment(groups_df),
         "solver": summarize_solver_runs(load_solver_runs(solver_stats_path)),
+        "solver_diagnostics": collect_solver_diagnostics(solver_stats_path),
         "infeasibility": collect_infeasibility(reports_dir, solver_stats_path),
     }
 
@@ -900,6 +1050,7 @@ def render(st, helpers=None, t=None):
     _render_frequency(st, section_header, report)
     _render_enrollment(st, section_header, stat_card, report)
     _render_inputs_weights(st, section_header, stat_card)
+    _render_solver_diagnostics(st, section_header, stat_card, report)
     _render_scenarios(st, section_header, stat_card)
     _render_infeasibility(st, section_header)
 
@@ -1263,6 +1414,74 @@ def _render_inputs_weights(st, section_header, stat_card):
                 st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.info("Weights cache unavailable — per-professor targets cannot be shown.")
+
+
+def _render_solver_diagnostics(st, section_header, stat_card, report):
+    section_header("Solver diagnostics — why this result")
+    sd = report.get("solver_diagnostics", {})
+    if not sd.get("available"):
+        st.info("No solver run recorded yet. Run the optimization to interpret "
+                "the solver behaviour.")
+        return
+
+    st.caption("Plain-language reading of the CP-SAT status per semester: why "
+               "the solver returned OPTIMAL / FEASIBLE / INFEASIBLE and what to "
+               "do next. Read-only: this panel explains, it does not change the "
+               "solution.")
+
+    runs = sd.get("runs", [])
+    n_opt = sum(1 for r in runs if r["status"] == "OPTIMAL")
+    n_rec = sum(1 for r in runs if r["recovered"])
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        stat_card("Solver runs", sd.get("n_runs", 0), "per semester")
+    with c2:
+        stat_card("Optimal", n_opt, "proven best solution")
+    with c3:
+        stat_card("Unplaced students", sd.get("unplaced", {}).get("count", 0),
+                  "enrolled but not placed")
+
+    tone = sd.get("overall_tone", "ok")
+    overall = sd.get("overall", "")
+    if tone == "ok":
+        st.success(overall)
+    elif tone == "warning":
+        st.warning(overall)
+    else:
+        st.error(overall)
+
+    # Interprétation par run.
+    for r in runs:
+        label = r.get("label") or f"S{r.get('semester', '?')}"
+        title = f"{label} — {r['status']}: {r['headline']}"
+        if r["recovered"]:
+            title += " (auto-recovered)"
+        with st.expander(title, expanded=(r["tone"] == "error")):
+            meta = (f"sessions: {r.get('n_sessions', 'n/a')} · "
+                    f"gap: {r.get('gap', 'n/a')} · "
+                    f"solve time: {r.get('wall_time_s', 'n/a')}s")
+            st.caption(meta)
+            st.markdown(f"**Why:** {r['why']}")
+            st.markdown(f"**What to do:** {r['action']}")
+
+    # Étudiants non placés, agrégés par cause (verdict).
+    up = sd.get("unplaced", {})
+    if up.get("count"):
+        st.markdown("**Unplaced students by cause**")
+        by_v = up.get("by_verdict", {})
+        try:
+            df = pd.DataFrame(
+                [{"cause": k, "students": v} for k, v in by_v.items()]
+            ).sort_values("students", ascending=False)
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        except Exception:
+            pass
+        st.caption("Each unplaced student has an explicit verdict (total "
+                   "timetable conflict, saturated compatible slots, or "
+                   "cohort/program constraint). This is a signal for capacity "
+                   "provisioning, not a solver error.")
+    else:
+        st.success("Every enrolled student was placed in a group.")
 
 
 def _render_scenarios(st, section_header, stat_card):
