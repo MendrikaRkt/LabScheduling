@@ -75,8 +75,16 @@ datas += [
     ("validation_credits.py", "."),
     ("solver_config.py", "."),        # Phase 2 — configurable soft constraints
     ("simulation_engine.py", "."),    # Phase 2 — infeasibility simulation
+    ("excel_export_enhanced.py", "."),  # Phase 3 — enhanced Excel export engine
+    ("export_manager.py", "."),         # Phase 3 — export formats + templates
     ("VERSION.txt", "."),
 ]
+
+# Phase 3 — Excel templates (branded .xlsx consumed by the template engine).
+if os.path.isdir("templates"):
+    for _tn in os.listdir("templates"):
+        if _tn.lower().endswith(".xlsx") and not _tn.startswith("~$"):
+            datas.append((os.path.join("templates", _tn), "templates"))
 
 # Phase 2 — Streamlit multipage pages (Solver Configuration, Infeasibility
 # Simulator). Bundled next to app.py so `streamlit run app.py` discovers them.
@@ -124,6 +132,8 @@ hidden += [
     "loyola_theme", "update_manager", "config_verify",
     "monitoring", "lab_professor_assignment", "professor_credits",
     "lab_constants", "data_quality", "kpi_report", "validation_credits",
+    "solver_config", "simulation_engine",
+    "excel_export_enhanced", "export_manager",  # Phase 3
     "streamlit.runtime.scriptrunner.magic_funcs",
 ]
 
