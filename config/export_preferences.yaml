@@ -1,0 +1,86 @@
+# export_preferences.yaml — Phase 3 enhanced Excel export preferences.
+#
+# Consumed by export_manager.load_preferences(). Every value here is optional;
+# anything omitted falls back to the built-in defaults in export_manager.py.
+#
+# default_format:       format chosen by the UI on first load
+#                       (standard | enhanced | summary | detailed)
+# default_color_scheme: header/accent palette (loyola | default | monochrome)
+# templates_dir:        directory (relative to the app root) holding *.xlsx
+#                       templates for the template engine
+# formats:              per-format overrides of the ExportOptions flags. Only
+#                       the keys you list override the preset; the rest keep
+#                       their preset value.
+
+default_format: enhanced
+default_color_scheme: loyola
+templates_dir: templates
+
+formats:
+  standard:
+    color_coded_groups: true
+    legend: false
+    room_utilization: false
+    professor_workload: false
+    student_placement: false
+    time_slot_analysis: false
+    quality_metrics: false
+    conditional_formatting: false
+    data_validation: false
+    named_ranges: false
+    cell_comments: false
+    protect_sheets: false
+
+  summary:
+    color_coded_groups: true
+    legend: true
+    room_utilization: false
+    professor_workload: false
+    student_placement: true
+    time_slot_analysis: false
+    quality_metrics: true
+    conditional_formatting: true
+    auto_filter: true
+    freeze_panes: true
+    data_validation: false
+    named_ranges: false
+    cell_comments: false
+    protect_sheets: false
+
+  enhanced:
+    color_coded_groups: true
+    legend: true
+    room_utilization: true
+    professor_workload: true
+    student_placement: true
+    time_slot_analysis: true
+    quality_metrics: true
+    conditional_formatting: true
+    auto_filter: true
+    freeze_panes: true
+    data_validation: true
+    named_ranges: true
+    cell_comments: true
+    protect_sheets: false
+
+  detailed:
+    color_coded_groups: true
+    legend: true
+    room_utilization: true
+    professor_workload: true
+    student_placement: true
+    time_slot_analysis: true
+    quality_metrics: true
+    conditional_formatting: true
+    auto_filter: true
+    freeze_panes: true
+    data_validation: true
+    named_ranges: true
+    cell_comments: true
+    protect_sheets: true
+
+# Colour reference (colour-blind-safe, Okabe-Ito derived):
+#   optimal        = #009E73 (bluish green)
+#   under-utilized = #E69F00 (orange)
+#   over-subscribed= #D55E00 (vermillion)
+# Loyola brand: navy #003366, gold #FFCC00
