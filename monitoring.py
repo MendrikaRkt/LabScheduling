@@ -400,6 +400,107 @@ def collect_credit_compliance(schedule_df):
     return out
 
 
+def collect_oversubscription(schedule_df):
+    """Détecte les matières sur-souscrites (groupes planifiés > budget de crédits P).
+    
+    Croise les groupes réellement planifiés (schedule_df) avec le budget officiel
+    (expected_sessions) pour identifier les matières dont le volume dépasse la
+    capacité provisionnée. Marque les cas critiques (prof unique) et calcule
+    l'écart capacitaire.
+    
+    Contexte : Les conflits horaires professeurs (collect_professor_conflicts) et
+    dépassements de crédits (collect_credit_compliance) sont souvent la CONSÉQUENCE
+    de la sur-souscription — ce collecteur identifie la cause racine.
+    
+    Returns:
+        dict avec:
+            count: nombre de matières sur-souscrites
+            total_gap_groups: écart cumulé en groupes
+            single_prof_count: nombre de matières à prof unique sur-souscrites
+            items: [{subject, budget_groups, planned_groups, gap, n_professors,
+                     professors, single_prof}, ...]
+    """
+    out = {"count": 0, "total_gap_groups": 0, "single_prof_count": 0, "items": []}
+    if schedule_df is None or len(schedule_df) == 0:
+        return out
+    if "subject" not in schedule_df.columns or "grupo" not in schedule_df.columns:
+        return out
+    
+    try:
+        import lab_professor_assignment as lpa
+    except Exception:
+        return out
+    
+    # 1) Budget par matière (somme des groupes attendus par prof)
+    try:
+        exp_df = lpa.expected_sessions(None)
+    except Exception:
+        return out
+    if exp_df is None or len(exp_df) == 0:
+        return out
+    
+    budget_by_subject = {}
+    for subj, grp in exp_df.groupby("subject_clean"):
+        budget_by_subject[subj] = {
+            "groups": int(grp["groups"].sum()),
+            "professors": grp["prof_name"].tolist(),
+        }
+    
+    # 2) Groupes planifiés par matière (canonique)
+    planned_by_subject = {}
+    for s in schedule_df["subject"].dropna().unique():
+        label = lpa._strip_semester_prefix(s) if hasattr(lpa, "_strip_semester_prefix") else s
+        key = lpa.canonical_subject_key(label)
+        sub = schedule_df[schedule_df["subject"] == s]
+        n_groups = sub["grupo"].nunique()
+        if key not in planned_by_subject:
+            planned_by_subject[key] = {"groups": 0, "label": label}
+        planned_by_subject[key]["groups"] += n_groups
+    
+    # 3) Nombre de profs par matière (depuis weights)
+    try:
+        weights = lpa.subject_professor_weights(None)
+    except Exception:
+        weights = {}
+    n_profs = {k: len(v) for k, v in weights.items()}
+    
+    # 4) Comparaison budget vs planifié
+    all_subjects = set(list(budget_by_subject.keys()) + list(planned_by_subject.keys()))
+    for subj in all_subjects:
+        budget_info = budget_by_subject.get(subj, {"groups": 0, "professors": []})
+        planned_info = planned_by_subject.get(subj, {"groups": 0, "label": subj})
+        
+        budget_g = budget_info["groups"]
+        planned_g = planned_info["groups"]
+        gap = planned_g - budget_g
+        
+        if gap <= 0:
+            continue  # pas de sur-souscription
+        
+        profs = budget_info["professors"]
+        np = n_profs.get(subj, len(profs))
+        single = (np == 1)
+        
+        out["count"] += 1
+        out["total_gap_groups"] += gap
+        if single:
+            out["single_prof_count"] += 1
+        
+        out["items"].append({
+            "subject": planned_info.get("label", subj),
+            "budget_groups": budget_g,
+            "planned_groups": planned_g,
+            "gap": gap,
+            "n_professors": np,
+            "professors": profs,
+            "single_prof": single,
+        })
+    
+    # Tri par gap décroissant
+    out["items"] = sorted(out["items"], key=lambda x: -x["gap"])
+    return out
+
+
 # =============================================================================
 # 6) Emplois du temps : double réservation des professeurs
 # =============================================================================
@@ -668,6 +769,7 @@ def build_report(schedule_df, groups_df, config_path=DEFAULT_CONFIG_PATH,
         "constraints": collect_constraint_checks(schedule_df, groups_df),
         "student_duplicates": detect_student_group_duplicates(groups_df),
         "credit_compliance": collect_credit_compliance(schedule_df),
+        "oversubscription": collect_oversubscription(schedule_df),
         "professor_conflicts": collect_professor_conflicts(schedule_df),
         "free_busy": collect_free_busy(schedule_df, groups_df),
         "existing_labs": collect_existing_labs(schedule_df),
@@ -705,6 +807,13 @@ def build_report(schedule_df, groups_df, config_path=DEFAULT_CONFIG_PATH,
     if cc.get("n_over"):
         add("error", "Crédits",
             f"{cc['n_over']} professeur(s) dépassant leurs crédits (séances > attendues)")
+
+    os = report["oversubscription"]
+    if os.get("count"):
+        msg = f"{os['count']} matière(s) sur-souscrite(s) (groupes planifiés > budget)"
+        if os.get("single_prof_count"):
+            msg += f" — dont {os['single_prof_count']} à prof unique (critique)"
+        add("warning", "Capacité", msg)
 
     rooms_crit = [r for r in report["free_busy"].get("rooms", [])
                   if r.get("status") == "critical"]
@@ -785,6 +894,7 @@ def render(st, helpers=None, t=None):
     _render_constraints(st, section_header, report)
     _render_emploi_du_temps(st, section_header, report)
     _render_credit_compliance(st, section_header, stat_card, report)
+    _render_oversubscription(st, section_header, stat_card, report)
     _render_free_busy(st, section_header, report)
     _render_existing_labs(st, section_header, stat_card, report)
     _render_frequency(st, section_header, report)
@@ -929,6 +1039,80 @@ def _render_credit_compliance(st, section_header, stat_card, report):
                      "Δ": r["delta"], "Status": r["status"]}
                     for r in cc["rows"]]
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+def _render_oversubscription(st, section_header, stat_card, report):
+    """Affiche les matières sur-souscrites (groupes planifiés > budget crédits P).
+    
+    Aide à diagnostiquer la CAUSE RACINE des conflits professeurs et dépassements
+    de crédits : quand la demande étudiante dépasse la capacité provisionnée,
+    les professeurs sont mécaniquement sur-sollicités.
+    """
+    section_header("Over-subscription (root cause of conflicts & credit overruns)")
+    os = report["oversubscription"]
+    
+    if not os.get("count"):
+        st.success("✓ No over-subscribed courses — all scheduled groups fit within P credit budget.")
+        st.caption("Over-subscription occurs when enrollment demand generates more lab groups "
+                   "than provisioned P credits can support. When absent, professor conflicts "
+                   "and credit overruns (if any) stem from other causes (e.g., scheduling constraints).")
+        return
+    
+    # Métriques principales
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        stat_card("Over-subscribed courses", os.get("count", 0),
+                  "groups planned > budget")
+    with c2:
+        stat_card("Single-prof critical", os.get("single_prof_count", 0),
+                  "unavoidable without hiring/provisioning", color="orange")
+    with c3:
+        stat_card("Total capacity gap", os.get("total_gap_groups", 0),
+                  "extra groups beyond budget", color="red")
+    
+    st.warning(
+        f"**{os['count']} courses are over-subscribed**: student enrollment has generated "
+        f"more groups than the P credit budget supports. This is the **root cause** of "
+        f"professor conflicts and credit overruns detected elsewhere in this report."
+    )
+    
+    st.caption(
+        "**Context:** The solver prioritizes placing all enrolled students (pedagogical objective). "
+        "Professor assignment is computed *post-hoc* proportionally to P credits. When scheduled "
+        "groups exceed budget, professors are mechanically over-allocated → conflicts + overruns."
+    )
+    
+    # Tableau détaillé
+    with st.expander(f"Detailed breakdown — {os['count']} over-subscribed courses", expanded=True):
+        rows = []
+        for item in os.get("items", []):
+            profs_str = ", ".join(item.get("professors", [])[:3])
+            if len(item.get("professors", [])) > 3:
+                profs_str += f" (+{len(item['professors']) - 3})"
+            
+            flag = "⚠️ SINGLE PROF" if item.get("single_prof") else ""
+            rows.append({
+                "Course": item["subject"],
+                "Budget (groups)": item["budget_groups"],
+                "Scheduled (groups)": item["planned_groups"],
+                "Gap": f"+{item['gap']}",
+                "# Professors": item["n_professors"],
+                "Professors": profs_str,
+                "Critical": flag,
+            })
+        
+        df_os = pd.DataFrame(rows)
+        st.dataframe(df_os, use_container_width=True, hide_index=True)
+    
+    # Guidance actionnable
+    st.info(
+        "**Next steps:**\n"
+        f"- **Priority:** {os.get('single_prof_count', 0)} single-professor courses require "
+        "capacity intervention (hire additional faculty or provision extra P credits).\n"
+        f"- **Distributable:** {os['count'] - os.get('single_prof_count', 0)} multi-professor "
+        "courses may benefit from load rebalancing or additional provisioning.\n"
+        "- **Administrative action:** Use this table to request budget allocation for the identified gap."
+    )
 
 
 def _render_free_busy(st, section_header, report):
