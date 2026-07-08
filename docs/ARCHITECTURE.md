@@ -352,3 +352,59 @@ Every simulation returns a `before` / `after` / `diff` structure so the UI can
 show the metric delta and whether a scenario would become feasible.
 
 See `PHASE2_FEATURES.md` for usage details.
+
+
+
+## 11. Phase 3 components (enhanced Excel exports)
+
+Phase 3 adds a richer, analysis-oriented Excel export layer. It is **purely
+additive**: the validated Daniel-format exporters (`excel_export.py` +
+`excel_generator_core.py`) are never modified, and the `standard` format simply
+delegates to them, so existing deliverables stay byte-for-byte identical.
+
+### 11.1 Module map
+
+| Piece | File | Role |
+|-------|------|------|
+| Enhanced engine | `excel_export_enhanced.py` | Builds colour-coded group sheets, a legend, and five analysis sheets (Room Utilization, Professor Workload, Student Placement, Time Slot Analysis, Quality Metrics). Owns all styling helpers (branded headers, alternating rows, conditional formatting, charts, comments, freeze panes, auto-filters, data validation, named ranges). |
+| Format & template manager | `export_manager.py` | Maps a `format_type` (`standard` / `enhanced` / `summary` / `detailed`) to an `ExportOptions` profile; loads `config/export_preferences.yaml`; and implements the template engine (discover / validate / render `{{TOKEN}}` placeholders). |
+| Preferences | `config/export_preferences.yaml` | Default format, default colour scheme, per-format flag overrides, templates directory. Missing/invalid -> built-in defaults. |
+| Templates | `templates/*.xlsx` | Branded workbooks with `{{TOKEN}}` placeholders. `loyola_schedule_template.xlsx` ships by default; `templates/build_loyola_template.py` regenerates it deterministically. |
+| UI | `pages/6_Exports_Avancés.py` | Read-only export console: perimeter/format/colour-scheme selectors, per-sheet and per-formatting checkboxes, data preview, generate + download, and a template renderer. |
+
+### 11.2 Formats
+
+| Format | Sheets | Notable |
+|--------|--------|---------|
+| `standard` | (delegates to `excel_export`) | Daniel-format workbooks, unchanged. |
+| `summary` | Overview, Groups, Legend, Student Placement, Quality Metrics | Lightweight overview. |
+| `enhanced` | All sheets | Full analysis with charts, comments, validation, named ranges. |
+| `detailed` | All sheets | Same as enhanced but sheets are protected (filters stay usable). |
+
+### 11.3 Group sizing thresholds (status semantics)
+
+Mirror `pipeline.py`: `MIN_GROUP_SIZE = 7`, `PREFERRED_GROUP_SIZE = 12`,
+`MAX_GROUP_SIZE = 15`. A group is **optimal** when `7 <= size <= 15`,
+**under-utilized** below 7, **over-subscribed** above 15. Conditional
+formatting and the status column both apply this rule.
+
+### 11.4 Accessibility
+
+Status colours use a colour-blind-safe (Okabe-Ito derived) palette — optimal
+`#009E73` (bluish green), under-utilized `#E69F00` (orange), over-subscribed
+`#D55E00` (vermillion). Status is additionally encoded with a text label and a
+fill *pattern*, so meaning never relies on colour alone. Per-group colours use
+the qualitative Okabe-Ito set, extended deterministically via HSL for large
+group counts so a group's colour is stable across every sheet.
+
+### 11.5 Public API
+
+- `export_manager.export_with_format(format_type, *, semester=None, out_path=None, color_scheme=None, overrides=None)`
+- `export_manager.render_template(name, context, *, out_path=None)`
+- `excel_export_enhanced.build_enhanced_workbook(schedule_df, groups_df, *, kpi, solver_stats, options, color_scheme, semester)`
+- `excel_export_enhanced.export_enhanced(semester=None, *, out_path=None, options=None, color_scheme='loyola')`
+
+Room capacity for cell comments is a documented proxy (max students ever
+scheduled in a room) because the pipeline outputs carry no explicit capacity.
+
+See `PHASE3_EXCEL_FEATURES.md` for usage details.
