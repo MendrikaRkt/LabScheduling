@@ -177,6 +177,12 @@ Built inside `solve()`, one model per semester.
 - **Friday cap**: constant + escalating penalty above a soft session cap on
   Fridays (anti-bottleneck), never a hard ban.
 
+> **Phase 2 note — configurable weights.** The first-anchor, last-anchor,
+> spacing and parity penalties now read their weights and on/off state from
+> `config/solver_constraints.yaml` via `solver_config.py`. When the file is
+> absent or invalid, the historical defaults (100 / 100 / 200 / 50) are applied,
+> so behaviour is unchanged. See section 10.
+
 ### Warm start
 `add_week_hints()` injects an evenly-spread week assignment as a solver hint to
 speed convergence.
@@ -300,3 +306,49 @@ Everything the engine does is meant to be inspectable, not hidden:
 
 This observability is the QA backbone that lets the same engine be trusted in
 production and extended to new use cases.
+
+
+
+---
+
+## 10. Phase 2 components (configurable constraints + infeasibility simulation)
+
+Phase 2 adds two additive, read-only-by-default capabilities. No validated
+solver logic or data-processing stage is modified; the solver only reads weights
+that default to the historical values.
+
+### 10.1 Configurable soft constraints
+
+| Piece | File | Role |
+|-------|------|------|
+| Schema + loader | `solver_config.py` | Validated load/save of soft-constraint weights and on/off flags; 3 presets (Strict / Balanced / Relaxed); defaults reproduce the historical weights. |
+| Config file | `config/solver_constraints.yaml` | Human-editable weights, flags and preset reference. Missing/invalid -> Balanced defaults. |
+| Solver hook | `pipeline.solve()` | Loads config once, applies effective weights to the objective terms, and appends a `constraint_config` summary to each `solver_stats.json` entry. A disabled constraint contributes weight 0, i.e. the term is skipped. |
+| UI | `pages/4_Configuration_Solveur.py` | Profile selector, per-constraint toggles + weight sliders, live preview, extreme-config warnings, save/reset with confirmation. |
+
+The four tunable soft constraints are `semester_anchor_first`,
+`semester_anchor_last`, `spacing`, `parity`. Hard constraints (C1/C4/C5) and the
+reserved-slot penalty are intentionally NOT exposed (they are correctness, not
+preference).
+
+### 10.2 Infeasibility simulation (What-If)
+
+| Piece | File | Role |
+|-------|------|------|
+| Engine | `simulation_engine.py` | Pure, side-effect-free capacity/bottleneck model plus an optional real CP-SAT feasibility dry-run. Never writes to `reports/`/`outputs/`. |
+| UI | `pages/5_Simulateur_Infaisabilite.py` | Three sections: (1) exclude groups, (2) add room/time-slot capacity, (3) automatic suggestions from detected bottlenecks. |
+
+Engine entry points:
+- `simulate_without_groups(sessions, group_ids)` — recompute bottlenecks with
+  groups removed; reports overflow reduction and affected students.
+- `simulate_with_extra_capacity(sessions, extra_slots)` — recompute with extra
+  weeks added to given `(resource, day, block)` slots.
+- `suggest_actions(sessions)` — rank groups to drop / resources to add.
+- `dry_run_feasibility(sessions)` — build C1/C4/C5 and solve for feasibility only.
+- Read-only loaders parse `reports/unplaced_students.json`,
+  `reports/solver_stats.json` and `reports/infeasibility_S*.txt`.
+
+Every simulation returns a `before` / `after` / `diff` structure so the UI can
+show the metric delta and whether a scenario would become feasible.
+
+See `PHASE2_FEATURES.md` for usage details.
