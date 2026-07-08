@@ -380,3 +380,71 @@ def test_build_report_flags_constraint_error():
     severities = {a["severity"] for a in report["anomalies"]}
     assert "error" in severities
     assert report["n_errors"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Smoke test du rendu Streamlit
+# ---------------------------------------------------------------------------
+# Ce test instancie de FAUX helpers dont les signatures reproduisent EXACTEMENT
+# celles d'app.py (notamment stat_card(label, value, desc="") — SANS argument
+# `color`). Il aurait attrapé la régression `stat_card() got an unexpected
+# keyword argument 'color'` avant livraison. On vérifie que render() ne lève
+# jamais et n'appelle jamais safe_error (== aucune exception interne avalée).
+
+class _FakeCtx:
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+
+
+class _FakeSt:
+    """Streamlit factice : toute méthode inconnue est un no-op renvoyant un ctx."""
+    def __getattr__(self, name):
+        def _noop(*a, **k):
+            return _FakeCtx()
+        return _noop
+
+    def columns(self, n):
+        count = n if isinstance(n, int) else len(n)
+        return [_FakeCtx() for _ in range(count)]
+
+
+def _make_helpers():
+    calls = {"safe_error": []}
+
+    def section_header(title): pass
+    # Signature IDENTIQUE à app.py : pas d'argument `color`.
+    def stat_card(label, value, desc=""): pass
+    def page_header(*a, **k): pass
+    def safe_error(msg, e=None): calls["safe_error"].append((msg, e))
+
+    helpers = {"page_header": page_header, "section_header": section_header,
+               "stat_card": stat_card, "safe_error": safe_error}
+    return helpers, calls
+
+
+def test_render_smoke_with_data(monkeypatch):
+    """render() ne doit jamais crasher ni avaler d'exception (données réelles)."""
+    sched_path = "outputs/optimization/optimized_schedule_v5.csv"
+    grp_path = "outputs/optimization/group_composition.csv"
+    if not (os.path.exists(sched_path) and os.path.exists(grp_path)):
+        pytest.skip("Vraies données absentes — test skippé")
+
+    sched = pd.read_csv(sched_path)
+    grp = pd.read_csv(grp_path)
+    orig = mon.build_report
+    monkeypatch.setattr(mon, "build_report", lambda *a, **k: orig(sched, grp))
+
+    helpers, calls = _make_helpers()
+    mon.render(_FakeSt(), helpers=helpers, t=lambda k, d=None: d or k)
+    assert calls["safe_error"] == [], f"render a avalé une exception: {calls['safe_error']}"
+
+
+def test_render_smoke_without_data(monkeypatch):
+    """render() gère le cas 'aucune sur-souscription' (report vide) sans crasher."""
+    orig = mon.build_report
+    monkeypatch.setattr(mon, "build_report",
+                        lambda *a, **k: orig(pd.DataFrame(), pd.DataFrame()))
+
+    helpers, calls = _make_helpers()
+    mon.render(_FakeSt(), helpers=helpers, t=lambda k, d=None: d or k)
+    assert calls["safe_error"] == [], f"render a avalé une exception: {calls['safe_error']}"
