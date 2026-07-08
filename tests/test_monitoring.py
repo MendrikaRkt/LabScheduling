@@ -307,6 +307,53 @@ def test_build_report_structure_keys(clean_schedule, groups_with_duplicate,
     assert report["n_errors"] >= 0
 
 
+def test_collect_oversubscription_empty():
+    """Cas limite : planning vide."""
+    res = mon.collect_oversubscription(None)
+    assert res["count"] == 0
+    assert res["total_gap_groups"] == 0
+    assert res["single_prof_count"] == 0
+    assert res["items"] == []
+
+
+def test_collect_oversubscription_no_lpa():
+    """Cas défensif : si lab_professor_assignment est absent, renvoie count=0."""
+    df = pd.DataFrame([
+        {"subject": "Física", "grupo": 1, "week": 1, "semester": 1},
+        {"subject": "Física", "grupo": 2, "week": 1, "semester": 1},
+    ])
+    # Sans mock de lpa, le collecteur renvoie count=0 (import exception catchée)
+    res = mon.collect_oversubscription(df)
+    assert res["count"] == 0
+    assert res["items"] == []
+
+
+def test_collect_oversubscription_on_real_data():
+    """Test sur les vraies sorties du pipeline (si disponibles)."""
+    import os
+    sched_path = "outputs/optimization/optimized_schedule_v5.csv"
+    if not os.path.exists(sched_path):
+        pytest.skip("Vraies données absentes — test skippé")
+    
+    df = pd.read_csv(sched_path)
+    res = mon.collect_oversubscription(df)
+    
+    # On s'attend à détecter les 14 matières sur-souscrites (cf. diagnostic)
+    assert res["count"] >= 10, "Devrait détecter au moins 10 matières sur-souscrites"
+    assert res["total_gap_groups"] > 0
+    
+    # Vérifier qu'on a bien les champs attendus
+    if res["items"]:
+        item = res["items"][0]
+        assert "subject" in item
+        assert "budget_groups" in item
+        assert "planned_groups" in item
+        assert "gap" in item
+        assert item["gap"] > 0  # tous les items sont sur-souscrits
+        assert "single_prof" in item
+        assert "n_professors" in item
+
+
 def test_build_report_flags_duplicate_and_missing_config(
         clean_schedule, groups_with_duplicate, tmp_path):
     report = mon.build_report(
