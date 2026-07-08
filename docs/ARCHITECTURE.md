@@ -324,7 +324,7 @@ that default to the historical values.
 | Schema + loader | `solver_config.py` | Validated load/save of soft-constraint weights and on/off flags; 3 presets (Strict / Balanced / Relaxed); defaults reproduce the historical weights. |
 | Config file | `config/solver_constraints.yaml` | Human-editable weights, flags and preset reference. Missing/invalid -> Balanced defaults. |
 | Solver hook | `pipeline.solve()` | Loads config once, applies effective weights to the objective terms, and appends a `constraint_config` summary to each `solver_stats.json` entry. A disabled constraint contributes weight 0, i.e. the term is skipped. |
-| UI | `pages/4_Configuration_Solveur.py` | Profile selector, per-constraint toggles + weight sliders, live preview, extreme-config warnings, save/reset with confirmation. |
+| UI | `ui_solver_constraints.py` (tab "Contraintes du solveur" of the single Configuration page in `app.py`) | Profile selector, per-constraint toggles + weight sliders, live preview, extreme-config warnings, save/reset with confirmation. |
 
 The four tunable soft constraints are `semester_anchor_first`,
 `semester_anchor_last`, `spacing`, `parity`. Hard constraints (C1/C4/C5) and the
@@ -336,7 +336,7 @@ preference).
 | Piece | File | Role |
 |-------|------|------|
 | Engine | `simulation_engine.py` | Pure, side-effect-free capacity/bottleneck model plus an optional real CP-SAT feasibility dry-run. Never writes to `reports/`/`outputs/`. |
-| UI | `pages/5_Simulateur_Infaisabilite.py` | Three sections: (1) exclude groups, (2) add room/time-slot capacity, (3) automatic suggestions from detected bottlenecks. |
+| UI | `pages/4_Simulateur_Infaisabilite.py` | At-a-glance summary of the latest run (feasibility, bottlenecks, unplaced students, data freshness), then: (1) automatic suggestions (auto-run on infeasibility), (2) manual group exclusion, (3) extra room/time-slot capacity. |
 
 Engine entry points:
 - `simulate_without_groups(sessions, group_ids)` — recompute bottlenecks with
@@ -370,7 +370,7 @@ delegates to them, so existing deliverables stay byte-for-byte identical.
 | Format & template manager | `export_manager.py` | Maps a `format_type` (`standard` / `enhanced` / `summary` / `detailed`) to an `ExportOptions` profile; loads `config/export_preferences.yaml`; and implements the template engine (discover / validate / render `{{TOKEN}}` placeholders). |
 | Preferences | `config/export_preferences.yaml` | Default format, default colour scheme, per-format flag overrides, templates directory. Missing/invalid -> built-in defaults. |
 | Templates | `templates/*.xlsx` | Branded workbooks with `{{TOKEN}}` placeholders. `loyola_schedule_template.xlsx` ships by default; `templates/build_loyola_template.py` regenerates it deterministically. |
-| UI | `pages/6_Exports_Avancés.py` | Read-only export console: perimeter/format/colour-scheme selectors, per-sheet and per-formatting checkboxes, data preview, generate + download, and a template renderer. |
+| UI | `ui_advanced_exports.py` (section "Exports avances" of the Export page in `app.py`) | Perimeter/format/colour-scheme selectors, per-sheet and per-formatting checkboxes, data preview, generate + download, and a template renderer — applied directly where the Excel files are generated. |
 
 ### 11.2 Formats
 

@@ -39,7 +39,7 @@ delegates straight to them so existing deliverables remain identical.
 
 ## Using it from the UI
 
-Open the **"Exports avances"** page (`pages/6_Exports_Avancés.py`) in the
+Open the **"Exports avances (classeurs enrichis)"** section at the bottom of the **Export** page in `app.py` (component `ui_advanced_exports.py`) in the
 Streamlit app. Choose a perimeter (both semesters / S1 / S2), a format, a colour
 scheme (Loyola / Default / Monochrome), tick the sheets and formatting options,
 preview the data, then **Generer le classeur** and download. The lower section
