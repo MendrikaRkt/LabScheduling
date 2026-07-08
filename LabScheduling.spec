@@ -15,6 +15,8 @@ the metadata of its key dependencies, and ship the app's own .py files and
 resource folders as data so the bundled `streamlit run app.py` can find them.
 """
 
+import os
+
 from PyInstaller.utils.hooks import (
     collect_all,
     copy_metadata,
@@ -71,8 +73,17 @@ datas += [
     ("data_quality.py", "."),
     ("kpi_report.py", "."),
     ("validation_credits.py", "."),
+    ("solver_config.py", "."),        # Phase 2 — configurable soft constraints
+    ("simulation_engine.py", "."),    # Phase 2 — infeasibility simulation
     ("VERSION.txt", "."),
 ]
+
+# Phase 2 — Streamlit multipage pages (Solver Configuration, Infeasibility
+# Simulator). Bundled next to app.py so `streamlit run app.py` discovers them.
+if os.path.isdir("pages"):
+    for _fn in os.listdir("pages"):
+        if _fn.endswith(".py"):
+            datas.append((os.path.join("pages", _fn), "pages"))
 
 # Resource folders (use a glob-friendly collect; missing folders are skipped).
 #

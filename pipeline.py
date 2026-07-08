@@ -42,6 +42,13 @@ try:
 except Exception:  # le module KPI est optionnel ; ne jamais casser l'import
     _kpi = None
 
+# Phase 2 — configurable soft-constraint weights (additive; degrades to the
+# validated defaults if the module or its YAML file is unavailable).
+try:
+    import solver_config as _solver_config
+except Exception:  # ne jamais casser l'import si le module optionnel manque
+    _solver_config = None
+
 # Étape 6.5 — Reproductibilité & réglage du solveur (centralisés)
 RANDOM_SEED = 42            # graine fixe -> résultats reproductibles d'un run à l'autre
 SOLVER_RELATIVE_GAP = 0.02  # arrêt à 2 % de l'optimum prouvé -> temps maîtrisé
@@ -3475,6 +3482,23 @@ def solve(all_groups):
     all_results = []
     SOLVER_RUNS.clear()  # Étape 6.4/6.6 — repartir d'un journal solveur propre
 
+    # Phase 2 — charger la configuration des contraintes souples (poids/activation).
+    # Rétrocompatible : à défaut de module ou de fichier valide, on retombe sur les
+    # poids historiques (first=100, last=100, spacing=200, parity=50).
+    if _solver_config is not None:
+        _constraint_cfg = _solver_config.load_config()
+        _w_first = _solver_config.get_weight(_constraint_cfg, 'semester_anchor_first', 100)
+        _w_last = _solver_config.get_weight(_constraint_cfg, 'semester_anchor_last', 100)
+        _w_gap = _solver_config.get_weight(_constraint_cfg, 'spacing', 200)
+        _w_parity = _solver_config.get_weight(_constraint_cfg, 'parity', 50)
+        _cfg_summary = _solver_config.config_summary(_constraint_cfg)
+        print(f"  [CONFIG] Contraintes souples : profil={_cfg_summary['active_profile']}, "
+              f"poids first={_w_first}, last={_w_last}, spacing={_w_gap}, parity={_w_parity}")
+    else:
+        _constraint_cfg = None
+        _w_first, _w_last, _w_gap, _w_parity = 100, 100, 200, 50
+        _cfg_summary = None
+
     for sem in sorted(set(g['semester'] for g in all_groups)):
         sem_groups = [g for g in all_groups if g['semester'] == sem]
         sem_label = f"S{sem}"
@@ -3684,23 +3708,26 @@ def solve(all_groups):
                     gap_deviations.append(dev)
 
 
+        # Poids issus de la configuration Phase 2 (défauts = valeurs historiques).
+        # Un poids nul (contrainte désactivée) => le terme est simplement ignoré,
+        # ce qui reproduit exactement l'absence de la contrainte dans l'objectif.
         objective_terms = []
-        if first_excess:
+        if first_excess and _w_first > 0:
             sum_first = model.NewIntVar(0, 10000, 'sum_first')
             model.Add(sum_first == sum(first_excess))
-            objective_terms.append((sum_first, 100))
-        if last_deficit:
+            objective_terms.append((sum_first, _w_first))
+        if last_deficit and _w_last > 0:
             sum_last = model.NewIntVar(0, 10000, 'sum_last')
             model.Add(sum_last == sum(last_deficit))
-            objective_terms.append((sum_last, 100))
-        if gap_deviations:
+            objective_terms.append((sum_last, _w_last))
+        if gap_deviations and _w_gap > 0:
             sum_gaps = model.NewIntVar(0, 10000, 'sum_gaps')
             model.Add(sum_gaps == sum(gap_deviations))
-            objective_terms.append((sum_gaps, 200))
-        if parity_penalties:
+            objective_terms.append((sum_gaps, _w_gap))
+        if parity_penalties and _w_parity > 0:
             sum_parity = model.NewIntVar(0, 100000, 'sum_parity')
             model.Add(sum_parity == sum(parity_penalties))
-            objective_terms.append((sum_parity, PARITY_PENALTY_WEIGHT))
+            objective_terms.append((sum_parity, _w_parity))
 
 
         if c4_res_penalty_terms:
@@ -3976,6 +4003,11 @@ def solve(all_groups):
                 print(f"  [FAIL] {sem_label} : infaisable (aucun groupe à retirer)")
 
     # Étape 6.6 — journaliser les stats solveur (statut, objectif, gap, temps).
+    # Phase 2 — on annexe à chaque entrée le résumé de la configuration des
+    # contraintes souples effectivement appliquée (profil + poids + activation).
+    if _cfg_summary is not None:
+        for _entry in SOLVER_RUNS:
+            _entry['constraint_config'] = _cfg_summary
     try:
         os.makedirs("reports", exist_ok=True)
         with open("reports/solver_stats.json", "w", encoding="utf-8") as fh:

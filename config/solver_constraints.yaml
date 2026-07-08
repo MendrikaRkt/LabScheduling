@@ -1,0 +1,59 @@
+# ---------------------------------------------------------------------------
+# solver_constraints.yaml — Configurable soft constraints for the CP-SAT solver
+# (Phase 2, Feature 1).
+#
+# This file tunes ONLY the soft (preference) constraints. The hard constraints
+# C1 (no time overlap), C4 (weeks >= practice credits) and C5 (no double lab on
+# same day) are always enforced and are NOT configurable here.
+#
+# If this file is missing or invalid, the app silently falls back to the
+# validated "Balanced" defaults, so behaviour is unchanged.
+#
+# Each soft constraint has:
+#   enabled : true/false  -> when false, the constraint is dropped (weight 0).
+#   weight  : integer 0..100000 -> relative importance in the objective.
+#
+# Preset profiles (see 'profiles' below) can be applied from the UI in one
+# click. 'active_profile' records the currently selected profile name
+# (or 'Custom' when weights were edited manually).
+# ---------------------------------------------------------------------------
+
+active_profile: Balanced
+
+soft_constraints:
+  # Pull each group's FIRST session towards the start of its window.
+  semester_anchor_first:
+    enabled: true
+    weight: 100
+  # Pull each group's LAST session towards the end of its window.
+  semester_anchor_last:
+    enabled: true
+    weight: 100
+  # Keep the sessions of a group evenly spaced across the semester.
+  spacing:
+    enabled: true
+    weight: 200
+  # Alternate odd/even weeks between parallel groups of the same subject.
+  parity:
+    enabled: true
+    weight: 50
+
+# ---------------------------------------------------------------------------
+# Reference preset profiles (informational; the app also embeds these).
+# ---------------------------------------------------------------------------
+profiles:
+  Strict:
+    semester_anchor_first: {enabled: true, weight: 300}
+    semester_anchor_last: {enabled: true, weight: 300}
+    spacing: {enabled: true, weight: 500}
+    parity: {enabled: true, weight: 150}
+  Balanced:
+    semester_anchor_first: {enabled: true, weight: 100}
+    semester_anchor_last: {enabled: true, weight: 100}
+    spacing: {enabled: true, weight: 200}
+    parity: {enabled: true, weight: 50}
+  Relaxed:
+    semester_anchor_first: {enabled: true, weight: 30}
+    semester_anchor_last: {enabled: true, weight: 30}
+    spacing: {enabled: false, weight: 50}
+    parity: {enabled: false, weight: 10}
