@@ -1,0 +1,95 @@
+# Final Exam Scheduling Profile
+# Hypothetical profile for university-wide final exam period planning.
+
+domain: final_exam
+entity_label: Exam
+sessions_per_entity: 1  # Each subject has exactly 1 final exam
+scheduling_weeks:
+  min: 1
+  max: 2  # Typical 2-week exam period (January or June)
+allow_repetitions: false  # No repetition - one exam only
+
+# Hard constraints (must be satisfied)
+hard_constraints:
+  - student_conflict  # C1: No student has 2 exams simultaneously
+  - room_capacity     # C4: Room must have enough seats for all enrolled students
+  - instructor_conflict  # C5: Professor can only proctor 1 exam per slot
+  - max_exams_per_day_per_student  # NEW: Maximum 2 exams per day for any student (fairness)
+  
+# Soft constraints (preferences, weighted in objective function)
+soft_constraints:
+  spacing_student_exams: 300  # Prefer at least 1 day between a student's exams
+  morning_preference: 50      # Prefer morning slots (students more alert)
+  fair_distribution: 100      # Balance exam load across days
+
+# Room assignment rules
+room_filter:
+  type: exam_rooms  # Large lecture halls suitable for proctored exams
+  min_capacity: 40  # Exams typically need larger rooms than lab groups
+  examples:
+    - "Aula Magna"
+    - "Salón de Grados"
+    - "Aula A1"
+    - "Aula B2"
+  
+capacity_mode: aggregate  # Multiple small exams can share one large room (if capacity allows)
+
+# Instructor assignment rules
+instructor_fixed: false  # Any professor can proctor (not necessarily the course instructor)
+instructor_required: true  # A proctor must always be present
+min_proctors_per_exam: 1  # At least 1 proctor required
+max_proctors_per_slot: 3  # Maximum proctoring load per professor per slot
+
+# Credit system (not applicable to exams)
+credit_label: "Exam slot"
+credit_to_sessions_multiplier: 1  # Not used (exams don't have "credits")
+
+# Excel output configuration
+output_sheets:
+  - name: "Exam Schedule"
+    description: "Master exam timetable (day, time, room, subject)"
+  - name: "Student Exam Calendar"
+    description: "Per-student exam schedule with spacing analysis"
+  - name: "Exam Conflicts"
+    description: "Report of any remaining time conflicts or capacity issues"
+  - name: "Room Utilization"
+    description: "Room usage during exam period"
+  - name: "Proctor Assignment"
+    description: "Professor proctoring schedule"
+  - name: "Validation"
+    description: "Schedule reliability report"
+
+# Data sources
+required_inputs:
+  - revisionAulario.xlsx  # Exam room availability (large lecture halls)
+  - report_AlumnosGrupos.xlsx  # Student enrollments per subject
+  - professor_availability.xlsx  # Optional: professors available to proctor
+
+# Business rules
+business_rules:
+  max_exams_per_day_per_student: 2  # Hard limit for student fairness
+  min_rest_days_between_exams: 1    # Prefer at least 1 day rest between a student's exams
+  exam_duration_hours: 2            # Standard exam duration
+  available_time_slots:
+    - "09:00-11:00"  # Morning slot 1
+    - "11:30-13:30"  # Morning slot 2
+    - "16:00-18:00"  # Afternoon slot
+  excluded_days:
+    - "Sunday"  # No exams on Sundays
+  room_setup_buffer_minutes: 30  # Time needed between exams in same room for cleanup/setup
+
+# Strategic notes
+notes: |
+  This profile demonstrates how the generic scheduling engine can be repurposed
+  for final exam planning with minimal changes. Key differences from lab practices:
+  
+  1. **One-shot scheduling**: Each exam happens exactly once (no repetitions)
+  2. **Fairness constraints**: Students should not have >2 exams/day or consecutive days
+  3. **Room aggregation**: Large rooms can host multiple small exams if capacity permits
+  4. **Flexible proctoring**: Any professor can supervise (not tied to course instructor)
+  5. **Compressed timeline**: 2-week period vs. 15-week semester
+  
+  Use cases:
+  - January exam period (end of Fall semester)
+  - June exam period (end of Spring semester)
+  - Makeup exams (September, smaller scale)

@@ -408,3 +408,189 @@ Room capacity for cell comments is a documented proxy (max students ever
 scheduled in a room) because the pipeline outputs carry no explicit capacity.
 
 See `PHASE3_EXCEL_FEATURES.md` for usage details.
+
+
+
+---
+
+## 12. Multi-Department Vision — Scheduling Platform Abstraction
+
+**Status:** Strategic proposal (Phase A) for final presentation. Proof-of-concept architecture demonstrating how the lab scheduling engine can generalize to other university planning domains.
+
+### 12.1 Strategic Motivation
+
+The current LabScheduling application solves a **specific** problem: assigning lab practice groups to time/room slots. However, the underlying constraint satisfaction engine (CP-SAT + conflict detection + room capacity + validation) implements a **general pattern**:
+
+> *Given entities (groups/exams/sessions), time slots (day × hour × room), and conflict rules, find an assignment that satisfies all hard constraints and optimizes soft preferences.*
+
+This same pattern applies to:
+- **Final exams** (one exam per subject, 2-week period, no student has >2 exams/day)
+- **Lecture hall assignment** (large courses need specific rooms, avoid professor conflicts)
+- **Office hours / consultations** (faculty availability, student booking)
+- **Other institutions** (different credit systems, room types, constraints)
+
+**Value proposition:**
+- For Loyola: Unified scheduling platform reducing tool fragmentation
+- For other universities: Adaptable to their academic structure
+- For final presentation: Demonstrates systems thinking and architectural maturity
+
+### 12.2 Four-Layer Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Layer 4: Unified UI                                    │
+│  ├─ Multi-Profile page (select Lab/Exam/Lecture/...)   │
+│  ├─ Dynamic config UI (adapts to selected profile)     │
+│  └─ Profile-specific exports                            │
+└─────────────────────────────────────────────────────────┘
+                         │
+┌─────────────────────────────────────────────────────────┐
+│  Layer 3: Domain Adapters                               │
+│  ├─ pipeline.py (lab practice adapter)                  │
+│  ├─ exam_scheduler.py (future exam adapter)             │
+│  └─ Backward compatibility wrappers                     │
+└─────────────────────────────────────────────────────────┘
+                         │
+┌─────────────────────────────────────────────────────────┐
+│  Layer 2: Profile System                                │
+│  ├─ config/scheduling_profiles/*.yaml                   │
+│  │   ├─ lab_practice.yaml (current production)          │
+│  │   ├─ final_exam.yaml (hypothetical demo)            │
+│  │   └─ Custom profiles (institution-specific)         │
+│  └─ SchedulingProfile dataclass                         │
+└─────────────────────────────────────────────────────────┘
+                         │
+┌─────────────────────────────────────────────────────────┐
+│  Layer 1: Generic Scheduling Core                       │
+│  ├─ scheduling_core.py                                  │
+│  │   ├─ solve_generic() — domain-agnostic CP-SAT       │
+│  │   ├─ Conflict detection (student/prof/room)         │
+│  │   └─ Constraint builder from profile rules          │
+│  └─ Already-generic components:                         │
+│      ├─ schedule_validation.py (structure-agnostic)     │
+│      ├─ excel_export*.py (DataFrame → workbook)         │
+│      └─ solver_config.py (soft constraint tuning)       │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 12.3 What is Generic vs. Domain-Specific
+
+| Aspect | Lab Practice (Current) | Final Exam (Hypothetical) | Abstraction |
+|--------|------------------------|---------------------------|-------------|
+| **Entity** | Practice group (students in lab component) | Exam session (all students taking final) | `SchedulableEntity` with ID, students, duration |
+| **Repetitions** | 5 sessions per group (1 P = 5 practices) | 1 exam per subject | `sessions_per_entity` (1 or N) |
+| **Time window** | 15-week semester | 2-week exam period | `scheduling_weeks` (min, max) |
+| **Room type** | Lab rooms (Ciencias Exp., Robótica) | Large lecture halls (Aula Magna) | `room_filter_type` + capacity |
+| **Spacing** | Prefer 2-week gaps between practices | No spacing (1 exam only) | Optional soft constraint |
+| **Student conflict** | No 2 labs simultaneously | No 2 exams simultaneously | **Generic** (C1) |
+| **Room conflict** | 1 room holds 1 group | 1 room can hold multiple small exams (if capacity allows) | **Generic** (C4) + `capacity_mode` |
+| **Professor role** | 1 dedicated prof per group (fixed) | Any prof can proctor (flexible) | `instructor_fixed` flag |
+| **Credit system** | 1 P credit = 5 sessions | 1 exam slot (no credits) | `credit_to_sessions_multiplier` |
+
+**Key insight:** Student conflict, room capacity, and instructor conflict are **already generic** in the current codebase. Only the *credit system*, *repetition count*, and *room assignment rules* are lab-specific.
+
+### 12.4 Profile System
+
+**Module:** `scheduling_core.py` (new, Phase A stub)  
+**Config:** `config/scheduling_profiles/*.yaml`
+
+A **SchedulingProfile** is a YAML file defining:
+```yaml
+domain: lab_practice | final_exam | lecture_hall | ...
+entity_label: Group | Exam | Course | ...
+sessions_per_entity: 5  # How many times entity is scheduled
+scheduling_weeks: {min: 1, max: 15}
+allow_repetitions: true | false
+
+hard_constraints:
+  - student_conflict
+  - room_capacity
+  - max_exams_per_day_per_student  # Domain-specific constraint
+
+soft_constraints:
+  spacing: 200
+  fair_distribution: 100
+
+room_filter: {type: lab_rooms, min_capacity: 40}
+capacity_mode: per_group | aggregate
+instructor_fixed: true | false
+output_sheets: [...]  # Which Excel sheets to generate
+```
+
+**Usage:**
+```python
+from scheduling_core import SchedulingProfile, solve_generic
+
+# Load profile
+profile = SchedulingProfile.from_yaml("config/scheduling_profiles/lab_practice.yaml")
+
+# Solve
+schedule = solve_generic(entities, time_slots, busy_slots, profile, solver_config)
+```
+
+### 12.5 Implementation Roadmap
+
+**Phase A (current, for demo):**
+- ✅ Architecture design document (`MULTI_DEPARTMENT_ABSTRACTION.md`)
+- ✅ Profile system with 2 examples (`lab_practice.yaml`, `final_exam.yaml`)
+- ✅ Stub `scheduling_core.py` (delegates to `pipeline.py` for lab profile)
+- ✅ Documentation updates (this section)
+- 📋 Visual assets (architecture diagram, comparison slides)
+
+**Phase B (post-presentation, production):**
+- Refactor `pipeline.py` to extract generic CP-SAT logic into `scheduling_core.solve_generic()`
+- Implement exam-specific constraints (`max_exams_per_day_per_student`, `spacing_student_exams`)
+- Build exam data loaders and adapters
+- Full test suite for multi-profile system
+- Multi-Profile UI page (`pages/7_Multi_Profil.py`)
+
+**Phase C (future platform features):**
+- Visual profile editor (YAML → web form)
+- Constraint marketplace (library of pre-built constraints)
+- Multi-semester planning (Labs S1 + Exams S1 + Labs S2 + Exams S2 in one pass)
+- External API for third-party integrations
+
+### 12.6 Strategic Use Cases
+
+**Use Case 1: Final Exams (January / June)**
+- **Pain point:** Manual exam scheduling → student conflicts, unfair distribution (3 exams in 1 day)
+- **Solution:** Load `final_exam.yaml`, run solver with same student enrollment data
+- **Output:** `Exam_Schedule_S1.xlsx` with no conflicts, max 2 exams/day/student
+- **Impact:** Saves ~40 hours per exam period (2× per year)
+
+**Use Case 2: Other Universities**
+- **Scenario:** Universidad de Sevilla has different credit system (1 credit = 3 sessions, not 5)
+- **Solution:** Create `config/scheduling_profiles/sevilla_lab.yaml` with their rules
+- **Impact:** Tool becomes **multi-tenant** and institutionally agnostic
+
+**Use Case 3: Multiple Departments at Loyola**
+- Engineering labs (current)
+- Business exams (new)
+- Law lecture halls (future)
+- All using the same platform with different profiles
+
+### 12.7 Backward Compatibility
+
+**Critical:** The lab scheduling engine (`pipeline.py`, `excel_export.py`, all validated sheets) continues to work unchanged. The abstraction is **purely additive**:
+
+- `pipeline.py` becomes a thin wrapper around `scheduling_core.solve_generic()` for the lab profile
+- Existing CLI/UI workflows continue to call `pipeline.solve()` (which now delegates internally)
+- No breaking changes to data formats, outputs, or APIs
+- Profile system is opt-in (discovered via `list_available_profiles()`)
+
+### 12.8 For Final Presentation
+
+**Narrative:**
+> "We started by solving lab scheduling for Loyola Engineering. But we quickly realized the underlying constraint satisfaction pattern is **universal**. The same engine that schedules lab practices can schedule final exams, lecture halls, office hours — or adapt to a different university's rules entirely. We've built not just a tool, but a **platform** for university-wide planning."
+
+**Demo:** Show side-by-side:
+1. Current Lab solver → `Distribucion_Practicas_AUTO.xlsx`
+2. Hypothetical Exam solver (mock data) → `Exam_Schedule_S1.xlsx`
+3. Same `scheduling_core` engine, different profiles
+
+**Impact statement:**
+- **For Loyola:** Unified scheduling platform (labs + exams + lectures) from 1 codebase
+- **For other institutions:** Adaptable via YAML config (no code changes)
+- **For presentation jury:** Demonstrates systems thinking beyond a single use case
+
+See `docs/MULTI_DEPARTMENT_ABSTRACTION.md` for full technical design.
