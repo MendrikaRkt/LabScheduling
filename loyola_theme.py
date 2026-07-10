@@ -15,11 +15,15 @@ _CSS = """
   --paper:#0C1626; --surface:#13203A; --surface-2:#1A2B49; --surface-3:#22335A;
   --ink:#EAF1FA; --ink-soft:#A9BBD4; --ink-mute:#6B7E9E;
   --line:#243453; --line-bright:#33486F;
-  --good:#3DD8A4; --good-bg:rgba(61,216,164,.12);
-  --warn:#F5B544; --warn-bg:rgba(245,181,68,.12);
-  --bad:#F2615A;  --bad-bg:rgba(242,97,90,.12);
+  /* Status palette aligned with the Universidad Loyola brand (blue/white).
+     No bright green or red: positive = Loyola blue, attention = gold accent,
+     problem = muted wine. Meaning is always reinforced by text labels too. */
+  --good:#2E86AB; --good-bg:rgba(46,134,171,.14);
+  --warn:#D2A24A; --warn-bg:rgba(210,162,74,.14);
+  --bad:#B26575;  --bad-bg:rgba(178,101,117,.14);
   /* Aliases so both naming conventions used across the app resolve correctly */
-  --success:#3DD8A4; --danger:#F2615A; --warning:#F5B544;
+  --success:#2E86AB; --danger:#B26575; --warning:#D2A24A;
+  --green:#2E86AB; --red:#B26575;
   --text-secondary:#A9BBD4; --text-muted:#6B7E9E; --accent:#6FAED9;
   --radius:16px; --radius-lg:20px;
   --shadow:0 8px 28px rgba(8,22,41,.45);
@@ -231,8 +235,29 @@ h1,h2,h3{font-family:var(--font-display);letter-spacing:-.02em;color:var(--ink)}
   border-radius:11px!important;font-family:var(--font-body)!important;color:var(--ink)!important;
 }
 
-/* ── ALERTS (success/warning/error) recolorés ── */
-.stAlert{border-radius:12px;border:1px solid var(--line)}
+/* ── ALERTS (success/warning/error) recolorés ──
+   Streamlit ships bright green/red alert backgrounds. To respect the Loyola
+   brand (blue/white, no jarring green/red) we neutralise the fill to a navy
+   surface and use the Loyola status palette for the left accent border. The
+   alert kind is still conveyed by the icon Streamlit draws inside. */
+.stAlert{border-radius:12px}
+.stAlert [data-testid="stAlertContainer"],
+.stAlert div[role="alert"]{
+  background:var(--surface)!important;
+  color:var(--ink)!important;
+  border:1px solid var(--line)!important;
+  border-left:4px solid var(--cyan)!important;
+}
+/* Per-kind left-border accent via the aria icon label when available. */
+.stAlert:has(svg[title="Success" i]) [data-testid="stAlertContainer"],
+.stSuccess [data-testid="stAlertContainer"]{border-left-color:var(--good)!important}
+.stAlert:has(svg[title="Warning" i]) [data-testid="stAlertContainer"],
+.stWarning [data-testid="stAlertContainer"]{border-left-color:var(--warn)!important}
+.stAlert:has(svg[title="Error" i]) [data-testid="stAlertContainer"],
+.stError [data-testid="stAlertContainer"]{border-left-color:var(--bad)!important}
+.stAlert:has(svg[title="Info" i]) [data-testid="stAlertContainer"],
+.stInfo [data-testid="stAlertContainer"]{border-left-color:var(--cyan)!important}
+.stAlert [data-testid="stAlertContainer"] *{color:var(--ink)!important}
 
 /* ── PROGRESS BAR ── */
 .stProgress>div>div>div{background:linear-gradient(90deg,var(--cyan),var(--navy))!important}

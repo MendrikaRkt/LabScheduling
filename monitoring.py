@@ -1058,8 +1058,8 @@ def render(st, helpers=None, t=None):
 # ---- sous-rendus (gardent render() lisible) --------------------------------
 
 def _badge_html(text, kind):
-    colors = {"error": "#ef4444", "warning": "#f59e0b",
-              "info": "#3b82f6", "ok": "#22c55e"}
+    colors = {"error": "#B26575", "warning": "#D2A24A",
+              "info": "#3b82f6", "ok": "#2E86AB"}
     c = colors.get(kind, "#64748b")
     return (f"<span style='display:inline-block;padding:2px 10px;border-radius:10px;"
             f"background:{c}1a;color:{c};font-size:0.8rem;font-weight:600;"

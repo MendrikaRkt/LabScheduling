@@ -724,8 +724,17 @@ def write_subject_group_professors(fp, out_path="subject_group_professors.csv"):
 
 if __name__ == "__main__":
     import sys
-    fp = sys.argv[1] if len(sys.argv) > 1 else \
-        "/home/ubuntu/Shared/Uploads/Asignacion_2025-2026_v5 - 2026-06-17 12:34:55.xlsx"
+    # Portable default: locate the Asignacion workbook via the shared resolver
+    # instead of a hard-coded developer path. Pass an explicit path as argv[1]
+    # to override.
+    if len(sys.argv) > 1:
+        fp = sys.argv[1]
+    else:
+        try:
+            from professor_credits import _find_asignacion_file
+            fp = _find_asignacion_file()
+        except Exception:
+            fp = "Asignacion_2025-2026_v5.xlsx"
     exp = expected_sessions(fp)
     print(exp.to_string())
     gmap, diags = build_group_professor_map(fp, return_diagnostics=True)

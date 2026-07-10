@@ -1557,9 +1557,6 @@ def _find_asignacion_file():
         'Asignacion_2025-2026_v5.xlsx'.replace('-', '_'),
         'data_clean/Asignacion_2025-2026_v5.xlsx',
         'data/Asignacion_2025-2026_v5.xlsx',
-        '/home/ubuntu/Uploads/Asignacion_2025-2026_v5.xlsx',
-        '/home/ubuntu/Shared/Uploads/Asignacion_2025-2026_v5.xlsx',
-        '/home/ubuntu/lab_project/Asignacion_2025-2026_v5.xlsx',
     ]
     g = globals().get('ASIGNACION_PATH')
     if g and os.path.exists(g):

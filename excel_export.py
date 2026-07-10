@@ -304,6 +304,16 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
         except Exception as exc:  # never break Excel generation
             print(f"    [WARN] Validación sheet skipped: {exc}")
 
+        # Feuille « Parameters » : traçabilité complète de la configuration
+        # réellement appliquée par le solveur pour cette exécution (additif,
+        # jamais bloquant). Point 10 : rendre visible dans l'Excel toute la
+        # configuration/contraintes actives afin de prouver le fonctionnement.
+        try:
+            import traceability_sheet
+            traceability_sheet.build_traceability_sheet(wb)
+        except Exception as exc:  # never break Excel generation
+            print(f"    [WARN] Parameters sheet skipped: {exc}")
+
         folder = os.path.join(out_base, level_config["label"], SEMESTER_FOLDER[semester])
         os.makedirs(folder, exist_ok=True)
         out_path = os.path.join(folder, level_config["file"])

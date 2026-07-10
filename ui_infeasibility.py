@@ -26,6 +26,15 @@ if _ROOT not in sys.path:
 
 import simulation_engine as se  # noqa: E402
 
+# app_paths gives the writable per-user workspace. At runtime run_app.py does
+# os.chdir(workspace), so the pipeline writes its artifacts there (relative to
+# the CWD) — NOT next to this source file. The simulator must therefore look in
+# the CWD / workspace first; the _ROOT fallback only helps in dev-from-source.
+try:
+    import app_paths as _app_paths
+except Exception:  # pragma: no cover - dev fallback
+    _app_paths = None
+
 # Optional: pull real lab rooms from the pipeline config to enrich sessions.
 try:
     import pipeline as _pipeline
@@ -39,16 +48,45 @@ except Exception:
 
 DAYS_FR = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
 
-_SESSION_CANDIDATES = [
-    os.path.join(_ROOT, "data_clean", "group_composition.csv"),
-    os.path.join(_ROOT, "group_composition.csv"),
-    os.path.join(_ROOT, "outputs", "optimization", "group_composition.csv"),
-    "/home/ubuntu/Shared/Uploads/group_composition.csv",
+_REL_CANDIDATES = [
+    os.path.join("outputs", "optimization", "group_composition.csv"),
+    os.path.join("data_clean", "group_composition.csv"),
+    "group_composition.csv",
 ]
 
 
+def _session_candidates() -> list:
+    """Build the ordered list of places to look for group_composition.csv.
+
+    Order matters: the pipeline writes into the CWD (workspace) at runtime, so
+    CWD-relative and app_paths.workspace paths come first; the source-tree
+    (_ROOT) paths are dev-from-source fallbacks only.
+    """
+    cands = []
+    # 1) CWD-relative (this is where the running pipeline writes after chdir).
+    for rel in _REL_CANDIDATES:
+        cands.append(os.path.abspath(rel))
+    # 2) Explicit workspace path via app_paths (robust when CWD is elsewhere).
+    if _app_paths is not None:
+        for rel in _REL_CANDIDATES:
+            try:
+                cands.append(_app_paths.workspace_path(rel))
+            except Exception:
+                pass
+    # 3) Source-tree fallback (dev-from-source only).
+    for rel in _REL_CANDIDATES:
+        cands.append(os.path.join(_ROOT, rel))
+    # De-duplicate while preserving order.
+    seen, ordered = set(), []
+    for p in cands:
+        if p not in seen:
+            seen.add(p)
+            ordered.append(p)
+    return ordered
+
+
 def _find_sessions_source() -> str:
-    for path in _SESSION_CANDIDATES:
+    for path in _session_candidates():
         if os.path.exists(path):
             return path
     return ""
@@ -97,7 +135,8 @@ def _render_diff(result: dict) -> None:
 
 def render() -> None:
     """Render the infeasibility simulator inside the main app navigation."""
-    st.title("Simulateur d'infaisabilite (analyse What-If)")
+    # NOTE: the page title is already rendered by app.py via page_header();
+    # we intentionally do not repeat it here to avoid a duplicate heading.
     st.info(
         "Cet outil est en LECTURE SEULE. Aucune donnee d'optimisation reelle "
         "n'est modifiee. Les resultats sont des estimations basees sur le modele "
