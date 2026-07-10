@@ -36,20 +36,46 @@ from lab_constants import CREDIT_TO_SESSIONS  # noqa: F401
 DEFAULT_FP = "Asignacion_2025-2026_v5.xlsx"
 
 def _find_asignacion_file():
-    """Localise le fichier Asignacion avec plusieurs chemins possibles."""
+    """Localise le fichier Asignacion en restant portable (aucun chemin machine).
+
+    Ordre de recherche :
+      1) noms usuels resolus via app_paths (workspace + ressources embarquees) ;
+      2) chemins relatifs bruts (repertoire de travail courant) ;
+      3) recherche recursive limitee au workspace et au CWD (jamais /home).
+    """
     candidates = [
         DEFAULT_FP,
-        '/home/ubuntu/Uploads/Asignacion_2025-2026_v5.xlsx',
-        '/home/ubuntu/Shared/Uploads/Asignacion_2025-2026_v5.xlsx',
-        '/home/ubuntu/lab_project/Asignacion_2025-2026_v5.xlsx',
         'data/Asignacion_2025-2026_v5.xlsx',
         'data_clean/Asignacion_2025-2026_v5.xlsx',
     ]
+    # 1) via app_paths (portable : workspace puis ressources embarquees)
+    try:
+        import app_paths as _ap
+        for rel in candidates:
+            r = _ap.resolve_existing(rel)
+            if r and os.path.exists(r):
+                return r
+    except Exception:
+        pass
+    # 2) chemins relatifs bruts
     for path in candidates:
         if os.path.exists(path):
             return path
-    # Recherche récursive en dernier recours
-    for root_dir in ['/home/ubuntu', os.getcwd()]:
+    # 3) recherche recursive bornee (workspace + CWD uniquement)
+    search_roots = []
+    try:
+        import app_paths as _ap2
+        ws = getattr(_ap2, 'WORKSPACE', None) or _ap2.workspace_path()
+        ws = os.path.dirname(ws) if os.path.splitext(str(ws))[1] else str(ws)
+        search_roots.append(ws)
+    except Exception:
+        pass
+    search_roots.append(os.getcwd())
+    seen = set()
+    for root_dir in search_roots:
+        if not root_dir or root_dir in seen or not os.path.isdir(root_dir):
+            continue
+        seen.add(root_dir)
         for dirpath, _, files in os.walk(root_dir):
             for f in files:
                 if f.lower().startswith('asignacion') and f.endswith('.xlsx'):

@@ -180,6 +180,7 @@ LANGS = {
         'nav_config': 'Configuración',
         'nav_optimize': 'Optimizar',
         'nav_results': 'Resultados',
+        'nav_analytics': 'Estadísticas',
         'nav_dashboard': 'Fiabilidad',
         'nav_integrity': 'Integridad',
         'nav_monitoring': 'Monitoreo',
@@ -314,6 +315,7 @@ LANGS = {
         'nav_config': 'Configuration',
         'nav_optimize': 'Optimize',
         'nav_results': 'Results',
+        'nav_analytics': 'Statistics',
         'nav_dashboard': 'Reliability',
         'nav_integrity': 'Integrity',
         'nav_monitoring': 'Monitoring',
@@ -440,6 +442,7 @@ LANGS = {
         'nav_config': 'Configuration',
         'nav_optimize': 'Optimiser',
         'nav_results': 'Résultats',
+        'nav_analytics': 'Statistiques',
         'nav_dashboard': 'Fiabilité',
         'nav_integrity': 'Intégrité',
         'nav_monitoring': 'Supervision',
@@ -655,7 +658,7 @@ with st.sidebar:
     # Navigation
     nav_options = [
         t('nav_home'), t('nav_data'), t('nav_config'), t('nav_optimize'),
-        t('nav_results'), t('nav_dashboard'), t('nav_integrity'), t('nav_monitoring'), t('nav_history'), t('nav_edit'), t('nav_groups'), t('nav_compare'), t('nav_export'),
+        t('nav_results'), t('nav_analytics'), t('nav_history'), t('nav_edit'), t('nav_groups'), t('nav_compare'), t('nav_export'),
         t('nav_student'), t('nav_simulateur'), t('nav_updates')
     ]
 
@@ -668,9 +671,11 @@ with st.sidebar:
             'config': t('nav_config'),
             'optimize': t('nav_optimize'),
             'results': t('nav_results'),
-            'dashboard': t('nav_dashboard'),
-            'integrity': t('nav_integrity'),
-            'monitoring': t('nav_monitoring'),
+            'analytics': t('nav_analytics'),
+            # Legacy targets now redirect to the consolidated Statistics page.
+            'dashboard': t('nav_analytics'),
+            'integrity': t('nav_analytics'),
+            'monitoring': t('nav_analytics'),
             'history': t('nav_history'),
             'edit': t('nav_edit'),
             'groups': t('nav_groups'),
@@ -1222,6 +1227,1187 @@ def wizard_nav(prev_label=None, next_label=None, prev_page=None, next_page=None,
                     st.rerun()  # apply navigation immediately (single click)
 
     return prev_clicked, next_clicked
+
+
+# ============================================================
+# Consolidated statistics renderers (Reliability / Integrity /
+# Monitoring). Defined as functions so a single "Statistics" page
+# can present them as tabs. Bodies preserved from the original
+# standalone pages (Points 6/7/9: merge overlapping pages).
+# ============================================================
+def _page_reliability():
+    page_header(
+        "Reliability dashboard",
+        "Quantitative metrics to validate the quality of the generated plan."
+    )
+
+    if not run_ok:
+        st.warning("**Pipeline not executed** — please run the optimization first.")
+        if st.button("← Go to Optimize", type="primary"):
+            st.session_state['_nav_to'] = 'optimize'
+            st.rerun()
+        st.stop()
+
+    # Load metrics module + data
+    try:
+        import reliability_metrics as rm
+        schedule_df = pd.read_csv('outputs/optimization/optimized_schedule_v5.csv')
+        groups_df = pd.read_csv('outputs/optimization/group_composition.csv')
+    except Exception as e:
+        safe_error("Unable to load the data", e)
+        st.stop()
+
+    with st.spinner("Computing metrics…"):
+        metrics = rm.compute_all_metrics(schedule_df, groups_df)
+
+    # ───────────────────────────────────────────────────────
+    # 1. HEALTH SCORE — top-of-page summary
+    # ───────────────────────────────────────────────────────
+    health = metrics['health']
+    score = health['score']
+    verdict = health['verdict']
+    issues = health['issues']
+
+    # Color coding — Loyola-aligned palette (no bright green/red).
+    if score >= 90:
+        score_color = "#2E86AB"   # Loyola blue (positive)
+        score_bg = "rgba(46, 134, 171, 0.08)"
+        verdict_emoji = ""
+    elif score >= 70:
+        score_color = "#D2A24A"   # gold accent (attention)
+        score_bg = "rgba(210, 162, 74, 0.08)"
+        verdict_emoji = ""
+    else:
+        score_color = "#B26575"   # muted wine (problem)
+        score_bg = "rgba(178, 101, 117, 0.08)"
+        verdict_emoji = ""
+
+    col_score, col_verdict = st.columns([1, 2])
+    with col_score:
+        st.markdown(f"""
+            <div style="
+                background: {score_bg};
+                border: 2px solid {score_color};
+                border-radius: 16px;
+                padding: 2rem 1rem;
+                text-align: center;
+            ">
+                <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">
+                    Overall score
+                </div>
+                <div style="font-size: 4rem; font-weight: 700; color: {score_color}; line-height: 1; margin: 0.5rem 0;">
+                    {score}
+                </div>
+                <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                    out of 100
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    with col_verdict:
+        st.markdown(f"""
+            <div style="padding: 1.5rem 2rem; height: 100%;">
+                <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-heading); margin-bottom: 0.5rem;">
+                    {verdict_emoji} {verdict}
+                </div>
+                <div style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">
+                    Score based on 7 dimensions: assignment, conflicts, distribution,
+                    room occupancy, student overload, spacing, and alignment
+                    with the reference.
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    if issues:
+        with st.expander(f"{len(issues)} item(s) requiring attention", expanded=False):
+            for issue in issues:
+                st.warning(issue)
+
+    st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+
+    # ───────────────────────────────────────────────────────
+    # 2. ESSENTIAL METRICS — always visible
+    # ───────────────────────────────────────────────────────
+    section_header("Key metrics")
+
+    a = metrics['assignment']
+    c = metrics['conflicts']
+
+    em_col1, em_col2, em_col3, em_col4 = st.columns(4)
+    with em_col1:
+        rate = a.get('assignment_rate', 0)
+        rate_color = "#2E86AB" if rate >= 95 else "#D2A24A" if rate >= 85 else "#B26575"
+        st.markdown(f"""
+            <div class="stat-card">
+                <div class="stat-label">Assignment rate</div>
+                <div class="stat-value" style="color: {rate_color};">{rate:.1f}%</div>
+                <div class="stat-desc">{a.get('assigned_students', 0)} / {a.get('total_students', 0)} enrolments (student × subject)</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with em_col2:
+        n_c1 = c.get('c1_violations', 0)
+        n_c4 = c.get('c4_violations', 0)
+        n_c5 = c.get('c5_violations', 0)
+        n_stud = c.get('student_conflicts', 0)
+        n_conf = n_c1 + n_c4 + n_c5 + n_stud
+        conf_color = "#2E86AB" if n_conf == 0 else "#B26575"
+        st.markdown(f"""
+            <div class="stat-card">
+                <div class="stat-label">Conflicts detected</div>
+                <div class="stat-value" style="color: {conf_color};">{n_conf}</div>
+                <div class="stat-desc">C1: {n_c1} · C4: {n_c4} · C5: {n_c5} · Stu: {n_stud}</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with em_col3:
+        n_overflow = a.get('overflow_groups', 0)
+        n_alt = a.get('alt_room_groups', 0)
+        n_excep = n_overflow + n_alt
+        excep_color = "#2E86AB" if n_excep == 0 else "#D2A24A"
+        st.markdown(f"""
+            <div class="stat-card">
+                <div class="stat-label">Exceptional groups</div>
+                <div class="stat-value" style="color: {excep_color};">{n_excep}</div>
+                <div class="stat-desc">{n_overflow} overflow · {n_alt} alt. room</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with em_col4:
+        st.markdown(f"""
+            <div class="stat-card">
+                <div class="stat-label">Total sessions</div>
+                <div class="stat-value">{a.get('total_sessions', 0)}</div>
+                <div class="stat-desc">{a.get('total_groups', 0)} groupes</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # Conflicts detail
+    if n_conf > 0:
+        st.error(f"**{n_conf} conflict(s) detected.** See details below.")
+        with st.expander("Conflict details", expanded=True):
+            if c.get('examples_c1'):
+                st.markdown(f"**C1 (subject + slot duplicated) — {n_c1} case(s)**")
+                _c1 = "\n".join(
+                    f"- {ex.get('subject', '?')} — "
+                    f"S{ex.get('semester', '?')} W{ex.get('week', '?')} "
+                    f"{ex.get('day', '?')} {ex.get('time_block', '?')} "
+                    f"({ex.get('count', 0)} sessions)"
+                    for ex in c['examples_c1'][:10]
+                )
+                st.markdown(_c1)
+            if c.get('examples_c4'):
+                st.markdown(f"**C4 (room + slot duplicated) — {n_c4} case(s)**")
+                _c4 = "\n".join(
+                    f"- {ex.get('room', '?')} — "
+                    f"S{ex.get('semester', '?')} W{ex.get('week', '?')} "
+                    f"{ex.get('day', '?')} {ex.get('time_block', '?')} "
+                    f"({ex.get('count', 0)} sessions)"
+                    for ex in c['examples_c4'][:10]
+                )
+                st.markdown(_c4)
+            if c.get('examples_c5'):
+                st.markdown(f"**C5 (sessions out of chronological order) — {n_c5} case(s)**")
+                _c5 = "\n".join(
+                    f"- {ex.get('subject', '?')} G{ex.get('grupo', '?')} — "
+                    f"S{ex.get('semester', '?')} "
+                    f"sessions {ex.get('sessions', [])} → weeks {ex.get('weeks', [])}"
+                    for ex in c['examples_c5'][:10]
+                )
+                st.markdown(_c5)
+            if n_stud > 0:
+                st.markdown(f"**Duplicate students — {n_stud} case(s) detected**")
+                st.caption("See the Individual case page to identify the students concerned.")
+    else:
+        st.success("**No conflicts detected.** The plan satisfies all hard constraints.")
+
+    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+
+    # ───────────────────────────────────────────────────────
+    # 3. QUALITY METRICS — expandable sections
+    # ───────────────────────────────────────────────────────
+    section_header("Quality metrics")
+
+    qual_tab1, qual_tab2, qual_tab3, qual_tab4 = st.tabs([
+        "Distribution", "Rooms", "Student overload", "Spacing"
+    ])
+
+    # ---- TAB: Distribution ----
+    with qual_tab1:
+        d = metrics['distribution']
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("**Distribution by day of week**")
+            by_day = d.get('by_day', {})
+            if by_day:
+                day_df = pd.DataFrame([
+                    {'Day': day, 'Sessions': by_day[day]}
+                    for day in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+                    if day in by_day
+                ])
+                st.bar_chart(day_df.set_index('Day'))
+
+                # Detect bottleneck
+                avg = sum(by_day.values()) / len(by_day) if by_day else 0
+                max_day = max(by_day.items(), key=lambda x: x[1]) if by_day else (None, 0)
+                if max_day[1] > avg * 1.5:
+                    st.warning(f"Bottleneck detected: {max_day[0]} concentrates {max_day[1]} sessions "
+                               f"(average {avg:.0f})")
+                else:
+                    st.success("Balanced distribution across days")
+
+        with col_b:
+            st.markdown("**Distribution par bloc horaire**")
+            by_block = d.get('by_block', {})
+            if by_block:
+                block_df = pd.DataFrame([
+                    {'Bloc': block, 'Sessions': count}
+                    for block, count in sorted(by_block.items())
+                ])
+                st.bar_chart(block_df.set_index('Bloc'))
+
+        st.markdown("**Distribution by week**")
+        by_week = d.get('by_week', {})
+        if by_week:
+            week_df = pd.DataFrame([
+                {'Week': f"W{int(str(w).split('-')[-1].lstrip('WS')):02d}", 'Sessions': count}
+                for w, count in sorted(by_week.items())
+            ])
+            st.bar_chart(week_df.set_index('Week'))
+
+    # ---- TAB: Room occupancy ----
+    with qual_tab2:
+        rooms = metrics['room_occupancy']
+        if rooms:
+            st.markdown("**Room load** (% occupation of available slots)")
+
+            room_data = []
+            for r in rooms:
+                util = r.get('occupancy_pct', 0)
+                if util >= 80:
+                    status = "Saturated"
+                elif util >= 60:
+                    status = "High"
+                elif util >= 30:
+                    status = "Moderate"
+                else:
+                    status = "Low"
+                room_data.append({
+                    'Room':          r.get('room', '?'),
+                    'Semester':      f"S{r.get('semester', '?')}",
+                    'Occupation':    f"{util:.1f}%",
+                    'Sessions':      r.get('sessions_used', 0),
+                    'Available slots': r.get('slots_available', 0),
+                    'Statut':        status,
+                })
+
+            st.dataframe(
+                pd.DataFrame(room_data),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            saturated = [r for r in rooms if r.get('status') == 'critical']
+            if saturated:
+                st.warning(f"{len(saturated)} saturated room(s): "
+                           f"{', '.join(r['room'] for r in saturated)}")
+            else:
+                st.success("No saturated rooms — capacity headroom available")
+        else:
+            st.info("No room data available.")
+
+    # ---- TAB: Student overload ----
+    with qual_tab3:
+        ov = metrics['overload']
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            n_overloaded = ov.get('overloaded_count', 0)
+            color = "#2E86AB" if n_overloaded == 0 else "#D2A24A"
+            st.markdown(f"""
+                <div class="stat-card">
+                    <div class="stat-label">Overloaded students</div>
+                    <div class="stat-value" style="color: {color};">{n_overloaded}</div>
+                    <div class="stat-desc">> 3 labs same week</div>
+                </div>
+            """, unsafe_allow_html=True)
+        with col_b:
+            st.markdown(f"""
+                <div class="stat-card">
+                    <div class="stat-label">Max peak observed</div>
+                    <div class="stat-value">{ov.get('max_labs_observed', 0)}</div>
+                    <div class="stat-desc">labs/week (1 student)</div>
+                </div>
+            """, unsafe_allow_html=True)
+        with col_c:
+            avg_grp_size = a.get('avg_group_size', 0)
+            st.markdown(f"""
+                <div class="stat-card">
+                    <div class="stat-label">Taille moyenne groupe</div>
+                    <div class="stat-value">{avg_grp_size:.1f}</div>
+                    <div class="stat-desc">students per group</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+
+        if ov.get('overloaded_count', 0) > 0 and ov.get('examples'):
+            st.markdown(f"**Top {len(ov['examples'])} cas de surcharge**")
+            top_data = []
+            for entry in ov['examples'][:10]:
+                top_data.append({
+                    'Student':     entry.get('student', '?'),
+                    'Semester':     f"S{entry.get('semester', '?')}",
+                    'Week':      f"W{entry.get('week', '?')}",
+                    'Labs this week': entry.get('count', 0),
+                })
+            st.dataframe(pd.DataFrame(top_data), use_container_width=True, hide_index=True)
+        elif n_overloaded == 0:
+            st.success("No student has more than 3 labs in the same week")
+
+    # ---- TAB: Spacing ----
+    with qual_tab4:
+        sp = metrics['spacing']
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            pct_well = sp.get('well_spaced_groups_pct', 0)
+            color = "#2E86AB" if pct_well >= 80 else "#D2A24A" if pct_well >= 60 else "#B26575"
+            st.markdown(f"""
+                <div class="stat-card">
+                    <div class="stat-label">Well-spaced groups</div>
+                    <div class="stat-value" style="color: {color};">{pct_well:.0f}%</div>
+                    <div class="stat-desc">P1=W4, Pn=Wmax, regular spacing</div>
+                </div>
+            """, unsafe_allow_html=True)
+        with col_b:
+            st.markdown(f"""
+                <div class="stat-card">
+                    <div class="stat-label">Avg P1 offset</div>
+                    <div class="stat-value">{sp.get('avg_first_excess', 0):.1f}</div>
+                    <div class="stat-desc">weeks after min_week</div>
+                </div>
+            """, unsafe_allow_html=True)
+        with col_c:
+            st.markdown(f"""
+                <div class="stat-card">
+                    <div class="stat-label">Avg Pn offset</div>
+                    <div class="stat-value">{sp.get('avg_last_deficit', 0):.1f}</div>
+                    <div class="stat-desc">semaines avant max_week</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+
+        st.markdown("**Detailed indicators**")
+        st.markdown(f"""
+            - **Average P1 offset**: {sp.get('avg_first_excess', 0):.2f} weeks after `min_week`
+              (ideal: 0)
+            - **Average Pn offset**: {sp.get('avg_last_deficit', 0):.2f} weeks before `max_week`
+              (ideal: 0)
+            - **Average gap deviation**: {sp.get('avg_gap_deviation', 0):.2f} weeks
+              vs the ideal gap (ideal: 0)
+            - **Perfectly spaced groups**: {pct_well:.0f}% of total
+        """)
+
+    st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+
+    # ───────────────────────────────────────────────────────
+    # 4. SUBJECT COVERAGE — comparison vs Daniel reference
+    # ───────────────────────────────────────────────────────
+    section_header("Coverage by subject")
+
+    cov = metrics['coverage']
+    if cov:
+        cov_data = []
+        for entry in cov:
+            ref_students = entry.get('ref_students')
+            deviation_pct = entry.get('deviation_pct')
+            status = entry.get('status', 'ok')
+            status_icon = {
+                'ok': 'OK',
+                'warning': 'Moderate gap',
+                'critical': 'Large gap',
+            }.get(status, status)
+
+            cov_data.append({
+                'Subject':          entry.get('subject', '?'),
+                'Sem.':             f"S{entry.get('semester', '?')}",
+                'Students':        entry.get('students', 0),
+                'Groups':           entry.get('groups', 0),
+                'Sessions':         entry.get('sessions', 0),
+                'Daniel ref (stu.)': ref_students if ref_students is not None else '—',
+                'Deviation':        f"{deviation_pct:+.1f}%" if deviation_pct is not None else '—',
+                'Status':           status_icon,
+            })
+        st.dataframe(pd.DataFrame(cov_data), use_container_width=True, hide_index=True)
+
+        # Highlight problematic subjects
+        problematic = [c for c in cov if c.get('status') == 'critical']
+        if problematic:
+            with st.expander(f"{len(problematic)} subject(s) with >30% deviation vs Daniel"):
+                for p in problematic:
+                    dev = p.get('deviation_pct', 0)
+                    st.write(f"- **{p.get('subject', '?')}** : {dev:+.1f}% "
+                             f"({p.get('students', 0)} actual vs {p.get('ref_students', '?')} reference)")
+        elif any(c.get('status') == 'warning' for c in cov):
+            n_warn = sum(1 for c in cov if c.get('status') == 'warning')
+            st.info(f"{n_warn} subject(s) with moderate gap (15-30%) — to monitor but acceptable")
+        else:
+            st.success("All subjects are aligned with Daniel's reference")
+
+    st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+
+    # ───────────────────────────────────────────────────────
+    # 5. EXPORT
+    # ───────────────────────────────────────────────────────
+    section_header("Export the report")
+
+    col_e1, col_e2 = st.columns(2)
+    with col_e1:
+        # JSON export
+        import json as json_module
+        # Convert metrics to JSON-safe format
+        def make_json_safe(obj):
+            if isinstance(obj, dict):
+                return {k: make_json_safe(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [make_json_safe(x) for x in obj]
+            elif hasattr(obj, 'item'):  # numpy scalar
+                return obj.item()
+            elif pd.isna(obj) if not isinstance(obj, (list, dict, set)) else False:
+                return None
+            else:
+                return obj
+        try:
+            json_str = json_module.dumps(make_json_safe(metrics), indent=2, ensure_ascii=False)
+            st.download_button(
+                "Download metrics (JSON)",
+                data=json_str.encode('utf-8'),
+                file_name=f"reliability_metrics_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                mime="application/json",
+                use_container_width=True,
+            )
+        except Exception as ex:
+            st.error(f"JSON export error: {ex}")
+
+    with col_e2:
+        # Plain-text summary for sharing
+        text_lines = [
+            "RELIABILITY REPORT — SCHEDULING PLAN",
+            "=" * 60,
+            f"Date : {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            "",
+            f"OVERALL SCORE: {score}/100 ({verdict})",
+            "",
+            "KEY METRICS",
+            f"  - Assignment rate: {a.get('assignment_rate', 0):.1f}%",
+            f"  - Assigned students: {a.get('assigned_students', 0)} / {a.get('total_students', 0)}",
+            f"  - Total sessions: {a.get('total_sessions', 0)}",
+            f"  - Groups formed: {a.get('total_groups', 0)}",
+            f"  - Conflicts detected: {n_conf}",
+            f"  - Overflow groups: {n_overflow}",
+            f"  - Alt. room groups: {n_alt}",
+            "",
+        ]
+        if issues:
+            text_lines.append("POINTS D'ATTENTION")
+            for issue in issues:
+                text_lines.append(f"  - {issue}")
+            text_lines.append("")
+
+        text_lines.append("=" * 60)
+        text_summary = "\n".join(text_lines)
+
+        st.download_button(
+            "Download summary (TXT)",
+            data=text_summary.encode('utf-8'),
+            file_name=f"reliability_report_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+            mime="text/plain",
+            use_container_width=True,
+        )
+
+    # Wizard navigation
+    wizard_nav(
+        prev_label="Results", prev_page='results',
+        next_label="History", next_page='history',
+    )
+
+
+
+def _page_integrity():
+    page_header(
+        "Flow integrity",
+        "Live verification that the generated schedule respects every rule: "
+        "students free, rooms free, professors eligible, reservations honoured."
+    )
+
+    if not run_ok:
+        st.warning("**Pipeline not executed** — please run the optimization first.")
+        if st.button("← Go to Optimize", type="primary", key="integ_go_opt"):
+            st.session_state['_nav_to'] = 'optimize'
+            st.rerun()
+        st.stop()
+
+    def _rp(rel):
+        if PATHS_OK:
+            found = app_paths.resolve_existing(rel)
+            if found:
+                return found
+        return rel
+
+    def _safe_csv(rel):
+        import os as _os
+        # Try the given path, then a common folder TYPO ('optimizarion'), then a
+        # recursive search by filename — so a misplaced file is still found
+        # instead of showing N/A.
+        cands = [rel]
+        if 'optimization/' in rel:
+            cands.append(rel.replace('optimization/', 'optimizarion/'))
+        seen = []
+        for c in cands:
+            seen.append(_rp(c))
+        # recursive fallback by basename within the workspace
+        try:
+            base = _os.path.basename(rel)
+            ws = getattr(app_paths, 'WORKSPACE', None) if PATHS_OK else None
+            if ws is None and PATHS_OK:
+                ws = app_paths.workspace_path()
+                ws = _os.path.dirname(ws) if _os.path.splitext(str(ws))[1] else str(ws)
+            if ws:
+                for root, _d, files in _os.walk(str(ws)):
+                    if base in files:
+                        seen.append(_os.path.join(root, base))
+        except Exception:
+            pass
+        for pth in seen:
+            try:
+                if pth and _os.path.exists(pth):
+                    return pd.read_csv(pth)
+            except Exception:
+                continue
+        return None
+
+    sched = _safe_csv('outputs/optimization/optimized_schedule_v5.csv')
+    comp = _safe_csv('outputs/optimization/group_composition.csv')
+    blocked = _safe_csv('outputs/optimization/blocked_slots.csv')
+    busy = _safe_csv('data_clean/optimization/student_busy.csv')
+    profs = _safe_csv('data_clean/optimization/subject_professors.csv')
+    pbusy = _safe_csv('data_clean/optimization/professor_busy.csv')
+
+    if sched is None or comp is None:
+        safe_error("Unable to load the generated schedule "
+                   "(optimized_schedule_v5.csv / group_composition.csv).", None)
+        st.stop()
+
+    from collections import defaultdict as _dd
+
+    DAY_IDS = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4}
+    BLOCK_IDS = {"08:30-10:30": 1, "10:30-12:30": 2, "12:30-14:30": 3,
+                 "15:00-17:00": 4, "17:00-19:00": 5, "19:00-21:00": 6}
+
+    sid_col = ("student_hash" if "student_hash" in comp.columns
+               else "student_name" if "student_name" in comp.columns else None)
+
+    sessions = sched.copy()
+    sessions["grupo"] = pd.to_numeric(sessions["grupo"], errors="coerce")
+    sessions = sessions.dropna(subset=["grupo"]); sessions["grupo"] = sessions["grupo"].astype(int)
+
+    # The schedule uses prefixed subject keys ("S1_Física") while
+    # group_composition uses the clean name ("Física"). Normalise both sides so
+    # the (subject, grupo) join actually matches.
+    import re as _re
+    def _subj_key(name):
+        return _re.sub(r'^S[12]_', '', str(name)).strip().lower()
+
+    grp_students = _dd(set)
+    student_filiere = {}   # student id -> filière (titulacion), for traced examples
+    if sid_col:
+        # Skip manual-override placements: those are deliberate human-in-the-loop
+        # decisions Daniel has already arbitrated, exactly as the pipeline's own
+        # student-conflict check does. Counting them would flag accepted clashes.
+        _has_ov = "is_override" in comp.columns
+        _fil_col = ("titulacion" if "titulacion" in comp.columns
+                    else "program" if "program" in comp.columns else None)
+        for _, r in comp.iterrows():
+            if str(r.get("grupo", "")).strip() in ("", "nan"):
+                continue
+            if _fil_col and r[sid_col] not in student_filiere:
+                _fv = str(r.get(_fil_col, "") or "").strip()
+                if _fv and not _fv.upper().startswith(("MIXED", "OVERFLOW")):
+                    student_filiere[r[sid_col]] = _fv
+            if _has_ov and bool(r.get("is_override", False)):
+                continue
+            grp_students[(_subj_key(r["subject"]), int(r["grupo"]))].add(r[sid_col])
+
+    # Build per-student lab slots
+    student_slot = _dd(list)
+    for _, s in sessions.iterrows():
+        key = (_subj_key(s["subject"]), int(s["grupo"]))
+        for st_ in grp_students.get(key, ()):
+            student_slot[st_].append((int(s["week"]), str(s["day"]), str(s["time_block"]),
+                                      str(s["subject"]), int(s["grupo"])))
+
+    results = []   # (status, title, detail)  status in {pass, info, skip, fail}
+
+    # 1. student-free
+    clash = 0
+    for st_, slots in student_slot.items():
+        seen = {}
+        for (w, d, b, subj, g) in slots:
+            k = (w, d, b)
+            if k in seen and seen[k] != (subj, g):
+                clash += 1
+            seen[k] = (subj, g)
+    results.append(("pass" if clash == 0 else "fail",
+                    "Students never double-booked",
+                    "No student has two lab sessions at the same week/day/block."
+                    if clash == 0 else f"{clash} clash(es) found."))
+
+    # 2. student-vs-class. The anonymised build keys composition by hash while
+    # student_busy uses raw ids — but student_directory.csv maps id<->hash, so we
+    # translate student_busy to hashes and check WITHOUT exposing real names.
+    directory = _safe_csv('outputs/optimization/student_directory.csv')
+    if busy is not None and sid_col:
+        bcol = busy.columns
+        sidc = "student_id" if "student_id" in bcol else ("student_hash" if "student_hash" in bcol else bcol[0])
+        # id -> composition identifier (name or hash) bridge via student_directory
+        id_map = {}
+        if directory is not None and "student_id" in directory.columns and sid_col in directory.columns:
+            id_map = {str(r["student_id"]): str(r[sid_col]) for _, r in directory.iterrows()}
+        busy_slots = _dd(set)
+        for _, r in busy.iterrows():
+            raw = str(r[sidc])
+            key = raw if sid_col == sidc else id_map.get(raw, raw)
+            di = int(r["day_idx"]) if "day_idx" in bcol else DAY_IDS.get(str(r.get("day", "")), -1)
+            bi = int(r["block_id"]) if "block_id" in bcol else BLOCK_IDS.get(str(r.get("block", "")), -1)
+            busy_slots[key].add((di, bi))
+        comp_ids = set(str(x) for x in comp[sid_col])
+        if busy_slots and (set(busy_slots) & comp_ids):
+            # student_busy is the WEEKLY RECURRING class pattern (day+block, no
+            # week); labs are week-specific. A day/block coincidence is therefore
+            # not necessarily a conflict, and we can't resolve it from a
+            # week-agnostic map. Report as INFO; the pipeline enforces the real
+            # week-aware no-overlap at group formation.
+            coincide = 0
+            for st_, slots in student_slot.items():
+                for (w, d, b, subj, g) in slots:
+                    if (DAY_IDS.get(d, -1), BLOCK_IDS.get(b, -1)) in busy_slots.get(str(st_), ()):
+                        coincide += 1
+            results.append(("info", "Lab vs class slot",
+                            f"{coincide} lab/day-block coincidence(s) with the recurring class "
+                            f"pattern — not necessarily conflicts (student_busy is week-agnostic; "
+                            f"the pipeline enforces week-aware no-overlap at group formation)."))
+        else:
+            results.append(("skip", "Lab vs class slot",
+                            "Could not align student_busy with the schedule "
+                            "(student_directory.csv missing or ids don't match)."))
+    else:
+        results.append(("skip", "Lab vs class slot",
+                        "student_busy.csv not available in this build."))
+
+    # 3. room-free (per semester)
+    room_slot = _dd(int)
+    for _, s in sessions.iterrows():
+        for room in str(s["lab_rooms"]).split(","):
+            room = room.strip()
+            if room:
+                room_slot[(room, int(s["semester"]), int(s["week"]),
+                           str(s["day"]), str(s["time_block"]))] += 1
+    c4 = [k for k, n in room_slot.items() if n > 1]
+    results.append(("pass" if not c4 else "fail",
+                    "Rooms never double-booked (per semester)",
+                    "No room hosts two sessions in the same semester/week/day/block."
+                    if not c4 else f"{len(c4)} conflict(s); e.g. " +
+                    "; ".join(f"{r} S{sem} W{w} {d} {b}" for (r, sem, w, d, b) in c4[:3])))
+
+    # 4a + 4b professors
+    if profs is not None:
+        elig = {str(r["subject"]): [n.strip() for n in str(r["professors"]).split(";") if n.strip()]
+                for _, r in profs.iterrows()}
+        def _names_for(subj):
+            if subj in elig: return elig[subj]
+            base = subj.split("_", 1)[-1]
+            for k, v in elig.items():
+                if k.split("_", 1)[-1] == base: return v
+            return []
+        no_elig = [str(s["subject"]) for _, s in sessions.iterrows() if not _names_for(str(s["subject"]))]
+        results.append(("pass" if not no_elig else "fail",
+                        "Every session has an eligible professor",
+                        "Each lab subject has at least one qualified professor."
+                        if not no_elig else f"Missing for: {sorted(set(no_elig))[:5]}"))
+        # 4b informational
+        pbset = _dd(set)
+        if pbusy is not None:
+            pc = pbusy.columns; pidc = "professor_id" if "professor_id" in pc else pc[0]
+            for _, r in pbusy.iterrows():
+                di = int(r["day_idx"]) if "day_idx" in pc else -1
+                bi = int(r["block_id"]) if "block_id" in pc else -1
+                pbset[str(r[pidc])].add((di, bi))
+        all_names = {n for names in elig.values() for n in names}
+        if pbset and len(set(pbset) & all_names) >= max(3, 0.3 * len(all_names)):
+            nf = 0
+            for _, s in sessions.iterrows():
+                names = _names_for(str(s["subject"]))
+                if names and all((DAY_IDS.get(str(s["day"]), -1), BLOCK_IDS.get(str(s["time_block"]), -1))
+                                 in pbset.get(n, set()) for n in names):
+                    nf += 1
+            results.append(("info", "Professor availability",
+                            f"{nf} session(s) where every eligible professor is also marked busy — "
+                            "expected when the eligible professor is the one running the lab. "
+                            "The pipeline already removes genuinely-busy slots at group formation."))
+        else:
+            results.append(("skip", "Professor availability",
+                            "professor_busy.csv not available or identifiers don't align."))
+    else:
+        results.append(("skip", "Eligible professors",
+                        "subject_professors.csv not available in this build."))
+
+    # 5. reserved slots (soft, per semester) + 5b markers absent
+    if blocked is not None and len(blocked):
+        has_sem = "semester" in blocked.columns
+        bset = set()
+        for _, r in blocked.iterrows():
+            sem = int(r["semester"]) if has_sem else None
+            bset.add((str(r["lab_rooms"]).strip(), sem, int(r["week"]),
+                      str(r["day"]), str(r["time_block"])))
+        hits = []
+        for _, s in sessions.iterrows():
+            for room in str(s["lab_rooms"]).split(","):
+                key = (room.strip(), int(s["semester"]) if has_sem else None,
+                       int(s["week"]), str(s["day"]), str(s["time_block"]))
+                if key in bset:
+                    hits.append(f"{str(s['subject']).split('_',1)[-1]} G{int(s['grupo'])} "
+                                f"(S{int(s['semester'])} W{int(s['week'])} {s['day']} {s['time_block']})")
+        if not hits:
+            results.append(("pass", "Reserved slots clear",
+                            "No real session is placed on a reserved (e.g. Biotecnología) slot."))
+        else:
+            results.append(("info", "Reserved-slot avoidance (soft)",
+                            f"{len(hits)} residual session(s) on reserved slots — the unavoidable "
+                            f"minimum when a group is fixed to that day/block: " + "; ".join(hits[:4])))
+        markers_in_sched = ("blocked" in sched.columns) or ((sessions["grupo"] == 0).any())
+        results.append(("pass" if not markers_in_sched else "fail",
+                        "Reservation markers kept out of the schedule",
+                        "The schedule has no marker rows, so the reliability check stays clean."
+                        if not markers_in_sched else "Marker rows leaked into the schedule."))
+    else:
+        results.append(("skip", "Reserved slots",
+                        "blocked_slots.csv not found (no reservations configured)."))
+
+    # ── Summary banner ──────────────────────────────────────
+    n_pass = sum(1 for r in results if r[0] == "pass")
+    n_fail = sum(1 for r in results if r[0] == "fail")
+    n_info = sum(1 for r in results if r[0] == "info")
+    n_skip = sum(1 for r in results if r[0] == "skip")
+    # Group the cards by status so all PASS sit together, then INFO, then N/A
+    # (failures first if any, since they are the most important to see).
+    _st_order = {"fail": 0, "pass": 1, "info": 2, "skip": 3}
+    results.sort(key=lambda r: _st_order.get(r[0], 9))
+    if n_fail == 0:
+        st.markdown(
+            f"<div style='padding:1.1rem 1.3rem;border-radius:12px;margin-bottom:1.2rem;"
+            f"background:rgba(46, 134, 171,0.10);border:1px solid rgba(46, 134, 171,0.45);'>"
+            f"<span style='font-size:1.15rem;font-weight:700;color:#2E86AB;'>All integrity checks passed</span>"
+            f"<br><span style='color:var(--text-muted);'>{n_pass} passed · {n_info} informational · {n_skip} not applicable in this build</span>"
+            f"</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(
+            f"<div style='padding:1.1rem 1.3rem;border-radius:12px;margin-bottom:1.2rem;"
+            f"background:rgba(178, 101, 117,0.10);border:1px solid rgba(178, 101, 117,0.45);'>"
+            f"<span style='font-size:1.15rem;font-weight:700;color:#B26575;'>{n_fail} integrity check(s) failed</span>"
+            f"<br><span style='color:var(--text-muted);'>{n_pass} passed · {n_info} informational · {n_skip} not applicable</span>"
+            f"</div>", unsafe_allow_html=True)
+
+    # ── Check cards ─────────────────────────────────────────
+    _style = {
+        "pass": ("#2E86AB", "rgba(46, 134, 171,0.06)", "", "PASS"),
+        "fail": ("#B26575", "rgba(178, 101, 117,0.07)", "", "FAIL"),
+        "info": ("#f4b942", "rgba(244,185,66,0.07)", "", "INFO"),
+        "skip": ("#64748b", "rgba(100,116,139,0.06)", "", "N/A"),
+    }
+    for status, title, detail in results:
+        color, bg, icon, tag = _style[status]
+        st.markdown(
+            f"<div style='display:flex;gap:0.9rem;align-items:flex-start;padding:0.85rem 1.1rem;"
+            f"border-radius:10px;margin-bottom:0.6rem;background:{bg};border:1px solid {color}33;"
+            f"border-left:3px solid {color};'>"
+            f"<div style='flex:1;'>"
+            f"<div style='font-weight:650;color:var(--text-primary);'>{title} "
+            f"<span style='font-size:0.7rem;color:{color};border:1px solid {color}66;border-radius:6px;"
+            f"padding:1px 6px;margin-left:6px;vertical-align:middle;'>{tag}</span></div>"
+            f"<div style='color:var(--text-muted);font-size:0.9rem;margin-top:0.2rem;'>{detail}</div>"
+            f"</div></div>", unsafe_allow_html=True)
+
+    # ── Legend: what the badges mean (esp. the yellow INFO cards) ───────────
+    with st.expander("What do these badges mean? (PASS / INFO / N/A)"):
+        st.markdown(
+            "- **<span style='color:#2E86AB;'>PASS</span>** — the rule is verified: "
+            "the generated schedule satisfies it with zero violations.\n"
+            "- **<span style='color:#f4b942;'>INFO</span>** (yellow) — **not a problem**. "
+            "It flags something that *looks* like it could be an issue but isn't a real "
+            "conflict, usually because the source data can't prove it either way. These are "
+            "shown transparently rather than hidden. In this build:\n"
+            "    - *Lab vs class slot* — `student_busy` records the **weekly recurring** class "
+            "pattern (day+block, no week number), while labs are placed in **specific weeks**. "
+            "A day/block coincidence isn't necessarily a clash; the pipeline already enforces "
+            "the real week-aware no-overlap when forming groups.\n"
+            "    - *Professor availability* — a professor who is **running a lab** also appears "
+            "\"busy\" at that slot in `professor_busy`. So \"all eligible busy\" mixes genuine "
+            "over-subscription with the normal case of the eligible professor teaching the "
+            "session. The pipeline removes genuinely-busy slots at group formation.\n"
+            "    - *Reserved-slot avoidance (soft)* — the Biotecnología reservation is a soft "
+            "penalty, not a hard block. The 2 residual sessions are the unavoidable minimum "
+            "(their group is fixed to that day/block); everything else was steered away.\n"
+            "- **<span style='color:#64748b;'>N/A</span>** — the check couldn't run because a "
+            "needed file isn't in this build (e.g. `subject_professors.csv`). Not a failure.",
+            unsafe_allow_html=True,
+        )
+
+    # ── Traced examples (for the defense) ──────────────────
+    section_header("Traced examples")
+    st.caption("Pick a few students and professors to show the schedule matches reality. "
+               "Each student's sessions are grouped by semester — no two share a week/day/block. "
+               "A student enrolled only in S1 subjects (e.g. Física + Química, typical 1st-year) "
+               "correctly shows no S2 sessions.")
+
+    # how many students to show
+    _n_students = st.slider("Students to show", 1, 10, 4, key="integ_n_students")
+
+    # day order for tidy sorting
+    _DAY_ORDER = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4}
+    # map a schedule subject -> semester number from the sessions frame
+    _subj_sem = {}
+    for _, _s in sessions.iterrows():
+        _subj_sem[str(_s["subject"])] = int(_s["semester"])
+
+    st.markdown("**Students** — name · field · sessions (grouped by semester)")
+    shown = 0
+    for st_, slots in student_slot.items():
+        if shown >= _n_students:
+            break
+        fil = student_filiere.get(st_, "—")
+        # split this student's sessions by semester
+        by_sem = _dd(list)
+        for (w, d, b, subj, g) in slots:
+            by_sem[_subj_sem.get(subj, 0)].append((w, d, b, subj, g))
+        # build the per-semester rows
+        sem_blocks = ""
+        for sem in sorted(by_sem):
+            rows = sorted(by_sem[sem], key=lambda x: (x[0], _DAY_ORDER.get(x[1], 9)))
+            chips = ""
+            for (w, d, b, subj, g) in rows:
+                name = subj.split("_", 1)[-1]
+                chips += (
+                    f"<span style='display:inline-block;background:var(--bg-elevated,#1b2440);"
+                    f"border:1px solid var(--border,#2c3658);border-radius:7px;"
+                    f"padding:2px 8px;margin:2px 4px 2px 0;font-size:0.78rem;color:var(--text-primary,#e6ecf5);'>"
+                    f"<b>{name}</b> G{g} · <span style='color:var(--text-muted,#94a3b8);'>"
+                    f"S{sem} W{w} · {d} {b}</span></span>"
+                )
+            sem_blocks += (
+                f"<div style='margin:0.35rem 0 0.1rem;'>"
+                f"<span style='font-size:0.7rem;letter-spacing:0.06em;color:var(--text-muted,#94a3b8);"
+                f"text-transform:uppercase;'>Semester {sem}</span><br>{chips}</div>"
+            )
+        st.markdown(
+            f"<div style='padding:0.7rem 0.95rem;border-radius:10px;margin-bottom:0.6rem;"
+            f"background:var(--bg-card,rgba(255,255,255,0.02));border:1px solid var(--border,#2c3658);'>"
+            f"<div style='display:flex;align-items:center;gap:0.6rem;margin-bottom:0.2rem;'>"
+            f"<span style='font-weight:700;color:var(--text-primary,#fff);'>{str(st_)}</span>"
+            f"<span style='font-size:0.72rem;font-weight:600;color:#38bdf8;border:1px solid #38bdf855;"
+            f"background:#38bdf814;border-radius:6px;padding:1px 8px;'>{fil}</span>"
+            f"<span style='font-size:0.72rem;color:var(--text-muted,#94a3b8);'>"
+            f"· {len(slots)} session(s)</span></div>"
+            f"{sem_blocks}</div>",
+            unsafe_allow_html=True,
+        )
+        shown += 1
+
+    if profs is not None:
+        # Lab credits per professor (1 P credit = 5 lab sessions) — feature #6 output.
+        import unicodedata as _ud
+        def _norm_pn(x):
+            x = _ud.normalize("NFKD", str(x))
+            x = "".join(c for c in x if not _ud.combining(c))
+            return " ".join(sorted(x.lower().replace(",", " ").split()))
+        _ll_csv = _find_prof_load_csv()
+        _credit_by_norm = {}
+        if _ll_csv:
+            try:
+                _ll = pd.read_csv(_ll_csv)
+                for _, _r in _ll.iterrows():
+                    _credit_by_norm[_norm_pn(_r.get("prof_name", ""))] = {
+                        "cr": float(_r.get("lab_credits", 0) or 0),
+                        "sess": int(float(_r.get("lab_sessions", 0) or 0)),
+                        "over": bool(_r.get("over_budget", False)),
+                    }
+            except Exception:
+                pass
+
+        st.markdown("**Professors** — subject · eligible teachers · lab credits → sessions "
+                    "(1 P credit = 5 sessions)")
+        for subj in sorted(sessions["subject"].unique()):
+            names = _names_for(str(subj))
+            if not names:
+                continue
+            # one chip per professor — name + lab-credit load when known
+            chips = ""
+            for nm in names:
+                _ci = _credit_by_norm.get(_norm_pn(nm))
+                if _ci and _ci["cr"] > 0:
+                    _flag = " (over budget)" if _ci["over"] else ""
+                    _load = (f"<span style='color:#6fb6e8;font-weight:600;'> · "
+                             f"{_ci['cr']:.0f} P cr \u2192 {_ci['sess']} sess{_flag}</span>")
+                else:
+                    _load = ""
+                chips += (
+                    f"<span style='display:inline-block;background:var(--bg-elevated,#1b2440);"
+                    f"border:1px solid var(--border,#2c3658);border-radius:7px;"
+                    f"padding:2px 8px;margin:2px 4px 2px 0;font-size:0.78rem;"
+                    f"color:var(--text-primary,#e6ecf5);'>{nm}{_load}</span>"
+                )
+            # scheduled slots for this subject (where data actually links to time)
+            _ss = sessions[sessions["subject"] == subj]
+            _slot_bits = ""
+            if len(_ss):
+                _agg = (_ss.groupby(["day", "time_block"]).size()
+                        .sort_values(ascending=False))
+                # Clear, prominent block of one badge per scheduled slot.
+                _slot_chips = "".join(
+                    f"<span style='display:inline-block;background:rgba(111,174,217,0.12);"
+                    f"border:1px solid rgba(111,174,217,0.40);border-radius:999px;"
+                    f"padding:3px 11px;margin:3px 5px 0 0;font-size:0.78rem;font-weight:600;"
+                    f"color:var(--cyan,#6FAED9);'>{d} {tb} "
+                    f"<span style='opacity:0.8;font-weight:500;'>&times;{n}</span></span>"
+                    for (d, tb), n in _agg.items()
+                )
+                _slot_bits = (
+                    "<div style='margin-top:0.6rem;padding-top:0.55rem;"
+                    "border-top:1px solid var(--line,#243453);'>"
+                    "<div style='font-family:var(--font-mono,monospace);font-size:0.66rem;"
+                    "letter-spacing:0.12em;text-transform:uppercase;"
+                    "color:var(--text-muted,#6B7E9E);margin-bottom:0.15rem;'>"
+                    "Scheduled sessions</div>"
+                    f"<div>{_slot_chips}</div></div>"
+                )
+            st.markdown(
+                f"<div style='padding:0.7rem 0.95rem;border-radius:10px;margin-bottom:0.6rem;"
+                f"background:var(--bg-card,rgba(255,255,255,0.02));border:1px solid var(--border,#2c3658);'>"
+                f"<div style='display:flex;align-items:center;gap:0.6rem;margin-bottom:0.3rem;'>"
+                f"<span style='font-weight:700;color:var(--text-primary,#fff);'>"
+                f"{str(subj).split('_',1)[-1]}</span>"
+                f"<span style='font-size:0.72rem;font-weight:600;color:#2E86AB;border:1px solid #2E86AB55;"
+                f"background:#2E86AB14;border-radius:6px;padding:1px 8px;'>{len(names)} eligible</span>"
+                f"</div>{chips}{_slot_bits}</div>",
+                unsafe_allow_html=True,
+            )
+
+    # -- Credits per professor (clear, sortable table) --
+    section_header("Credits per professor")
+    _ll_path = None
+    for _p in ("professor_lab_load.csv",
+               "outputs/optimization/professor_lab_load.csv"):
+        if os.path.exists(_p):
+            _ll_path = _p
+            break
+    if _ll_path is None:
+        st.info("File professor_lab_load.csv not found. "
+                "Run the pipeline to display credits per professor.")
+    # ── Lab credits per professor (clear, sortable table) ───────────────
+    section_header("Lab credits per professor")
+    _ll_path = _find_prof_load_csv()
+    if _ll_path is None:
+        st.info("Professor credit data is not available yet. "
+                "Run the optimization to generate it.")
+    else:
+        try:
+            _df = pd.read_csv(_ll_path)
+            _df_lab = _df[_df["lab_credits"].fillna(0) > 0].copy()
+            n_prof = len(_df_lab)
+            n_over = int(_df_lab["over_budget"].fillna(False).astype(bool).sum())
+            tot_cr = float(_df_lab["lab_credits"].fillna(0).sum())
+            tot_sess = int(_df_lab["lab_sessions"].fillna(0).sum())
+
+            help_tip(
+                "Lab load per professor. Validated rule: "
+                "1 P credit = 5 lab sessions. Budget overruns are "
+                "signaled (never blocking).",
+                "Laboratory teaching load per professor. Validated rule: "
+                "1 P credit = 5 lab sessions. Budget overruns are flagged "
+                "(never blocking).",
+                icon=""
+            )
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                stat_card("Professors", n_prof, "with lab credits")
+            with c2:
+                stat_card("Lab credits", f"{tot_cr:.0f}", "total assigned")
+            with c3:
+                stat_card("Lab sessions", tot_sess, "total (credits x 5)")
+            with c4:
+                stat_card("Overruns", n_over, "budget signaled")
+                stat_card("Lab sessions", tot_sess, "total (credits × 5)")
+            with c4:
+                stat_card("Over budget", n_over, "flagged")
+
+            _show = _df_lab.rename(columns={
+                "prof_code": "Code",
+                "prof_name": "Professor",
+                "lab_credits": "Lab credits",
+                "lab_sessions": "Lab sessions",
+                "theory_credits": "Theory credits",
+                "total_assigned": "Total assigned",
+                "budget": "Budget",
+                "margin": "Margin",
+                "over_budget": "Over budget",
+            })
+            _cols = ["Code", "Professor", "Lab credits", "Lab sessions",
+                     "Theory credits", "Total assigned", "Budget", "Margin",
+                     "Over budget"]
+            _cols = [c for c in _cols if c in _show.columns]
+            _show = _show[_cols].sort_values("Lab credits", ascending=False)
+            st.dataframe(_show, use_container_width=True, hide_index=True)
+        except Exception as e:
+            st.warning(f"Unable to display credits per professor: {e}")
+            st.warning(f"Could not display professor credits: {e}")
+
+    # -- How lab credits are computed and distributed --
+    with st.expander("How are lab credits computed and distributed?"):
+        st.markdown(
+            """
+**Source of truth.** The file `Asignacion_2025-2026_v5.xlsx`, sheet
+*"Asignación docente"*, lists for each (subject, group) pair up to
+**4 professors**, each with a credit count and a character:
+**T** = theory (lecture) or **P** = practice (lab).
+
+**Validated conversion rule.** `1 P credit = 5 lab sessions`.
+Example: a professor with **3P** must supervise **15 lab sessions**.
+Only **P** credits generate lab sessions; **T** credits are counted
+separately (column *Theory credits*).
+
+**Distribution.** Sessions are distributed per subject/group according to the
+professors declared on the sheet. The *Total assigned* column adds
+theory + lab, compared to the professor's *Budget* to compute the *Margin*.
+
+**Overruns.** When the load exceeds the budget, the system **signals** it
+(column *Over budget*) but **never blocks** generation:
+the system validates, it does not decide. In the official data, around
+**17 professors out of 127** are already above their budget — this is a
+factual statement left to the coordination's discretion.
+            """
+        )
+
+    # ── Teacher availability verification (proof) ──────────────────────
+    section_header("Teacher availability — verification")
+    help_tip(
+        "A posteriori proof that the produced schedule respects the parameters "
+        "of 'Teacher Availability Configuration'. Generated by the pipeline "
+        "(config/availability_verification.json) on every run.",
+        icon=""
+    )
+    _verif = None
+    for _vp in ("config/availability_verification.json",
+                "outputs/optimization/config/availability_verification.json"):
+        if os.path.exists(_vp):
+            try:
+                with open(_vp, "r", encoding="utf-8") as _vf:
+                    _verif = json.load(_vf)
+                break
+            except Exception:
+                _verif = None
+    if _verif is None:
+        st.info("No verification available yet. Run the "
+                "pipeline to generate the availability enforcement proof "
+                "(config/availability_verification.json).")
+    else:
+        # 1) Unavailable slots (HARD constraint)
+        _hbs = _verif.get("hard_blocked_slots", {})
+        _viol = _hbs.get("violations", [])
+        _relaxed_n = int(_hbs.get("relaxed_count", 0))
+        _unexpected_n = int(_hbs.get("unexpected_count", 0))
+        _status = _hbs.get("status")
+        if _status == "ok":
+            st.success(
+                f"Unavailable slots: **0 violation** "
+                f"({_hbs.get('checked_groups', 0)} constrained groups checked). "
+                "No session is placed on a blocked slot."
+            )
+        elif _status == "relaxed":
+            st.warning(
+                f"Unavailable slots: **{len(_viol)} expected violation(s)** "
+                f"({_relaxed_n} relaxed, 0 unexpected). These placements are "
+                "EXPECTED: for these subjects, enforcing the unavailability would "
+                "leave **no feasible slot**, so the constraint was deliberately "
+                "relaxed to keep the subject schedulable. Per the project "
+                "principle, the system **signals** but **never blocks**."
+            )
+        else:
+            st.error(
+                f"Unavailable slots: **{len(_viol)} violation(s)** detected "
+                f"({_relaxed_n} relaxed/expected, {_unexpected_n} unexpected). "
+                "The unexpected ones warrant investigation."
+            )
+        if _viol:
+            _vdf = pd.DataFrame(_viol).rename(columns={
+                "subject": "Subject",
+                "group": "Group",
+                "day": "Day",
+                "block": "Slot",
+                "relaxed": "Relaxed (expected)",
+                "reason": "Reason",
+            })
+            st.dataframe(_vdf, use_container_width=True, hide_index=True)
+            st.caption(
+                "Relaxed = expected: enforcing the unavailability would leave no "
+                "feasible slot for this subject. To remove it, relax a teacher's "
+                "unavailability, add a room/slot, or accept it."
+            )
+
+        # 2) Preferred time range (SOFT constraint)
+        _pref = _verif.get("preferred_range", [])
+        if _pref:
+            st.markdown("**Preferred time range** (soft — compliance rate)")
+            _pdf = pd.DataFrame(_pref).rename(columns={
+                "teacher": "Teacher",
+                "recognized": "Recognized",
+                "preferred_blocks": "Preferred slots",
+                "sessions_total": "Sessions",
+                "sessions_inside": "Inside range",
+                "pct_inside": "% inside range",
+            })
+            st.dataframe(_pdf, use_container_width=True, hide_index=True)
+
+        # 3) Max lab days / week (SIGNAL)
+        _mdw = _verif.get("max_days_per_week", [])
+        if _mdw:
+            st.markdown("**Maximum lab days / week** (signal)")
+            _mdf = pd.DataFrame(_mdw).rename(columns={
+                "teacher": "Teacher",
+                "recognized": "Recognized",
+                "cap": "Cap",
+                "days_used": "Days used",
+                "days": "Days",
+                "status": "Status",
+            })
+            st.dataframe(_mdf, use_container_width=True, hide_index=True)
+
+        if _verif.get("generated_at"):
+            st.caption(f"Verification generated on {_verif['generated_at']}")
+
+    st.caption("These are the same checks as verify_flow.py — shown here so no terminal is needed.")
+
+
+
+def _page_monitoring():
+    try:
+        import monitoring
+        monitoring.render(
+            st,
+            helpers={
+                'page_header': page_header,
+                'section_header': section_header,
+                'stat_card': stat_card,
+                'safe_error': safe_error,
+            },
+            t=t,
+        )
+    except Exception as _mon_exc:
+        safe_error("Unable to render the monitoring page", _mon_exc)
 
 
 # ════════════════════════════════════════════════════════════
@@ -2719,1193 +3905,34 @@ elif page == t('nav_results'):
         next_label="Export", next_page='export',
     )
 
-# ════════════════════════════════════════════════════════════
-# PAGE: RELIABILITY DASHBOARD
-# Comprehensive metrics to give Daniel quantitative confidence
-# in the generated planning.
-# ════════════════════════════════════════════════════════════
-elif page == t('nav_dashboard'):
-    page_header(
-        "Reliability dashboard",
-        "Quantitative metrics to validate the quality of the generated plan."
-    )
-
+# ============================================================
+# PAGE: STATISTICS (consolidated Reliability + Integrity + Monitoring)
+# One place for all quantitative validation of the plan.
+# ============================================================
+elif page == t('nav_analytics'):
     if not run_ok:
-        st.warning("**Pipeline not executed** — please run the optimization first.")
-        if st.button("← Go to Optimize", type="primary"):
+        page_header(
+            "Statistics",
+            "All quality metrics for the generated plan in one place."
+        )
+        st.warning("**Pipeline not executed** - please run the optimization first.")
+        if st.button("Go to Optimize", type="primary", key="analytics_go_opt"):
             st.session_state['_nav_to'] = 'optimize'
             st.rerun()
         st.stop()
-
-    # Load metrics module + data
-    try:
-        import reliability_metrics as rm
-        schedule_df = pd.read_csv('outputs/optimization/optimized_schedule_v5.csv')
-        groups_df = pd.read_csv('outputs/optimization/group_composition.csv')
-    except Exception as e:
-        safe_error("Unable to load the data", e)
-        st.stop()
-
-    with st.spinner("Computing metrics…"):
-        metrics = rm.compute_all_metrics(schedule_df, groups_df)
-
-    # ───────────────────────────────────────────────────────
-    # 1. HEALTH SCORE — top-of-page summary
-    # ───────────────────────────────────────────────────────
-    health = metrics['health']
-    score = health['score']
-    verdict = health['verdict']
-    issues = health['issues']
-
-    # Color coding
-    if score >= 90:
-        score_color = "#22c55e"   # green
-        score_bg = "rgba(34, 197, 94, 0.06)"
-        verdict_emoji = ""
-    elif score >= 70:
-        score_color = "#f59e0b"   # amber
-        score_bg = "rgba(245, 158, 11, 0.06)"
-        verdict_emoji = ""
-    else:
-        score_color = "#ef4444"   # red
-        score_bg = "rgba(239, 68, 68, 0.06)"
-        verdict_emoji = ""
-
-    col_score, col_verdict = st.columns([1, 2])
-    with col_score:
-        st.markdown(f"""
-            <div style="
-                background: {score_bg};
-                border: 2px solid {score_color};
-                border-radius: 16px;
-                padding: 2rem 1rem;
-                text-align: center;
-            ">
-                <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">
-                    Overall score
-                </div>
-                <div style="font-size: 4rem; font-weight: 700; color: {score_color}; line-height: 1; margin: 0.5rem 0;">
-                    {score}
-                </div>
-                <div style="font-size: 0.85rem; color: var(--text-secondary);">
-                    out of 100
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-    with col_verdict:
-        st.markdown(f"""
-            <div style="padding: 1.5rem 2rem; height: 100%;">
-                <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-heading); margin-bottom: 0.5rem;">
-                    {verdict_emoji} {verdict}
-                </div>
-                <div style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">
-                    Score based on 7 dimensions: assignment, conflicts, distribution,
-                    room occupancy, student overload, spacing, and alignment
-                    with the reference.
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    if issues:
-        with st.expander(f"{len(issues)} item(s) requiring attention", expanded=False):
-            for issue in issues:
-                st.warning(issue)
-
-    st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
-
-    # ───────────────────────────────────────────────────────
-    # 2. ESSENTIAL METRICS — always visible
-    # ───────────────────────────────────────────────────────
-    section_header("Key metrics")
-
-    a = metrics['assignment']
-    c = metrics['conflicts']
-
-    em_col1, em_col2, em_col3, em_col4 = st.columns(4)
-    with em_col1:
-        rate = a.get('assignment_rate', 0)
-        rate_color = "#22c55e" if rate >= 95 else "#f59e0b" if rate >= 85 else "#ef4444"
-        st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-label">Assignment rate</div>
-                <div class="stat-value" style="color: {rate_color};">{rate:.1f}%</div>
-                <div class="stat-desc">{a.get('assigned_students', 0)} / {a.get('total_students', 0)} enrolments (student × subject)</div>
-            </div>
-        """, unsafe_allow_html=True)
-    with em_col2:
-        n_c1 = c.get('c1_violations', 0)
-        n_c4 = c.get('c4_violations', 0)
-        n_c5 = c.get('c5_violations', 0)
-        n_stud = c.get('student_conflicts', 0)
-        n_conf = n_c1 + n_c4 + n_c5 + n_stud
-        conf_color = "#22c55e" if n_conf == 0 else "#ef4444"
-        st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-label">Conflicts detected</div>
-                <div class="stat-value" style="color: {conf_color};">{n_conf}</div>
-                <div class="stat-desc">C1: {n_c1} · C4: {n_c4} · C5: {n_c5} · Stu: {n_stud}</div>
-            </div>
-        """, unsafe_allow_html=True)
-    with em_col3:
-        n_overflow = a.get('overflow_groups', 0)
-        n_alt = a.get('alt_room_groups', 0)
-        n_excep = n_overflow + n_alt
-        excep_color = "#22c55e" if n_excep == 0 else "#f59e0b"
-        st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-label">Exceptional groups</div>
-                <div class="stat-value" style="color: {excep_color};">{n_excep}</div>
-                <div class="stat-desc">{n_overflow} overflow · {n_alt} alt. room</div>
-            </div>
-        """, unsafe_allow_html=True)
-    with em_col4:
-        st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-label">Total sessions</div>
-                <div class="stat-value">{a.get('total_sessions', 0)}</div>
-                <div class="stat-desc">{a.get('total_groups', 0)} groupes</div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    # Conflicts detail
-    if n_conf > 0:
-        st.error(f"**{n_conf} conflict(s) detected.** See details below.")
-        with st.expander("Conflict details", expanded=True):
-            if c.get('examples_c1'):
-                st.markdown(f"**C1 (subject + slot duplicated) — {n_c1} case(s)**")
-                _c1 = "\n".join(
-                    f"- {ex.get('subject', '?')} — "
-                    f"S{ex.get('semester', '?')} W{ex.get('week', '?')} "
-                    f"{ex.get('day', '?')} {ex.get('time_block', '?')} "
-                    f"({ex.get('count', 0)} sessions)"
-                    for ex in c['examples_c1'][:10]
-                )
-                st.markdown(_c1)
-            if c.get('examples_c4'):
-                st.markdown(f"**C4 (room + slot duplicated) — {n_c4} case(s)**")
-                _c4 = "\n".join(
-                    f"- {ex.get('room', '?')} — "
-                    f"S{ex.get('semester', '?')} W{ex.get('week', '?')} "
-                    f"{ex.get('day', '?')} {ex.get('time_block', '?')} "
-                    f"({ex.get('count', 0)} sessions)"
-                    for ex in c['examples_c4'][:10]
-                )
-                st.markdown(_c4)
-            if c.get('examples_c5'):
-                st.markdown(f"**C5 (sessions out of chronological order) — {n_c5} case(s)**")
-                _c5 = "\n".join(
-                    f"- {ex.get('subject', '?')} G{ex.get('grupo', '?')} — "
-                    f"S{ex.get('semester', '?')} "
-                    f"sessions {ex.get('sessions', [])} → weeks {ex.get('weeks', [])}"
-                    for ex in c['examples_c5'][:10]
-                )
-                st.markdown(_c5)
-            if n_stud > 0:
-                st.markdown(f"**Duplicate students — {n_stud} case(s) detected**")
-                st.caption("See the Individual case page to identify the students concerned.")
-    else:
-        st.success("**No conflicts detected.** The plan satisfies all hard constraints.")
-
-    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-
-    # ───────────────────────────────────────────────────────
-    # 3. QUALITY METRICS — expandable sections
-    # ───────────────────────────────────────────────────────
-    section_header("Quality metrics")
-
-    qual_tab1, qual_tab2, qual_tab3, qual_tab4 = st.tabs([
-        "Distribution", "Rooms", "Student overload", "Spacing"
-    ])
-
-    # ---- TAB: Distribution ----
-    with qual_tab1:
-        d = metrics['distribution']
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.markdown("**Distribution by day of week**")
-            by_day = d.get('by_day', {})
-            if by_day:
-                day_df = pd.DataFrame([
-                    {'Day': day, 'Sessions': by_day[day]}
-                    for day in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
-                    if day in by_day
-                ])
-                st.bar_chart(day_df.set_index('Day'))
-
-                # Detect bottleneck
-                avg = sum(by_day.values()) / len(by_day) if by_day else 0
-                max_day = max(by_day.items(), key=lambda x: x[1]) if by_day else (None, 0)
-                if max_day[1] > avg * 1.5:
-                    st.warning(f"Bottleneck detected: {max_day[0]} concentrates {max_day[1]} sessions "
-                               f"(average {avg:.0f})")
-                else:
-                    st.success("Balanced distribution across days")
-
-        with col_b:
-            st.markdown("**Distribution par bloc horaire**")
-            by_block = d.get('by_block', {})
-            if by_block:
-                block_df = pd.DataFrame([
-                    {'Bloc': block, 'Sessions': count}
-                    for block, count in sorted(by_block.items())
-                ])
-                st.bar_chart(block_df.set_index('Bloc'))
-
-        st.markdown("**Distribution by week**")
-        by_week = d.get('by_week', {})
-        if by_week:
-            week_df = pd.DataFrame([
-                {'Week': f"W{int(str(w).split('-')[-1].lstrip('WS')):02d}", 'Sessions': count}
-                for w, count in sorted(by_week.items())
-            ])
-            st.bar_chart(week_df.set_index('Week'))
-
-    # ---- TAB: Room occupancy ----
-    with qual_tab2:
-        rooms = metrics['room_occupancy']
-        if rooms:
-            st.markdown("**Room load** (% occupation of available slots)")
-
-            room_data = []
-            for r in rooms:
-                util = r.get('occupancy_pct', 0)
-                if util >= 80:
-                    status = "Saturated"
-                elif util >= 60:
-                    status = "High"
-                elif util >= 30:
-                    status = "Moderate"
-                else:
-                    status = "Low"
-                room_data.append({
-                    'Room':          r.get('room', '?'),
-                    'Semester':      f"S{r.get('semester', '?')}",
-                    'Occupation':    f"{util:.1f}%",
-                    'Sessions':      r.get('sessions_used', 0),
-                    'Available slots': r.get('slots_available', 0),
-                    'Statut':        status,
-                })
-
-            st.dataframe(
-                pd.DataFrame(room_data),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            saturated = [r for r in rooms if r.get('status') == 'critical']
-            if saturated:
-                st.warning(f"{len(saturated)} saturated room(s): "
-                           f"{', '.join(r['room'] for r in saturated)}")
-            else:
-                st.success("No saturated rooms — capacity headroom available")
-        else:
-            st.info("No room data available.")
-
-    # ---- TAB: Student overload ----
-    with qual_tab3:
-        ov = metrics['overload']
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            n_overloaded = ov.get('overloaded_count', 0)
-            color = "#22c55e" if n_overloaded == 0 else "#f59e0b"
-            st.markdown(f"""
-                <div class="stat-card">
-                    <div class="stat-label">Overloaded students</div>
-                    <div class="stat-value" style="color: {color};">{n_overloaded}</div>
-                    <div class="stat-desc">> 3 labs same week</div>
-                </div>
-            """, unsafe_allow_html=True)
-        with col_b:
-            st.markdown(f"""
-                <div class="stat-card">
-                    <div class="stat-label">Max peak observed</div>
-                    <div class="stat-value">{ov.get('max_labs_observed', 0)}</div>
-                    <div class="stat-desc">labs/week (1 student)</div>
-                </div>
-            """, unsafe_allow_html=True)
-        with col_c:
-            avg_grp_size = a.get('avg_group_size', 0)
-            st.markdown(f"""
-                <div class="stat-card">
-                    <div class="stat-label">Taille moyenne groupe</div>
-                    <div class="stat-value">{avg_grp_size:.1f}</div>
-                    <div class="stat-desc">students per group</div>
-                </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-
-        if ov.get('overloaded_count', 0) > 0 and ov.get('examples'):
-            st.markdown(f"**Top {len(ov['examples'])} cas de surcharge**")
-            top_data = []
-            for entry in ov['examples'][:10]:
-                top_data.append({
-                    'Student':     entry.get('student', '?'),
-                    'Semester':     f"S{entry.get('semester', '?')}",
-                    'Week':      f"W{entry.get('week', '?')}",
-                    'Labs this week': entry.get('count', 0),
-                })
-            st.dataframe(pd.DataFrame(top_data), use_container_width=True, hide_index=True)
-        elif n_overloaded == 0:
-            st.success("No student has more than 3 labs in the same week")
-
-    # ---- TAB: Spacing ----
-    with qual_tab4:
-        sp = metrics['spacing']
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            pct_well = sp.get('well_spaced_groups_pct', 0)
-            color = "#22c55e" if pct_well >= 80 else "#f59e0b" if pct_well >= 60 else "#ef4444"
-            st.markdown(f"""
-                <div class="stat-card">
-                    <div class="stat-label">Well-spaced groups</div>
-                    <div class="stat-value" style="color: {color};">{pct_well:.0f}%</div>
-                    <div class="stat-desc">P1=W4, Pn=Wmax, regular spacing</div>
-                </div>
-            """, unsafe_allow_html=True)
-        with col_b:
-            st.markdown(f"""
-                <div class="stat-card">
-                    <div class="stat-label">Avg P1 offset</div>
-                    <div class="stat-value">{sp.get('avg_first_excess', 0):.1f}</div>
-                    <div class="stat-desc">weeks after min_week</div>
-                </div>
-            """, unsafe_allow_html=True)
-        with col_c:
-            st.markdown(f"""
-                <div class="stat-card">
-                    <div class="stat-label">Avg Pn offset</div>
-                    <div class="stat-value">{sp.get('avg_last_deficit', 0):.1f}</div>
-                    <div class="stat-desc">semaines avant max_week</div>
-                </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-
-        st.markdown("**Detailed indicators**")
-        st.markdown(f"""
-            - **Average P1 offset**: {sp.get('avg_first_excess', 0):.2f} weeks after `min_week`
-              (ideal: 0)
-            - **Average Pn offset**: {sp.get('avg_last_deficit', 0):.2f} weeks before `max_week`
-              (ideal: 0)
-            - **Average gap deviation**: {sp.get('avg_gap_deviation', 0):.2f} weeks
-              vs the ideal gap (ideal: 0)
-            - **Perfectly spaced groups**: {pct_well:.0f}% of total
-        """)
-
-    st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
-
-    # ───────────────────────────────────────────────────────
-    # 4. SUBJECT COVERAGE — comparison vs Daniel reference
-    # ───────────────────────────────────────────────────────
-    section_header("Coverage by subject")
-
-    cov = metrics['coverage']
-    if cov:
-        cov_data = []
-        for entry in cov:
-            ref_students = entry.get('ref_students')
-            deviation_pct = entry.get('deviation_pct')
-            status = entry.get('status', 'ok')
-            status_icon = {
-                'ok': 'OK',
-                'warning': 'Moderate gap',
-                'critical': 'Large gap',
-            }.get(status, status)
-
-            cov_data.append({
-                'Subject':          entry.get('subject', '?'),
-                'Sem.':             f"S{entry.get('semester', '?')}",
-                'Students':        entry.get('students', 0),
-                'Groups':           entry.get('groups', 0),
-                'Sessions':         entry.get('sessions', 0),
-                'Daniel ref (stu.)': ref_students if ref_students is not None else '—',
-                'Deviation':        f"{deviation_pct:+.1f}%" if deviation_pct is not None else '—',
-                'Status':           status_icon,
-            })
-        st.dataframe(pd.DataFrame(cov_data), use_container_width=True, hide_index=True)
-
-        # Highlight problematic subjects
-        problematic = [c for c in cov if c.get('status') == 'critical']
-        if problematic:
-            with st.expander(f"{len(problematic)} subject(s) with >30% deviation vs Daniel"):
-                for p in problematic:
-                    dev = p.get('deviation_pct', 0)
-                    st.write(f"- **{p.get('subject', '?')}** : {dev:+.1f}% "
-                             f"({p.get('students', 0)} actual vs {p.get('ref_students', '?')} reference)")
-        elif any(c.get('status') == 'warning' for c in cov):
-            n_warn = sum(1 for c in cov if c.get('status') == 'warning')
-            st.info(f"{n_warn} subject(s) with moderate gap (15-30%) — to monitor but acceptable")
-        else:
-            st.success("All subjects are aligned with Daniel's reference")
-
-    st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
-
-    # ───────────────────────────────────────────────────────
-    # 5. EXPORT
-    # ───────────────────────────────────────────────────────
-    section_header("Export the report")
-
-    col_e1, col_e2 = st.columns(2)
-    with col_e1:
-        # JSON export
-        import json as json_module
-        # Convert metrics to JSON-safe format
-        def make_json_safe(obj):
-            if isinstance(obj, dict):
-                return {k: make_json_safe(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [make_json_safe(x) for x in obj]
-            elif hasattr(obj, 'item'):  # numpy scalar
-                return obj.item()
-            elif pd.isna(obj) if not isinstance(obj, (list, dict, set)) else False:
-                return None
-            else:
-                return obj
-        try:
-            json_str = json_module.dumps(make_json_safe(metrics), indent=2, ensure_ascii=False)
-            st.download_button(
-                "Download metrics (JSON)",
-                data=json_str.encode('utf-8'),
-                file_name=f"reliability_metrics_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-                mime="application/json",
-                use_container_width=True,
-            )
-        except Exception as ex:
-            st.error(f"JSON export error: {ex}")
-
-    with col_e2:
-        # Plain-text summary for sharing
-        text_lines = [
-            "RELIABILITY REPORT — SCHEDULING PLAN",
-            "=" * 60,
-            f"Date : {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-            "",
-            f"OVERALL SCORE: {score}/100 ({verdict})",
-            "",
-            "KEY METRICS",
-            f"  - Assignment rate: {a.get('assignment_rate', 0):.1f}%",
-            f"  - Assigned students: {a.get('assigned_students', 0)} / {a.get('total_students', 0)}",
-            f"  - Total sessions: {a.get('total_sessions', 0)}",
-            f"  - Groups formed: {a.get('total_groups', 0)}",
-            f"  - Conflicts detected: {n_conf}",
-            f"  - Overflow groups: {n_overflow}",
-            f"  - Alt. room groups: {n_alt}",
-            "",
-        ]
-        if issues:
-            text_lines.append("POINTS D'ATTENTION")
-            for issue in issues:
-                text_lines.append(f"  - {issue}")
-            text_lines.append("")
-
-        text_lines.append("=" * 60)
-        text_summary = "\n".join(text_lines)
-
-        st.download_button(
-            "Download summary (TXT)",
-            data=text_summary.encode('utf-8'),
-            file_name=f"reliability_report_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
-            mime="text/plain",
-            use_container_width=True,
-        )
-
-    # Wizard navigation
-    wizard_nav(
-        prev_label="Results", prev_page='results',
-        next_label="History", next_page='history',
-    )
-
-# ════════════════════════════════════════════════════════════
-# PAGE: INTEGRITY (flow-integrity checks, shown as visual cards)
-# Same checks as verify_flow.py, but rendered in-app for the defense
-# (no terminal). Students -> free; Professors -> free; rooms; reservations.
-# ════════════════════════════════════════════════════════════
-elif page == t('nav_integrity'):
     page_header(
-        "Flow integrity",
-        "Live verification that the generated schedule respects every rule: "
-        "students free, rooms free, professors eligible, reservations honoured."
+        "Statistics",
+        "All quality metrics for the generated plan in one place: "
+        "reliability, flow integrity, and pipeline monitoring."
     )
+    _an_tabs = st.tabs(["Reliability", "Integrity", "Monitoring"])
+    with _an_tabs[0]:
+        _page_reliability()
+    with _an_tabs[1]:
+        _page_integrity()
+    with _an_tabs[2]:
+        _page_monitoring()
 
-    if not run_ok:
-        st.warning("**Pipeline not executed** — please run the optimization first.")
-        if st.button("← Go to Optimize", type="primary", key="integ_go_opt"):
-            st.session_state['_nav_to'] = 'optimize'
-            st.rerun()
-        st.stop()
-
-    def _rp(rel):
-        if PATHS_OK:
-            found = app_paths.resolve_existing(rel)
-            if found:
-                return found
-        return rel
-
-    def _safe_csv(rel):
-        import os as _os
-        # Try the given path, then a common folder TYPO ('optimizarion'), then a
-        # recursive search by filename — so a misplaced file is still found
-        # instead of showing N/A.
-        cands = [rel]
-        if 'optimization/' in rel:
-            cands.append(rel.replace('optimization/', 'optimizarion/'))
-        seen = []
-        for c in cands:
-            seen.append(_rp(c))
-        # recursive fallback by basename within the workspace
-        try:
-            base = _os.path.basename(rel)
-            ws = getattr(app_paths, 'WORKSPACE', None) if PATHS_OK else None
-            if ws is None and PATHS_OK:
-                ws = app_paths.workspace_path()
-                ws = _os.path.dirname(ws) if _os.path.splitext(str(ws))[1] else str(ws)
-            if ws:
-                for root, _d, files in _os.walk(str(ws)):
-                    if base in files:
-                        seen.append(_os.path.join(root, base))
-        except Exception:
-            pass
-        for pth in seen:
-            try:
-                if pth and _os.path.exists(pth):
-                    return pd.read_csv(pth)
-            except Exception:
-                continue
-        return None
-
-    sched = _safe_csv('outputs/optimization/optimized_schedule_v5.csv')
-    comp = _safe_csv('outputs/optimization/group_composition.csv')
-    blocked = _safe_csv('outputs/optimization/blocked_slots.csv')
-    busy = _safe_csv('data_clean/optimization/student_busy.csv')
-    profs = _safe_csv('data_clean/optimization/subject_professors.csv')
-    pbusy = _safe_csv('data_clean/optimization/professor_busy.csv')
-
-    if sched is None or comp is None:
-        safe_error("Unable to load the generated schedule "
-                   "(optimized_schedule_v5.csv / group_composition.csv).", None)
-        st.stop()
-
-    from collections import defaultdict as _dd
-
-    DAY_IDS = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4}
-    BLOCK_IDS = {"08:30-10:30": 1, "10:30-12:30": 2, "12:30-14:30": 3,
-                 "15:00-17:00": 4, "17:00-19:00": 5, "19:00-21:00": 6}
-
-    sid_col = ("student_hash" if "student_hash" in comp.columns
-               else "student_name" if "student_name" in comp.columns else None)
-
-    sessions = sched.copy()
-    sessions["grupo"] = pd.to_numeric(sessions["grupo"], errors="coerce")
-    sessions = sessions.dropna(subset=["grupo"]); sessions["grupo"] = sessions["grupo"].astype(int)
-
-    # The schedule uses prefixed subject keys ("S1_Física") while
-    # group_composition uses the clean name ("Física"). Normalise both sides so
-    # the (subject, grupo) join actually matches.
-    import re as _re
-    def _subj_key(name):
-        return _re.sub(r'^S[12]_', '', str(name)).strip().lower()
-
-    grp_students = _dd(set)
-    student_filiere = {}   # student id -> filière (titulacion), for traced examples
-    if sid_col:
-        # Skip manual-override placements: those are deliberate human-in-the-loop
-        # decisions Daniel has already arbitrated, exactly as the pipeline's own
-        # student-conflict check does. Counting them would flag accepted clashes.
-        _has_ov = "is_override" in comp.columns
-        _fil_col = ("titulacion" if "titulacion" in comp.columns
-                    else "program" if "program" in comp.columns else None)
-        for _, r in comp.iterrows():
-            if str(r.get("grupo", "")).strip() in ("", "nan"):
-                continue
-            if _fil_col and r[sid_col] not in student_filiere:
-                _fv = str(r.get(_fil_col, "") or "").strip()
-                if _fv and not _fv.upper().startswith(("MIXED", "OVERFLOW")):
-                    student_filiere[r[sid_col]] = _fv
-            if _has_ov and bool(r.get("is_override", False)):
-                continue
-            grp_students[(_subj_key(r["subject"]), int(r["grupo"]))].add(r[sid_col])
-
-    # Build per-student lab slots
-    student_slot = _dd(list)
-    for _, s in sessions.iterrows():
-        key = (_subj_key(s["subject"]), int(s["grupo"]))
-        for st_ in grp_students.get(key, ()):
-            student_slot[st_].append((int(s["week"]), str(s["day"]), str(s["time_block"]),
-                                      str(s["subject"]), int(s["grupo"])))
-
-    results = []   # (status, title, detail)  status in {pass, info, skip, fail}
-
-    # 1. student-free
-    clash = 0
-    for st_, slots in student_slot.items():
-        seen = {}
-        for (w, d, b, subj, g) in slots:
-            k = (w, d, b)
-            if k in seen and seen[k] != (subj, g):
-                clash += 1
-            seen[k] = (subj, g)
-    results.append(("pass" if clash == 0 else "fail",
-                    "Students never double-booked",
-                    "No student has two lab sessions at the same week/day/block."
-                    if clash == 0 else f"{clash} clash(es) found."))
-
-    # 2. student-vs-class. The anonymised build keys composition by hash while
-    # student_busy uses raw ids — but student_directory.csv maps id<->hash, so we
-    # translate student_busy to hashes and check WITHOUT exposing real names.
-    directory = _safe_csv('outputs/optimization/student_directory.csv')
-    if busy is not None and sid_col:
-        bcol = busy.columns
-        sidc = "student_id" if "student_id" in bcol else ("student_hash" if "student_hash" in bcol else bcol[0])
-        # id -> composition identifier (name or hash) bridge via student_directory
-        id_map = {}
-        if directory is not None and "student_id" in directory.columns and sid_col in directory.columns:
-            id_map = {str(r["student_id"]): str(r[sid_col]) for _, r in directory.iterrows()}
-        busy_slots = _dd(set)
-        for _, r in busy.iterrows():
-            raw = str(r[sidc])
-            key = raw if sid_col == sidc else id_map.get(raw, raw)
-            di = int(r["day_idx"]) if "day_idx" in bcol else DAY_IDS.get(str(r.get("day", "")), -1)
-            bi = int(r["block_id"]) if "block_id" in bcol else BLOCK_IDS.get(str(r.get("block", "")), -1)
-            busy_slots[key].add((di, bi))
-        comp_ids = set(str(x) for x in comp[sid_col])
-        if busy_slots and (set(busy_slots) & comp_ids):
-            # student_busy is the WEEKLY RECURRING class pattern (day+block, no
-            # week); labs are week-specific. A day/block coincidence is therefore
-            # not necessarily a conflict, and we can't resolve it from a
-            # week-agnostic map. Report as INFO; the pipeline enforces the real
-            # week-aware no-overlap at group formation.
-            coincide = 0
-            for st_, slots in student_slot.items():
-                for (w, d, b, subj, g) in slots:
-                    if (DAY_IDS.get(d, -1), BLOCK_IDS.get(b, -1)) in busy_slots.get(str(st_), ()):
-                        coincide += 1
-            results.append(("info", "Lab vs class slot",
-                            f"{coincide} lab/day-block coincidence(s) with the recurring class "
-                            f"pattern — not necessarily conflicts (student_busy is week-agnostic; "
-                            f"the pipeline enforces week-aware no-overlap at group formation)."))
-        else:
-            results.append(("skip", "Lab vs class slot",
-                            "Could not align student_busy with the schedule "
-                            "(student_directory.csv missing or ids don't match)."))
-    else:
-        results.append(("skip", "Lab vs class slot",
-                        "student_busy.csv not available in this build."))
-
-    # 3. room-free (per semester)
-    room_slot = _dd(int)
-    for _, s in sessions.iterrows():
-        for room in str(s["lab_rooms"]).split(","):
-            room = room.strip()
-            if room:
-                room_slot[(room, int(s["semester"]), int(s["week"]),
-                           str(s["day"]), str(s["time_block"]))] += 1
-    c4 = [k for k, n in room_slot.items() if n > 1]
-    results.append(("pass" if not c4 else "fail",
-                    "Rooms never double-booked (per semester)",
-                    "No room hosts two sessions in the same semester/week/day/block."
-                    if not c4 else f"{len(c4)} conflict(s); e.g. " +
-                    "; ".join(f"{r} S{sem} W{w} {d} {b}" for (r, sem, w, d, b) in c4[:3])))
-
-    # 4a + 4b professors
-    if profs is not None:
-        elig = {str(r["subject"]): [n.strip() for n in str(r["professors"]).split(";") if n.strip()]
-                for _, r in profs.iterrows()}
-        def _names_for(subj):
-            if subj in elig: return elig[subj]
-            base = subj.split("_", 1)[-1]
-            for k, v in elig.items():
-                if k.split("_", 1)[-1] == base: return v
-            return []
-        no_elig = [str(s["subject"]) for _, s in sessions.iterrows() if not _names_for(str(s["subject"]))]
-        results.append(("pass" if not no_elig else "fail",
-                        "Every session has an eligible professor",
-                        "Each lab subject has at least one qualified professor."
-                        if not no_elig else f"Missing for: {sorted(set(no_elig))[:5]}"))
-        # 4b informational
-        pbset = _dd(set)
-        if pbusy is not None:
-            pc = pbusy.columns; pidc = "professor_id" if "professor_id" in pc else pc[0]
-            for _, r in pbusy.iterrows():
-                di = int(r["day_idx"]) if "day_idx" in pc else -1
-                bi = int(r["block_id"]) if "block_id" in pc else -1
-                pbset[str(r[pidc])].add((di, bi))
-        all_names = {n for names in elig.values() for n in names}
-        if pbset and len(set(pbset) & all_names) >= max(3, 0.3 * len(all_names)):
-            nf = 0
-            for _, s in sessions.iterrows():
-                names = _names_for(str(s["subject"]))
-                if names and all((DAY_IDS.get(str(s["day"]), -1), BLOCK_IDS.get(str(s["time_block"]), -1))
-                                 in pbset.get(n, set()) for n in names):
-                    nf += 1
-            results.append(("info", "Professor availability",
-                            f"{nf} session(s) where every eligible professor is also marked busy — "
-                            "expected when the eligible professor is the one running the lab. "
-                            "The pipeline already removes genuinely-busy slots at group formation."))
-        else:
-            results.append(("skip", "Professor availability",
-                            "professor_busy.csv not available or identifiers don't align."))
-    else:
-        results.append(("skip", "Eligible professors",
-                        "subject_professors.csv not available in this build."))
-
-    # 5. reserved slots (soft, per semester) + 5b markers absent
-    if blocked is not None and len(blocked):
-        has_sem = "semester" in blocked.columns
-        bset = set()
-        for _, r in blocked.iterrows():
-            sem = int(r["semester"]) if has_sem else None
-            bset.add((str(r["lab_rooms"]).strip(), sem, int(r["week"]),
-                      str(r["day"]), str(r["time_block"])))
-        hits = []
-        for _, s in sessions.iterrows():
-            for room in str(s["lab_rooms"]).split(","):
-                key = (room.strip(), int(s["semester"]) if has_sem else None,
-                       int(s["week"]), str(s["day"]), str(s["time_block"]))
-                if key in bset:
-                    hits.append(f"{str(s['subject']).split('_',1)[-1]} G{int(s['grupo'])} "
-                                f"(S{int(s['semester'])} W{int(s['week'])} {s['day']} {s['time_block']})")
-        if not hits:
-            results.append(("pass", "Reserved slots clear",
-                            "No real session is placed on a reserved (e.g. Biotecnología) slot."))
-        else:
-            results.append(("info", "Reserved-slot avoidance (soft)",
-                            f"{len(hits)} residual session(s) on reserved slots — the unavoidable "
-                            f"minimum when a group is fixed to that day/block: " + "; ".join(hits[:4])))
-        markers_in_sched = ("blocked" in sched.columns) or ((sessions["grupo"] == 0).any())
-        results.append(("pass" if not markers_in_sched else "fail",
-                        "Reservation markers kept out of the schedule",
-                        "The schedule has no marker rows, so the reliability check stays clean."
-                        if not markers_in_sched else "Marker rows leaked into the schedule."))
-    else:
-        results.append(("skip", "Reserved slots",
-                        "blocked_slots.csv not found (no reservations configured)."))
-
-    # ── Summary banner ──────────────────────────────────────
-    n_pass = sum(1 for r in results if r[0] == "pass")
-    n_fail = sum(1 for r in results if r[0] == "fail")
-    n_info = sum(1 for r in results if r[0] == "info")
-    n_skip = sum(1 for r in results if r[0] == "skip")
-    # Group the cards by status so all PASS sit together, then INFO, then N/A
-    # (failures first if any, since they are the most important to see).
-    _st_order = {"fail": 0, "pass": 1, "info": 2, "skip": 3}
-    results.sort(key=lambda r: _st_order.get(r[0], 9))
-    if n_fail == 0:
-        st.markdown(
-            f"<div style='padding:1.1rem 1.3rem;border-radius:12px;margin-bottom:1.2rem;"
-            f"background:rgba(34,197,94,0.10);border:1px solid rgba(34,197,94,0.45);'>"
-            f"<span style='font-size:1.15rem;font-weight:700;color:#22c55e;'>All integrity checks passed</span>"
-            f"<br><span style='color:var(--text-muted);'>{n_pass} passed · {n_info} informational · {n_skip} not applicable in this build</span>"
-            f"</div>", unsafe_allow_html=True)
-    else:
-        st.markdown(
-            f"<div style='padding:1.1rem 1.3rem;border-radius:12px;margin-bottom:1.2rem;"
-            f"background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.45);'>"
-            f"<span style='font-size:1.15rem;font-weight:700;color:#ef4444;'>{n_fail} integrity check(s) failed</span>"
-            f"<br><span style='color:var(--text-muted);'>{n_pass} passed · {n_info} informational · {n_skip} not applicable</span>"
-            f"</div>", unsafe_allow_html=True)
-
-    # ── Check cards ─────────────────────────────────────────
-    _style = {
-        "pass": ("#22c55e", "rgba(34,197,94,0.06)", "", "PASS"),
-        "fail": ("#ef4444", "rgba(239,68,68,0.07)", "", "FAIL"),
-        "info": ("#f4b942", "rgba(244,185,66,0.07)", "", "INFO"),
-        "skip": ("#64748b", "rgba(100,116,139,0.06)", "", "N/A"),
-    }
-    for status, title, detail in results:
-        color, bg, icon, tag = _style[status]
-        st.markdown(
-            f"<div style='display:flex;gap:0.9rem;align-items:flex-start;padding:0.85rem 1.1rem;"
-            f"border-radius:10px;margin-bottom:0.6rem;background:{bg};border:1px solid {color}33;"
-            f"border-left:3px solid {color};'>"
-            f"<div style='flex:1;'>"
-            f"<div style='font-weight:650;color:var(--text-primary);'>{title} "
-            f"<span style='font-size:0.7rem;color:{color};border:1px solid {color}66;border-radius:6px;"
-            f"padding:1px 6px;margin-left:6px;vertical-align:middle;'>{tag}</span></div>"
-            f"<div style='color:var(--text-muted);font-size:0.9rem;margin-top:0.2rem;'>{detail}</div>"
-            f"</div></div>", unsafe_allow_html=True)
-
-    # ── Legend: what the badges mean (esp. the yellow INFO cards) ───────────
-    with st.expander("What do these badges mean? (PASS / INFO / N/A)"):
-        st.markdown(
-            "- **<span style='color:#22c55e;'>PASS</span>** — the rule is verified: "
-            "the generated schedule satisfies it with zero violations.\n"
-            "- **<span style='color:#f4b942;'>INFO</span>** (yellow) — **not a problem**. "
-            "It flags something that *looks* like it could be an issue but isn't a real "
-            "conflict, usually because the source data can't prove it either way. These are "
-            "shown transparently rather than hidden. In this build:\n"
-            "    - *Lab vs class slot* — `student_busy` records the **weekly recurring** class "
-            "pattern (day+block, no week number), while labs are placed in **specific weeks**. "
-            "A day/block coincidence isn't necessarily a clash; the pipeline already enforces "
-            "the real week-aware no-overlap when forming groups.\n"
-            "    - *Professor availability* — a professor who is **running a lab** also appears "
-            "\"busy\" at that slot in `professor_busy`. So \"all eligible busy\" mixes genuine "
-            "over-subscription with the normal case of the eligible professor teaching the "
-            "session. The pipeline removes genuinely-busy slots at group formation.\n"
-            "    - *Reserved-slot avoidance (soft)* — the Biotecnología reservation is a soft "
-            "penalty, not a hard block. The 2 residual sessions are the unavoidable minimum "
-            "(their group is fixed to that day/block); everything else was steered away.\n"
-            "- **<span style='color:#64748b;'>N/A</span>** — the check couldn't run because a "
-            "needed file isn't in this build (e.g. `subject_professors.csv`). Not a failure.",
-            unsafe_allow_html=True,
-        )
-
-    # ── Traced examples (for the defense) ──────────────────
-    section_header("Traced examples")
-    st.caption("Pick a few students and professors to show the schedule matches reality. "
-               "Each student's sessions are grouped by semester — no two share a week/day/block. "
-               "A student enrolled only in S1 subjects (e.g. Física + Química, typical 1st-year) "
-               "correctly shows no S2 sessions.")
-
-    # how many students to show
-    _n_students = st.slider("Students to show", 1, 10, 4, key="integ_n_students")
-
-    # day order for tidy sorting
-    _DAY_ORDER = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4}
-    # map a schedule subject -> semester number from the sessions frame
-    _subj_sem = {}
-    for _, _s in sessions.iterrows():
-        _subj_sem[str(_s["subject"])] = int(_s["semester"])
-
-    st.markdown("**Students** — name · field · sessions (grouped by semester)")
-    shown = 0
-    for st_, slots in student_slot.items():
-        if shown >= _n_students:
-            break
-        fil = student_filiere.get(st_, "—")
-        # split this student's sessions by semester
-        by_sem = _dd(list)
-        for (w, d, b, subj, g) in slots:
-            by_sem[_subj_sem.get(subj, 0)].append((w, d, b, subj, g))
-        # build the per-semester rows
-        sem_blocks = ""
-        for sem in sorted(by_sem):
-            rows = sorted(by_sem[sem], key=lambda x: (x[0], _DAY_ORDER.get(x[1], 9)))
-            chips = ""
-            for (w, d, b, subj, g) in rows:
-                name = subj.split("_", 1)[-1]
-                chips += (
-                    f"<span style='display:inline-block;background:var(--bg-elevated,#1b2440);"
-                    f"border:1px solid var(--border,#2c3658);border-radius:7px;"
-                    f"padding:2px 8px;margin:2px 4px 2px 0;font-size:0.78rem;color:var(--text-primary,#e6ecf5);'>"
-                    f"<b>{name}</b> G{g} · <span style='color:var(--text-muted,#94a3b8);'>"
-                    f"S{sem} W{w} · {d} {b}</span></span>"
-                )
-            sem_blocks += (
-                f"<div style='margin:0.35rem 0 0.1rem;'>"
-                f"<span style='font-size:0.7rem;letter-spacing:0.06em;color:var(--text-muted,#94a3b8);"
-                f"text-transform:uppercase;'>Semester {sem}</span><br>{chips}</div>"
-            )
-        st.markdown(
-            f"<div style='padding:0.7rem 0.95rem;border-radius:10px;margin-bottom:0.6rem;"
-            f"background:var(--bg-card,rgba(255,255,255,0.02));border:1px solid var(--border,#2c3658);'>"
-            f"<div style='display:flex;align-items:center;gap:0.6rem;margin-bottom:0.2rem;'>"
-            f"<span style='font-weight:700;color:var(--text-primary,#fff);'>{str(st_)}</span>"
-            f"<span style='font-size:0.72rem;font-weight:600;color:#38bdf8;border:1px solid #38bdf855;"
-            f"background:#38bdf814;border-radius:6px;padding:1px 8px;'>{fil}</span>"
-            f"<span style='font-size:0.72rem;color:var(--text-muted,#94a3b8);'>"
-            f"· {len(slots)} session(s)</span></div>"
-            f"{sem_blocks}</div>",
-            unsafe_allow_html=True,
-        )
-        shown += 1
-
-    if profs is not None:
-        # Lab credits per professor (1 P credit = 5 lab sessions) — feature #6 output.
-        import unicodedata as _ud
-        def _norm_pn(x):
-            x = _ud.normalize("NFKD", str(x))
-            x = "".join(c for c in x if not _ud.combining(c))
-            return " ".join(sorted(x.lower().replace(",", " ").split()))
-        _ll_csv = _find_prof_load_csv()
-        _credit_by_norm = {}
-        if _ll_csv:
-            try:
-                _ll = pd.read_csv(_ll_csv)
-                for _, _r in _ll.iterrows():
-                    _credit_by_norm[_norm_pn(_r.get("prof_name", ""))] = {
-                        "cr": float(_r.get("lab_credits", 0) or 0),
-                        "sess": int(float(_r.get("lab_sessions", 0) or 0)),
-                        "over": bool(_r.get("over_budget", False)),
-                    }
-            except Exception:
-                pass
-
-        st.markdown("**Professors** — subject · eligible teachers · lab credits → sessions "
-                    "(1 P credit = 5 sessions)")
-        for subj in sorted(sessions["subject"].unique()):
-            names = _names_for(str(subj))
-            if not names:
-                continue
-            # one chip per professor — name + lab-credit load when known
-            chips = ""
-            for nm in names:
-                _ci = _credit_by_norm.get(_norm_pn(nm))
-                if _ci and _ci["cr"] > 0:
-                    _flag = " (over budget)" if _ci["over"] else ""
-                    _load = (f"<span style='color:#6fb6e8;font-weight:600;'> · "
-                             f"{_ci['cr']:.0f} P cr \u2192 {_ci['sess']} sess{_flag}</span>")
-                else:
-                    _load = ""
-                chips += (
-                    f"<span style='display:inline-block;background:var(--bg-elevated,#1b2440);"
-                    f"border:1px solid var(--border,#2c3658);border-radius:7px;"
-                    f"padding:2px 8px;margin:2px 4px 2px 0;font-size:0.78rem;"
-                    f"color:var(--text-primary,#e6ecf5);'>{nm}{_load}</span>"
-                )
-            # scheduled slots for this subject (where data actually links to time)
-            _ss = sessions[sessions["subject"] == subj]
-            _slot_bits = ""
-            if len(_ss):
-                _agg = (_ss.groupby(["day", "time_block"]).size()
-                        .sort_values(ascending=False))
-                # Clear, prominent block of one badge per scheduled slot.
-                _slot_chips = "".join(
-                    f"<span style='display:inline-block;background:rgba(111,174,217,0.12);"
-                    f"border:1px solid rgba(111,174,217,0.40);border-radius:999px;"
-                    f"padding:3px 11px;margin:3px 5px 0 0;font-size:0.78rem;font-weight:600;"
-                    f"color:var(--cyan,#6FAED9);'>{d} {tb} "
-                    f"<span style='opacity:0.8;font-weight:500;'>&times;{n}</span></span>"
-                    for (d, tb), n in _agg.items()
-                )
-                _slot_bits = (
-                    "<div style='margin-top:0.6rem;padding-top:0.55rem;"
-                    "border-top:1px solid var(--line,#243453);'>"
-                    "<div style='font-family:var(--font-mono,monospace);font-size:0.66rem;"
-                    "letter-spacing:0.12em;text-transform:uppercase;"
-                    "color:var(--text-muted,#6B7E9E);margin-bottom:0.15rem;'>"
-                    "Scheduled sessions</div>"
-                    f"<div>{_slot_chips}</div></div>"
-                )
-            st.markdown(
-                f"<div style='padding:0.7rem 0.95rem;border-radius:10px;margin-bottom:0.6rem;"
-                f"background:var(--bg-card,rgba(255,255,255,0.02));border:1px solid var(--border,#2c3658);'>"
-                f"<div style='display:flex;align-items:center;gap:0.6rem;margin-bottom:0.3rem;'>"
-                f"<span style='font-weight:700;color:var(--text-primary,#fff);'>"
-                f"{str(subj).split('_',1)[-1]}</span>"
-                f"<span style='font-size:0.72rem;font-weight:600;color:#22c55e;border:1px solid #22c55e55;"
-                f"background:#22c55e14;border-radius:6px;padding:1px 8px;'>{len(names)} eligible</span>"
-                f"</div>{chips}{_slot_bits}</div>",
-                unsafe_allow_html=True,
-            )
-
-    # -- Credits per professor (clear, sortable table) --
-    section_header("Credits per professor")
-    _ll_path = None
-    for _p in ("professor_lab_load.csv",
-               "outputs/optimization/professor_lab_load.csv"):
-        if os.path.exists(_p):
-            _ll_path = _p
-            break
-    if _ll_path is None:
-        st.info("File professor_lab_load.csv not found. "
-                "Run the pipeline to display credits per professor.")
-    # ── Lab credits per professor (clear, sortable table) ───────────────
-    section_header("Lab credits per professor")
-    _ll_path = _find_prof_load_csv()
-    if _ll_path is None:
-        st.info("Professor credit data is not available yet. "
-                "Run the optimization to generate it.")
-    else:
-        try:
-            _df = pd.read_csv(_ll_path)
-            _df_lab = _df[_df["lab_credits"].fillna(0) > 0].copy()
-            n_prof = len(_df_lab)
-            n_over = int(_df_lab["over_budget"].fillna(False).astype(bool).sum())
-            tot_cr = float(_df_lab["lab_credits"].fillna(0).sum())
-            tot_sess = int(_df_lab["lab_sessions"].fillna(0).sum())
-
-            help_tip(
-                "Lab load per professor. Validated rule: "
-                "1 P credit = 5 lab sessions. Budget overruns are "
-                "signaled (never blocking).",
-                "Laboratory teaching load per professor. Validated rule: "
-                "1 P credit = 5 lab sessions. Budget overruns are flagged "
-                "(never blocking).",
-                icon=""
-            )
-            c1, c2, c3, c4 = st.columns(4)
-            with c1:
-                stat_card("Professors", n_prof, "with lab credits")
-            with c2:
-                stat_card("Lab credits", f"{tot_cr:.0f}", "total assigned")
-            with c3:
-                stat_card("Lab sessions", tot_sess, "total (credits x 5)")
-            with c4:
-                stat_card("Overruns", n_over, "budget signaled")
-                stat_card("Lab sessions", tot_sess, "total (credits × 5)")
-            with c4:
-                stat_card("Over budget", n_over, "flagged")
-
-            _show = _df_lab.rename(columns={
-                "prof_code": "Code",
-                "prof_name": "Professor",
-                "lab_credits": "Lab credits",
-                "lab_sessions": "Lab sessions",
-                "theory_credits": "Theory credits",
-                "total_assigned": "Total assigned",
-                "budget": "Budget",
-                "margin": "Margin",
-                "over_budget": "Over budget",
-            })
-            _cols = ["Code", "Professor", "Lab credits", "Lab sessions",
-                     "Theory credits", "Total assigned", "Budget", "Margin",
-                     "Over budget"]
-            _cols = [c for c in _cols if c in _show.columns]
-            _show = _show[_cols].sort_values("Lab credits", ascending=False)
-            st.dataframe(_show, use_container_width=True, hide_index=True)
-        except Exception as e:
-            st.warning(f"Unable to display credits per professor: {e}")
-            st.warning(f"Could not display professor credits: {e}")
-
-    # -- How lab credits are computed and distributed --
-    with st.expander("How are lab credits computed and distributed?"):
-        st.markdown(
-            """
-**Source of truth.** The file `Asignacion_2025-2026_v5.xlsx`, sheet
-*"Asignación docente"*, lists for each (subject, group) pair up to
-**4 professors**, each with a credit count and a character:
-**T** = theory (lecture) or **P** = practice (lab).
-
-**Validated conversion rule.** `1 P credit = 5 lab sessions`.
-Example: a professor with **3P** must supervise **15 lab sessions**.
-Only **P** credits generate lab sessions; **T** credits are counted
-separately (column *Theory credits*).
-
-**Distribution.** Sessions are distributed per subject/group according to the
-professors declared on the sheet. The *Total assigned* column adds
-theory + lab, compared to the professor's *Budget* to compute the *Margin*.
-
-**Overruns.** When the load exceeds the budget, the system **signals** it
-(column *Over budget*) but **never blocks** generation:
-the system validates, it does not decide. In the official data, around
-**17 professors out of 127** are already above their budget — this is a
-factual statement left to the coordination's discretion.
-            """
-        )
-
-    # ── Teacher availability verification (proof) ──────────────────────
-    section_header("Teacher availability — verification")
-    help_tip(
-        "A posteriori proof that the produced schedule respects the parameters "
-        "of 'Teacher Availability Configuration'. Generated by the pipeline "
-        "(config/availability_verification.json) on every run.",
-        icon=""
-    )
-    _verif = None
-    for _vp in ("config/availability_verification.json",
-                "outputs/optimization/config/availability_verification.json"):
-        if os.path.exists(_vp):
-            try:
-                with open(_vp, "r", encoding="utf-8") as _vf:
-                    _verif = json.load(_vf)
-                break
-            except Exception:
-                _verif = None
-    if _verif is None:
-        st.info("No verification available yet. Run the "
-                "pipeline to generate the availability enforcement proof "
-                "(config/availability_verification.json).")
-    else:
-        # 1) Unavailable slots (HARD constraint)
-        _hbs = _verif.get("hard_blocked_slots", {})
-        _viol = _hbs.get("violations", [])
-        _relaxed_n = int(_hbs.get("relaxed_count", 0))
-        _unexpected_n = int(_hbs.get("unexpected_count", 0))
-        _status = _hbs.get("status")
-        if _status == "ok":
-            st.success(
-                f"Unavailable slots: **0 violation** "
-                f"({_hbs.get('checked_groups', 0)} constrained groups checked). "
-                "No session is placed on a blocked slot."
-            )
-        elif _status == "relaxed":
-            st.warning(
-                f"Unavailable slots: **{len(_viol)} expected violation(s)** "
-                f"({_relaxed_n} relaxed, 0 unexpected). These placements are "
-                "EXPECTED: for these subjects, enforcing the unavailability would "
-                "leave **no feasible slot**, so the constraint was deliberately "
-                "relaxed to keep the subject schedulable. Per the project "
-                "principle, the system **signals** but **never blocks**."
-            )
-        else:
-            st.error(
-                f"Unavailable slots: **{len(_viol)} violation(s)** detected "
-                f"({_relaxed_n} relaxed/expected, {_unexpected_n} unexpected). "
-                "The unexpected ones warrant investigation."
-            )
-        if _viol:
-            _vdf = pd.DataFrame(_viol).rename(columns={
-                "subject": "Subject",
-                "group": "Group",
-                "day": "Day",
-                "block": "Slot",
-                "relaxed": "Relaxed (expected)",
-                "reason": "Reason",
-            })
-            st.dataframe(_vdf, use_container_width=True, hide_index=True)
-            st.caption(
-                "Relaxed = expected: enforcing the unavailability would leave no "
-                "feasible slot for this subject. To remove it, relax a teacher's "
-                "unavailability, add a room/slot, or accept it."
-            )
-
-        # 2) Preferred time range (SOFT constraint)
-        _pref = _verif.get("preferred_range", [])
-        if _pref:
-            st.markdown("**Preferred time range** (soft — compliance rate)")
-            _pdf = pd.DataFrame(_pref).rename(columns={
-                "teacher": "Teacher",
-                "recognized": "Recognized",
-                "preferred_blocks": "Preferred slots",
-                "sessions_total": "Sessions",
-                "sessions_inside": "Inside range",
-                "pct_inside": "% inside range",
-            })
-            st.dataframe(_pdf, use_container_width=True, hide_index=True)
-
-        # 3) Max lab days / week (SIGNAL)
-        _mdw = _verif.get("max_days_per_week", [])
-        if _mdw:
-            st.markdown("**Maximum lab days / week** (signal)")
-            _mdf = pd.DataFrame(_mdw).rename(columns={
-                "teacher": "Teacher",
-                "recognized": "Recognized",
-                "cap": "Cap",
-                "days_used": "Days used",
-                "days": "Days",
-                "status": "Status",
-            })
-            st.dataframe(_mdf, use_container_width=True, hide_index=True)
-
-        if _verif.get("generated_at"):
-            st.caption(f"Verification generated on {_verif['generated_at']}")
-
-    st.caption("These are the same checks as verify_flow.py — shown here so no terminal is needed.")
-
-
-# ════════════════════════════════════════════════════════════
-# PAGE: MONITORING (control tower)
-# Centralized verification & supervision of the whole pipeline:
-# constraints, variables, inputs, weights, conflicts, free/busy
-# slots, infeasibility and scenarios — to scale and maintain the
-# optimization reliably over time.
-# ════════════════════════════════════════════════════════════
-elif page == t('nav_monitoring'):
-    try:
-        import monitoring
-        monitoring.render(
-            st,
-            helpers={
-                'page_header': page_header,
-                'section_header': section_header,
-                'stat_card': stat_card,
-                'safe_error': safe_error,
-            },
-            t=t,
-        )
-    except Exception as _mon_exc:
-        safe_error("Unable to render the monitoring page", _mon_exc)
 
 
 # ════════════════════════════════════════════════════════════
@@ -4190,7 +4217,7 @@ elif page == t('nav_history'):
                 d1, d2, d3 = st.columns(3)
                 with d1:
                     sd = diff.get('sessions_diff', 0)
-                    color = "#22c55e" if sd == 0 else "#f59e0b"
+                    color = "#2E86AB" if sd == 0 else "#D2A24A"
                     sign = "+" if sd > 0 else ""
                     st.markdown(f"""
                         <div class="stat-card">
@@ -4201,7 +4228,7 @@ elif page == t('nav_history'):
                     """, unsafe_allow_html=True)
                 with d2:
                     cc = diff.get('cells_changed', 0)
-                    color = "#22c55e" if cc == 0 else "#f59e0b"
+                    color = "#2E86AB" if cc == 0 else "#D2A24A"
                     st.markdown(f"""
                         <div class="stat-card">
                             <div class="stat-label">Modified sessions</div>
@@ -4231,7 +4258,7 @@ elif page == t('nav_history'):
 
     # Wizard navigation
     wizard_nav(
-        prev_label="Reliability", prev_page='dashboard',
+        prev_label="Statistics", prev_page='analytics',
         next_label="Edit", next_page='edit',
     )
 
@@ -4371,7 +4398,7 @@ elif page == t('nav_edit'):
     sh += "<div style='display:flex; gap:0; margin:1.5rem 0 2rem 0;'>"
     for i, label in enumerate(step_labels, start=1):
         if i < current_step:
-            bg, color, border = "rgba(34,197,94,0.15)", "#4ade80", "#22c55e"
+            bg, color, border = "rgba(46, 134, 171,0.15)", "#4ade80", "#2E86AB"
             icon = str(i)
         elif i == current_step:
             bg, color, border = "rgba(99,102,241,0.15)", "#a5b4fc", "#6366f1"
@@ -4637,11 +4664,11 @@ elif page == t('nav_edit'):
                     "**Target slot.** Hover over cells to see details. "
                     "<span style='display:inline-flex;gap:0.5rem;font-size:0.85rem;'>"
                     "<span style='display:inline-flex;align-items:center;gap:0.3rem;'>"
-                    "<span style='width:8px;height:8px;border-radius:50%;background:#22C55E;'></span>Free</span>"
+                    "<span style='width:8px;height:8px;border-radius:50%;background:#2E86AB;'></span>Free</span>"
                     "<span style='display:inline-flex;align-items:center;gap:0.3rem;'>"
-                    "<span style='width:8px;height:8px;border-radius:50%;background:#F59E0B;'></span>Warning</span>"
+                    "<span style='width:8px;height:8px;border-radius:50%;background:#D2A24A;'></span>Warning</span>"
                     "<span style='display:inline-flex;align-items:center;gap:0.3rem;'>"
-                    "<span style='width:8px;height:8px;border-radius:50%;background:#EF4444;'></span>Conflict</span>"
+                    "<span style='width:8px;height:8px;border-radius:50%;background:#B26575;'></span>Conflict</span>"
                     "<span style='display:inline-flex;align-items:center;gap:0.3rem;'>"
                     "<span style='width:8px;height:8px;border-radius:50%;background:#6366F1;'></span>Current</span>"
                     "</span>",
@@ -4670,11 +4697,11 @@ elif page == t('nav_edit'):
                         if status == 'self':
                             dot_color, bg, tt = '#6366F1', 'rgba(99,102,241,0.2)', 'Current position'
                         elif status == 'free':
-                            dot_color, bg, tt = '#22C55E', 'rgba(34,197,94,0.08)', 'Free'
+                            dot_color, bg, tt = '#2E86AB', 'rgba(46, 134, 171,0.08)', 'Free'
                         elif status == 'warning':
-                            dot_color, bg, tt = '#F59E0B', 'rgba(245,158,11,0.12)', ' · '.join(cell['reasons'])
+                            dot_color, bg, tt = '#D2A24A', 'rgba(210, 162, 74,0.12)', ' · '.join(cell['reasons'])
                         else:
-                            dot_color, bg, tt = '#EF4444', 'rgba(239,68,68,0.12)', ' · '.join(cell['reasons'])
+                            dot_color, bg, tt = '#B26575', 'rgba(178, 101, 117,0.12)', ' · '.join(cell['reasons'])
                         dot = (f'<span style="display:inline-block;width:10px;height:10px;'
                                f'border-radius:50%;background:{dot_color};"></span>')
                         grid_html += (
@@ -5242,7 +5269,7 @@ elif page == t('nav_export'):
         if all_curso_files:
             st.markdown("""
                 <div class="info-card" style="
-                    background: linear-gradient(135deg, rgba(34, 197, 94, 0.04), rgba(34, 197, 94, 0.01));
+                    background: linear-gradient(135deg, rgba(46, 134, 171, 0.04), rgba(46, 134, 171, 0.01));
                     border-left: 4px solid var(--green);
                     margin-top: 1rem;
                     margin-bottom: 1rem;">
@@ -5411,8 +5438,8 @@ elif page == t('nav_export'):
     if os.path.exists('outputs/optimization/Curso_2025_2026'):
         st.markdown("""
             <div style="text-align: center; margin-top: 2rem; padding: 1.5rem;
-                         background: linear-gradient(135deg, rgba(34, 197, 94, 0.06), rgba(34, 197, 94, 0.02));
-                         border: 1px solid rgba(34, 197, 94, 0.25);
+                         background: linear-gradient(135deg, rgba(46, 134, 171, 0.06), rgba(46, 134, 171, 0.02));
+                         border: 1px solid rgba(46, 134, 171, 0.25);
                          border-radius: 12px;">
                 <div style="font-weight: 600; color: var(--green); margin-bottom: 0.25rem;">
                     Workflow complete
@@ -5761,8 +5788,8 @@ elif page == t('nav_student'):
                     f"{pick['day']} {pick['time_block']} · "
                     f"{cap_rem} place(s) disponible(s)"
                 )
-                reco_color = "rgba(34,197,94,0.08)"
-                reco_border = "#22c55e"
+                reco_color = "rgba(46, 134, 171,0.08)"
+                reco_border = "#2E86AB"
             elif pick_kind == 'afternoon':
                 cap_rem = pick['capacity_max'] - pick['capacity_used']
                 reco_line = (
@@ -5770,22 +5797,22 @@ elif page == t('nav_student'):
                     f"{pick['day']} {pick['time_block']} · "
                     f"{cap_rem} place(s) disponible(s)"
                 )
-                reco_color = "rgba(245,158,11,0.08)"
-                reco_border = "#f59e0b"
+                reco_color = "rgba(210, 162, 74,0.08)"
+                reco_border = "#D2A24A"
             elif pick_kind == 'full':
                 reco_line = (
                     f"**No group with available slots.** "
                     f"All compatible groups are full."
                 )
-                reco_color = "rgba(245,158,11,0.08)"
-                reco_border = "#f59e0b"
+                reco_color = "rgba(210, 162, 74,0.08)"
+                reco_border = "#D2A24A"
             else:
                 reco_line = (
                     f"**No compatible group found.** "
                     f"All slots conflict with the student's availability."
                 )
-                reco_color = "rgba(239,68,68,0.08)"
-                reco_border = "#ef4444"
+                reco_color = "rgba(178, 101, 117,0.08)"
+                reco_border = "#B26575"
 
             st.markdown(
                 f"<div style='padding:0.75rem 1rem; background:{reco_color}; "
@@ -5897,21 +5924,21 @@ elif page == t('nav_student'):
             cap_remaining = g['capacity_max'] - g['capacity_used']
 
             if g['has_conflict']:
-                color = "#EF4444"
+                color = "#B26575"
                 msg = "Conflict with availability"
-                bg = "rgba(239,68,68,0.06)"
+                bg = "rgba(178, 101, 117,0.06)"
             elif cap_remaining <= 0:
-                color = "#F59E0B"
+                color = "#D2A24A"
                 msg = "Full (saturated)"
-                bg = "rgba(245,158,11,0.06)"
+                bg = "rgba(210, 162, 74,0.06)"
             elif g['is_afternoon']:
-                color = "#F59E0B"
+                color = "#D2A24A"
                 msg = "Compatible (afternoon)"
-                bg = "rgba(245,158,11,0.04)"
+                bg = "rgba(210, 162, 74,0.04)"
             else:
-                color = "#22C55E"
+                color = "#2E86AB"
                 msg = "Compatible"
-                bg = "rgba(34,197,94,0.06)"
+                bg = "rgba(46, 134, 171,0.06)"
 
             st.markdown(
                 f"<div style='padding:0.5rem 0.75rem; background:{bg}; "

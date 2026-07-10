@@ -36,15 +36,18 @@ from openpyxl.utils import get_column_letter
 
 
 # ── Loyola palette ─────────────────────────────────────────────────────────
+# Status colors follow the Universidad Loyola brand (blue/white). We avoid
+# bright green/red: positive = Loyola blue, attention = gold, problem = muted
+# wine. Meaning is always reinforced by an explicit text label in each cell.
 NAVY = "1B3A6F"
 NAVY_DEEP = "0F2344"
 GOLD = "FFCC00"
-GOOD = "2E9E6B"
-GOOD_BG = "E3F5EC"
+GOOD = "2E86AB"
+GOOD_BG = "E4F0F6"
 WARN = "B8860B"
 WARN_BG = "FBF3DC"
-BAD = "C0392B"
-BAD_BG = "FBE4E1"
+BAD = "B26575"
+BAD_BG = "F3E5E9"
 GREY_BG = "F2F5FA"
 WHITE = "FFFFFF"
 
