@@ -1508,6 +1508,186 @@ def build_vista_profesor_sheet(workbook, schedule_df, subjects, professor_lookup
 
 
 # =============================================================================
+# VISTA PROFESOR (tabla) — filterable, colour-coded companion sheet
+# =============================================================================
+#
+# Additive enrichment (Point 2): alongside the validated "Vista profesor" grid
+# (which stays untouched), we add a FLAT, FILTERABLE table view of the same
+# sessions. This is what makes group/program colours and Excel filters usable:
+# a grid with merged cells cannot carry an auto-filter, a flat table can.
+#
+# The sheet has one row per lab session with an auto-filter on the header,
+# frozen header row, and colour coding on the Asignatura (subject), Programa
+# (program) and Grupo (group) cells so the reader can visually group rows.
+
+#: Distinct, legible (black-text) colour per academic program. Falls back to a
+#: neutral light blue for unknown programs.
+PROGRAM_COLORS = {
+    'GITI':  'BDD7EE',
+    'GIM':   'C6E0B4',
+    'GIE':   'FFE699',
+    'GIEA':  'F8CBAD',
+    'GIC':   'D9D2E9',
+    'GIQ':   'D0E0C0',
+    'GISI':  'FCE4D6',
+    'GIOT':  'DDEBF7',
+    'GIERM': 'E2EFDA',
+}
+
+#: Colour-blind-friendly cycle (Okabe-Ito derived, pale variants) used to give a
+#: stable colour per group number. Index = (grupo - 1) mod len(cycle).
+GROUP_COLOR_CYCLE = [
+    'F4C7B5', 'B7D9E8', 'C2E0C6', 'F5E6A8', 'D8C7E8',
+    'F5C6D0', 'C8D9F0', 'E8D4B0', 'B8E0D8', 'E0C4C0',
+]
+
+
+def get_program_fill(program_name):
+    """Return a PatternFill for an academic program (light gray fallback)."""
+    key = str(program_name).strip().upper()
+    color_hex = PROGRAM_COLORS.get(key, 'DDEBF7')
+    return PatternFill(start_color=color_hex, end_color=color_hex, fill_type='solid')
+
+
+def get_group_fill(grupo):
+    """Return a stable PatternFill for a group number (colour-blind cycle)."""
+    try:
+        idx = (int(grupo) - 1) % len(GROUP_COLOR_CYCLE)
+    except Exception:
+        idx = 0
+    color_hex = GROUP_COLOR_CYCLE[idx]
+    return PatternFill(start_color=color_hex, end_color=color_hex, fill_type='solid')
+
+
+def build_vista_profesor_tabla_sheet(workbook, schedule_df, subjects,
+                                     professor_lookup=None):
+    """Build the "Vista profesor (tabla)" tab: a flat, filterable, colour-coded
+    table of every lab session for the level.
+
+    Columns: Semana, Fecha, Día, Franja horaria, Asignatura, Programa, Grupo,
+    Práctica, Sala, Estudiantes, Profesor.
+
+    Features:
+      * auto-filter on the header row (native Excel column filters);
+      * frozen header row;
+      * subject / program / group colour coding on their respective cells.
+
+    Purely additive: the validated grid sheet is not modified.
+    """
+    worksheet = workbook.create_sheet('Vista profesor (tabla)')
+
+    if schedule_df is None or len(schedule_df) == 0:
+        return
+
+    # Restrict to subjects that actually have sessions in this level.
+    lab_subjects = set(s for s in subjects if s in schedule_df['subject'].unique())
+    rows = schedule_df[schedule_df['subject'].isin(lab_subjects)].copy()
+    if len(rows) == 0:
+        return
+
+    try:
+        _sem = int(str(rows['semester'].iloc[0]))
+    except Exception:
+        _sem = 1
+
+    # ── Title band ──────────────────────────────────────────────────────
+    headers = ['Semana', 'Fecha', 'Día', 'Franja horaria', 'Asignatura',
+               'Programa', 'Grupo', 'Práctica', 'Sala', 'Estudiantes',
+               'Profesor']
+    ncols = len(headers)
+
+    worksheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+    tcell = worksheet.cell(row=1, column=1,
+                           value='Vista profesor — tabla filtrable')
+    tcell.font = PROGRAM_FONT
+    tcell.alignment = LEFT_ALIGNMENT
+
+    worksheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ncols)
+    hcell = worksheet.cell(
+        row=2, column=1,
+        value=('Una fila por sesión. Use los filtros de columna (fila de '
+               'encabezado) para filtrar por asignatura, programa, grupo, '
+               'profesor, día o sala. Colores: asignatura, programa y grupo.'),
+    )
+    hcell.alignment = WRAP_TOP_ALIGNMENT
+    worksheet.row_dimensions[2].height = 30
+
+    # ── Header row ──────────────────────────────────────────────────────
+    header_row = 4
+    for ci, htext in enumerate(headers, start=1):
+        write_bordered_cell(
+            worksheet, header_row, ci, htext,
+            WHITE_FONT, HEADER_BLUE_FILL, CENTER_ALIGNMENT,
+        )
+
+    # ── Data rows (sorted for a stable, readable order) ─────────────────
+    _day_order = {d: i for i, d in enumerate(DAYS_OF_WEEK)}
+    rows['_day_ord'] = rows['day'].map(lambda d: _day_order.get(str(d), 99))
+    rows = rows.sort_values(
+        by=['week', '_day_ord', 'time_block', 'subject', 'grupo', 'session'],
+        kind='stable',
+    )
+
+    r = header_row + 1
+    for _, row in rows.iterrows():
+        subject_full = str(row['subject'])
+        subject_clean = strip_semester_prefix(subject_full)
+        try:
+            week_num = int(row['week'])
+        except Exception:
+            week_num = 0
+        day_name = str(row['day'])
+        try:
+            day_idx = DAYS_OF_WEEK.index(day_name)
+            fecha = get_week_dates(week_num, _sem)[day_idx]
+        except Exception:
+            fecha = None
+
+        room = row.get('lab_rooms', '')
+        room = str(room).strip() if room is not None and str(room).strip() and str(room) != 'nan' else '—'
+        prof = row.get('professor', '')
+        prof = str(prof).strip() if prof is not None and str(prof).strip() and str(prof) != 'nan' else '—'
+
+        values = [
+            week_num,
+            fecha,
+            day_name,
+            str(row['time_block']),
+            sanitize_cell(subject_clean),
+            str(row.get('program', '')),
+            int(row['grupo']) if str(row.get('grupo', '')).strip() not in ('', 'nan') else '',
+            int(row['session']) if str(row.get('session', '')).strip() not in ('', 'nan') else '',
+            room,
+            int(row['nb_students']) if str(row.get('nb_students', '')).strip() not in ('', 'nan') else '',
+            sanitize_cell(prof),
+        ]
+
+        for ci, val in enumerate(values, start=1):
+            cell = write_bordered_cell(
+                worksheet, r, ci, val, COURSE_FONT, None, LEFT_ALIGNMENT,
+            )
+            if ci == 2 and fecha is not None:
+                cell.number_format = 'YYYY-MM-DD'
+            # Colour coding on subject / program / group cells.
+            if ci == 5:
+                cell.fill = get_subject_fill(subject_clean)
+            elif ci == 6:
+                cell.fill = get_program_fill(row.get('program', ''))
+            elif ci == 7:
+                cell.fill = get_group_fill(row.get('grupo', 0))
+        r += 1
+
+    # ── Auto-filter + frozen header + widths ────────────────────────────
+    last_col_letter = get_column_letter(ncols)
+    worksheet.auto_filter.ref = f'A{header_row}:{last_col_letter}{r - 1}'
+    worksheet.freeze_panes = f'A{header_row + 1}'
+
+    widths = [8, 12, 11, 15, 26, 11, 8, 9, 26, 12, 34]
+    for ci, w in enumerate(widths, start=1):
+        worksheet.column_dimensions[get_column_letter(ci)].width = w
+
+
+# =============================================================================
 # VUE PROFESSEUR (consolidée) — Partie 1
 # =============================================================================
 #

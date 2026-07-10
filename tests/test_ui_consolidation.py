@@ -21,9 +21,15 @@ def test_ui_solver_constraints_module_exposes_render():
     assert callable(getattr(mod, "render_solver_constraints_section", None))
 
 
-def test_ui_advanced_exports_module_exposes_render():
-    mod = importlib.import_module("ui_advanced_exports")
-    assert callable(getattr(mod, "render_advanced_exports_section", None))
+def test_advanced_exports_section_removed_from_export_page():
+    # Point 2: the standalone "Advanced exports" section is removed from the
+    # Export page; its enhanced features are integrated into the default
+    # deliverables instead. The obsolete UI module must be gone too.
+    assert not os.path.exists(os.path.join(ROOT, "ui_advanced_exports.py"))
+    with open(os.path.join(ROOT, "app.py"), encoding="utf-8") as fh:
+        source = fh.read()
+    assert "render_advanced_exports_section" not in source
+    assert "Exports avances (classeurs enrichis)" not in source
 
 
 def test_old_standalone_pages_removed():
@@ -65,7 +71,6 @@ def test_app_embeds_consolidated_components():
     with open(os.path.join(ROOT, "app.py"), encoding="utf-8") as fh:
         source = fh.read()
     assert "render_solver_constraints_section" in source
-    assert "render_advanced_exports_section" in source
     # Solver-constraints tab title (localised to English, Point 1).
     assert "Solver constraints" in source
     # Configuration overview/preview panel embedded (Point 1).
@@ -76,5 +81,4 @@ def test_spec_bundles_new_ui_modules():
     with open(os.path.join(ROOT, "LabScheduling.spec"), encoding="utf-8") as fh:
         spec = fh.read()
     assert "ui_solver_constraints" in spec
-    assert "ui_advanced_exports" in spec
     assert "ui_config_preview" in spec
