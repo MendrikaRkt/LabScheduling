@@ -1608,6 +1608,17 @@ elif page == t('nav_config'):
             "(`config/user_config.json`) but no override is active in this session."
         )
 
+    # ─────────────────────────────────────────────────────────
+    # CONFIGURATION OVERVIEW / PREVIEW (Point 1)
+    # Compact, read-only snapshot of the loaded input files, the main
+    # generation parameters, a data summary and quick launch buttons.
+    # ─────────────────────────────────────────────────────────
+    try:
+        from ui_config_preview import render_config_preview
+        render_config_preview()
+    except Exception as _cfgprev_exc:
+        st.info(f"Configuration overview unavailable: {_cfgprev_exc}")
+
     # 5 tabs: the 4 validated tabs + the consolidated solver-constraints tab
     # (Phase 2 feature merged here so there is a single Configuration page).
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -1615,7 +1626,7 @@ elif page == t('nav_config'):
         f"{t('per_subject')}",
         f"{t('year_pref_title')}",
         f"{t('teacher_title')}",
-        "Contraintes du solveur",
+        "Solver constraints",
     ])
 
     # Load LAB_CONFIG once for tabs 1-2. The pipeline module may live at the

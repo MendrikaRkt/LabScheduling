@@ -268,6 +268,30 @@ def build_validation_sheet(workbook, report, sheet_title="Validación"):
             ws.cell(row=rr, column=cc).border = BORDER
     row += 4
 
+    # ── Solver configuration applied (Point 1 traceability) ────────────
+    solver_cfg = report.get("solver_config") or {}
+    if solver_cfg:
+        row = _section(ws, row, "Configuración del solver (parámetros aplicados)")
+        row = _kv(ws, row, "Perfil activo", solver_cfg.get("profile", "-"))
+        _labels_es = {
+            "semester_anchor_first": "Anclaje inicio de semestre (1ª sesión)",
+            "semester_anchor_last": "Anclaje fin de semestre (última sesión)",
+            "spacing": "Espaciado regular entre sesiones",
+            "parity": "Alternancia de paridad entre grupos paralelos",
+        }
+        weights = solver_cfg.get("weights", {}) or {}
+        enabled = solver_cfg.get("enabled", {}) or {}
+        for key in ("semester_anchor_first", "semester_anchor_last",
+                    "spacing", "parity"):
+            if key not in weights and key not in enabled:
+                continue
+            state = "activada" if enabled.get(key, False) else "desactivada"
+            row = _kv(
+                ws, row, _labels_es.get(key, key),
+                f"peso {weights.get(key, 0)} ({state})",
+            )
+        row += 1
+
     # ── Teacher load (top entries) ─────────────────────────────────────
     teacher_load = report.get("teacher_load", [])
     if teacher_load:

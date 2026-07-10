@@ -629,6 +629,25 @@ def validate_schedule(paths=None, max_examples=25):
     report["solver"] = solver_info
 
     # ------------------------------------------------------------------ #
+    # Active soft-constraint configuration (Point 1 traceability)         #
+    # Surfaced so the applied solver parameters flow into the Excel       #
+    # Validation sheet, not only into reports/solver_stats.json.          #
+    # ------------------------------------------------------------------ #
+    solver_config_info = {"profile": "UNKNOWN", "weights": {}, "enabled": {}}
+    try:
+        import solver_config as _sc
+        _cfg = _sc.load_config()
+        _summary = _sc.config_summary(_cfg)
+        solver_config_info = {
+            "profile": _sc.detect_profile(_cfg),
+            "weights": _summary.get("weights", {}),
+            "enabled": _summary.get("enabled", {}),
+        }
+    except Exception as exc:
+        report["warnings"].append(f"lecture solver_constraints.yaml: {exc}")
+    report["solver_config"] = solver_config_info
+
+    # ------------------------------------------------------------------ #
     # Counts                                                             #
     # ------------------------------------------------------------------ #
     n_students = 0

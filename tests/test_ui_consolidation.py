@@ -66,7 +66,10 @@ def test_app_embeds_consolidated_components():
         source = fh.read()
     assert "render_solver_constraints_section" in source
     assert "render_advanced_exports_section" in source
-    assert "Contraintes du solveur" in source
+    # Solver-constraints tab title (localised to English, Point 1).
+    assert "Solver constraints" in source
+    # Configuration overview/preview panel embedded (Point 1).
+    assert "render_config_preview" in source
 
 
 def test_spec_bundles_new_ui_modules():
@@ -74,3 +77,4 @@ def test_spec_bundles_new_ui_modules():
         spec = fh.read()
     assert "ui_solver_constraints" in spec
     assert "ui_advanced_exports" in spec
+    assert "ui_config_preview" in spec
