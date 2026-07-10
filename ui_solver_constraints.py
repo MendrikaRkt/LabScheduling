@@ -12,7 +12,7 @@ The component keeps the exact same behaviour as the standalone page:
 - Extreme-configuration warnings, live preview, validation.
 - Persistence to ``config/solver_constraints.yaml`` via ``solver_config``.
 
-All UI labels are in French per project convention; no emojis are used.
+All UI labels are in English per project convention; no emojis are used.
 """
 
 from __future__ import annotations
@@ -22,6 +22,18 @@ import streamlit as st
 import solver_config as sc
 
 
+def _label(key: str) -> str:
+    """English label with a French fallback if the EN map is unavailable."""
+    en = getattr(sc, "CONSTRAINT_LABELS_EN", {})
+    return en.get(key, sc.CONSTRAINT_LABELS_FR.get(key, key))
+
+
+def _help(key: str) -> str:
+    """English one-line help with a French fallback."""
+    en = getattr(sc, "CONSTRAINT_HELP_EN", {})
+    return en.get(key, sc.CONSTRAINT_HELP_FR.get(key, ""))
+
+
 def render_solver_constraints_section() -> None:
     """Render the solver soft-constraint panel (embeddable in a tab).
 
@@ -29,10 +41,9 @@ def render_solver_constraints_section() -> None:
     ``config/solver_constraints.yaml`` through :mod:`solver_config`.
     """
     st.caption(
-        "Ajustez les contraintes SOUPLES (preferences) du solveur CP-SAT. "
-        "Les contraintes DURES (C1 chevauchement, C4 semaines >= credits, "
-        "C5 pas de double labo le meme jour) restent toujours actives et ne "
-        "sont pas modifiables ici."
+        "Tune the SOFT (preference) constraints of the CP-SAT solver. "
+        "The HARD constraints (C1 overlap, C4 weeks >= credits, C5 no double "
+        "lab on the same day) are always active and cannot be changed here."
     )
 
     # Load current configuration into session state (once).
@@ -42,10 +53,10 @@ def render_solver_constraints_section() -> None:
     cfg = st.session_state.solver_cfg
 
     # ── Profile selector ──────────────────────────────────────────────
-    st.markdown("##### Profil predefini")
+    st.markdown("##### Preset profile")
     st.caption(
-        "Appliquez un profil en un clic. 'Personnalise' apparait des que "
-        "vous modifiez un poids manuellement."
+        "Apply a profile in one click. 'Custom' appears as soon as you "
+        "change a weight manually."
     )
 
     current_profile = sc.detect_profile(cfg)
@@ -56,45 +67,60 @@ def render_solver_constraints_section() -> None:
             _sync_widget_state()
             st.rerun()
     with col_b:
-        if st.button("Equilibre (Balanced)", use_container_width=True,
+        if st.button("Balanced", use_container_width=True,
                      key="scfg_balanced"):
             st.session_state.solver_cfg = sc.apply_profile("Balanced")
             _sync_widget_state()
             st.rerun()
     with col_c:
-        if st.button("Detendu (Relaxed)", use_container_width=True,
+        if st.button("Relaxed", use_container_width=True,
                      key="scfg_relaxed"):
             st.session_state.solver_cfg = sc.apply_profile("Relaxed")
             _sync_widget_state()
             st.rerun()
     with col_d:
-        st.metric("Profil actuel", current_profile)
+        st.metric("Current profile", current_profile)
 
     # ── Per-constraint controls ───────────────────────────────────────
-    st.markdown("##### Reglage fin des contraintes souples")
+    st.markdown("##### Fine tuning of soft constraints")
+    st.caption(
+        "Each constraint below is a PREFERENCE, not a rule: the solver tries "
+        "to honour it but may trade it off for a globally better schedule. "
+        "Toggle it off to ignore it entirely, or raise/lower its weight to "
+        "make it more or less important relative to the others."
+    )
+
+    details = getattr(sc, "CONSTRAINT_DETAIL_EN", {})
 
     new_soft = {}
     for key in sc.SOFT_CONSTRAINT_KEYS:
         entry = cfg["soft_constraints"][key]
-        label = sc.CONSTRAINT_LABELS_FR.get(key, key)
-        help_txt = sc.CONSTRAINT_HELP_FR.get(key, "")
+        label = _label(key)
+        help_txt = _help(key)
+        detail = details.get(key, {})
         with st.container(border=True):
             c1, c2 = st.columns([1, 3])
             with c1:
                 enabled = st.toggle(
-                    "Activee", value=bool(entry["enabled"]),
+                    "Enabled", value=bool(entry["enabled"]),
                     key=f"scfg_en_{key}",
                 )
             with c2:
                 st.markdown(f"**{label}**")
                 st.caption(help_txt)
             weight = st.slider(
-                "Poids (importance relative)",
+                "Weight (relative importance)",
                 min_value=sc.MIN_WEIGHT, max_value=1000,
                 value=min(int(entry["weight"]), 1000),
                 step=10, key=f"scfg_w_{key}",
                 disabled=not enabled,
             )
+            if detail:
+                st.markdown(
+                    f"- **Purpose:** {detail.get('purpose', '')}\n"
+                    f"- **Effect of the weight:** {detail.get('effect', '')}\n"
+                    f"- **Typical values:** {detail.get('typical', '')}"
+                )
             new_soft[key] = {"enabled": enabled, "weight": weight}
 
     # Rebuild the working config from the widgets.
@@ -109,47 +135,48 @@ def render_solver_constraints_section() -> None:
         st.warning(w)
 
     # ── Live preview ──────────────────────────────────────────────────
-    with st.expander("Apercu de la configuration effective"):
+    with st.expander("Preview of the effective configuration"):
         summary = sc.config_summary(working_cfg)
         prev1, prev2 = st.columns(2)
         with prev1:
-            st.markdown("**Poids effectifs (0 = desactivee)**")
+            st.markdown("**Effective weights (0 = disabled)**")
             st.json(summary["weights"])
         with prev2:
-            st.markdown("**Etat des contraintes**")
+            st.markdown("**Constraint states**")
             st.json(summary["enabled"])
 
     errors = sc.validate_config(working_cfg)
     if errors:
-        st.error("Configuration invalide :\n\n- " + "\n- ".join(errors))
+        st.error("Invalid configuration:\n\n- " + "\n- ".join(errors))
 
     # ── Save / Reset ──────────────────────────────────────────────────
     save_col, reset_col = st.columns(2)
     with save_col:
         confirm = st.checkbox(
-            "Je confirme l'enregistrement de cette configuration",
+            "I confirm saving this configuration",
             key="scfg_confirm",
         )
-        if st.button("Enregistrer la configuration du solveur", type="primary",
+        if st.button("Save solver configuration", type="primary",
                      disabled=not confirm or bool(errors),
                      use_container_width=True, key="scfg_save"):
             try:
                 path = sc.save_config(working_cfg)
-                st.success(f"Configuration enregistree dans : {path}")
+                st.success(f"Configuration saved to: {path}")
             except Exception as exc:  # pragma: no cover - UI feedback
-                st.error(f"Echec de l'enregistrement : {exc}")
+                st.error(f"Save failed: {exc}")
     with reset_col:
-        if st.button("Reinitialiser aux valeurs par defaut (Balanced)",
+        if st.button("Reset to defaults (Balanced)",
                      use_container_width=True, key="scfg_reset"):
             st.session_state.solver_cfg = sc.apply_profile("Balanced")
             _sync_widget_state()
             st.rerun()
 
     st.caption(
-        "Rappel : si le fichier de configuration est absent ou invalide, le "
-        "solveur applique automatiquement le profil 'Balanced' (comportement "
-        "historique). La configuration est prise en compte au prochain "
-        "lancement de l'optimisation."
+        "Reminder: if the configuration file is missing or invalid, the "
+        "solver automatically applies the 'Balanced' profile (historical "
+        "behaviour). The configuration is applied on the next optimization "
+        "run and is recorded in reports/solver_stats.json and in the "
+        "Validation Excel sheet for traceability."
     )
 
 

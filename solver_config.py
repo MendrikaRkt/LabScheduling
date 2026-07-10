@@ -83,6 +83,85 @@ CONSTRAINT_HELP_FR: Dict[str, str] = {
     ),
 }
 
+#: Human-readable English labels for the UI (values only; keys stay canonical).
+CONSTRAINT_LABELS_EN: Dict[str, str] = {
+    "semester_anchor_first": "Semester start anchor (first session)",
+    "semester_anchor_last": "Semester end anchor (last session)",
+    "spacing": "Even spacing between sessions",
+    "parity": "Parity alternation between parallel groups",
+}
+
+#: Short English help text for each soft constraint (one-line summary).
+CONSTRAINT_HELP_EN: Dict[str, str] = {
+    "semester_anchor_first": (
+        "Penalises first sessions placed too late in the allowed window. "
+        "Higher weight = earlier start."
+    ),
+    "semester_anchor_last": (
+        "Penalises last sessions placed too early. Higher weight = keeps "
+        "using weeks until the end of the semester."
+    ),
+    "spacing": (
+        "Penalises irregular gaps between a group's successive sessions. "
+        "Higher weight = more uniform spacing."
+    ),
+    "parity": (
+        "Encourages parallel groups to occupy opposite-parity weeks "
+        "(odd/even). Higher weight = stricter alternation."
+    ),
+}
+
+#: Detailed English explanation for each soft constraint. Each entry gives
+#: the purpose, the effect of the weight, and a typical value range so the
+#: user understands what each control in the "Fine tuning" section does.
+CONSTRAINT_DETAIL_EN: Dict[str, Dict[str, str]] = {
+    "semester_anchor_first": {
+        "purpose": (
+            "Pulls the FIRST lab session of every group towards the "
+            "beginning of the allowed week window."
+        ),
+        "effect": (
+            "Raising the weight makes the solver start labs as early as "
+            "possible; lowering it lets the first session drift later when "
+            "that produces a better overall schedule."
+        ),
+        "typical": "Relaxed 30 | Balanced 100 | Strict 300",
+    },
+    "semester_anchor_last": {
+        "purpose": (
+            "Pushes the LAST lab session of every group towards the end of "
+            "the allowed week window, spreading work across the semester."
+        ),
+        "effect": (
+            "Raising the weight keeps sessions running until late in the "
+            "semester; lowering it allows everything to be packed earlier."
+        ),
+        "typical": "Relaxed 30 | Balanced 100 | Strict 300",
+    },
+    "spacing": {
+        "purpose": (
+            "Keeps a group's successive sessions evenly spaced instead of "
+            "clustered together."
+        ),
+        "effect": (
+            "Raising the weight enforces regular gaps between sessions; "
+            "lowering it (or disabling) allows back-to-back weeks."
+        ),
+        "typical": "Relaxed 50 (off) | Balanced 200 | Strict 500",
+    },
+    "parity": {
+        "purpose": (
+            "Encourages parallel groups of the same subject to run on "
+            "opposite-parity weeks (odd vs even) to balance room usage."
+        ),
+        "effect": (
+            "Raising the weight enforces stricter odd/even alternation; "
+            "lowering it (or disabling) removes the parity preference."
+        ),
+        "typical": "Relaxed 10 (off) | Balanced 50 | Strict 150",
+    },
+}
+
 #: Weight bounds accepted by the validator (inclusive).
 MIN_WEIGHT = 0
 MAX_WEIGHT = 100_000
