@@ -1,0 +1,67 @@
+# Lab Practice Scheduling Profile
+# This profile mirrors the current LabScheduling behavior for lab session planning.
+
+domain: lab_practice
+entity_label: Group
+sessions_per_entity: 5  # 1 P credit = 5 practice sessions (per CREDIT_TO_SESSIONS constant)
+scheduling_weeks:
+  min: 1
+  max: 15
+allow_repetitions: true  # Groups schedule multiple practices across the semester
+
+# Hard constraints (must be satisfied)
+hard_constraints:
+  - student_conflict  # C1: No student attends 2 labs simultaneously
+  - room_capacity     # C4: Room can hold only 1 group per slot
+  - instructor_conflict  # C5: Professor teaches only 1 group per slot
+  
+# Soft constraints (preferences, weighted in objective function)
+soft_constraints:
+  spacing: 200  # Prefer spacing between practices of same group
+  parity: 50    # Balance week-day distribution
+  semester_anchor_first: 100  # Prefer scheduling early in semester
+  semester_anchor_last: 100   # (mutually exclusive with above, config determines which is active)
+
+# Room assignment rules
+room_filter:
+  type: lab_rooms  # Only physical lab spaces
+  examples:
+    - "Ciencias Experimentales I"
+    - "Ciencias Experimentales II"
+    - "Lab. Robótica"
+    - "Lab. Telemática"
+  
+capacity_mode: per_group  # Each group occupies a room exclusively
+
+# Instructor assignment rules
+instructor_fixed: true  # Each group has 1 dedicated professor (from Asignación docente)
+instructor_required: true  # A professor must always be present
+
+# Credit system
+credit_label: "P credit"
+credit_to_sessions_multiplier: 5  # 1 P = 5 sessions (pipeline.CREDIT_TO_SESSIONS)
+
+# Excel output configuration
+output_sheets:
+  - name: "Grupo de prácticas"
+    description: "Student roster per group with color-coding"
+  - name: "Vista profesor"
+    description: "Weekly grid view of professor schedule"
+  - name: "Vista profesor (tabla)"
+    description: "Filterable table of all sessions"
+  - name: "Teacher View"
+    description: "Per-professor credit breakdown and session timetable"
+  - name: "Validation"
+    description: "Schedule reliability report and conflict summary"
+
+# Data sources
+required_inputs:
+  - revisionAulario.xlsx  # Room timetable
+  - report_AlumnosGrupos.xlsx  # Student enrollments
+  - Asignacion_2025-2026_v5.xlsx  # Professor P/T credit assignment (optional, falls back to cache)
+
+# Business rules
+business_rules:
+  max_group_size: 20  # Optimal group size (yellow alert if exceeded)
+  min_group_size: 8   # Minimum viable group size (yellow alert if below)
+  preferred_spacing_weeks: 2  # Ideal gap between practices of same group
