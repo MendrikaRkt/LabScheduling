@@ -286,6 +286,14 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
         )
         gen.build_vista_profesor_sheet(wb, level_schedule, subjects)
 
+        # Companion filterable, colour-coded table for "Vista profesor"
+        # (Point 2 enrichment). Additive: the validated grid above is untouched.
+        if hasattr(gen, "build_vista_profesor_tabla_sheet"):
+            try:
+                gen.build_vista_profesor_tabla_sheet(wb, level_schedule, subjects)
+            except Exception as exc:  # never break Excel generation
+                print(f"    [WARN] Vista profesor (tabla) skipped: {exc}")
+
         # NOUVELLE feuille consolidée centrée professeur (Partie 1).
         if hasattr(gen, "build_vue_professeur_consolidada_sheet"):
             gen.build_vue_professeur_consolidada_sheet(

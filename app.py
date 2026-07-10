@@ -5334,16 +5334,11 @@ elif page == t('nav_export'):
     else:
         st.info("No files generated yet")
 
-    # ════════════════════════════════════════
-    # ADVANCED EXPORTS (Phase 3, consolidated here)
-    # Enhanced workbooks generated directly from the same results.
-    # ════════════════════════════════════════
-    section_header("Exports avances (classeurs enrichis)")
-    try:
-        from ui_advanced_exports import render_advanced_exports_section
-        render_advanced_exports_section()
-    except Exception as _advx_exc:
-        st.error(f"Advanced exports panel unavailable: {_advx_exc}")
+    # NOTE: The former standalone "Advanced exports" section was removed here.
+    # Its enhanced features (colour-coded groups/programs and native Excel
+    # filters) are now integrated directly into the DEFAULT deliverables via
+    # the "Vista profesor (tabla)" sheet added by the standard Excel generator.
+    # There is no longer a separate enriched-workbook step.
 
     # ─── Wizard navigation ───
     wizard_nav(

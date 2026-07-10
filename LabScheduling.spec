@@ -79,7 +79,6 @@ datas += [
     ("export_manager.py", "."),         # Phase 3 — export formats + templates
     ("ui_solver_constraints.py", "."),  # Consolidation — solver config tab
     ("ui_config_preview.py", "."),      # Configuration overview/preview panel
-    ("ui_advanced_exports.py", "."),    # Consolidation — advanced exports section
     ("ui_infeasibility.py", "."),       # Consolidation — infeasibility simulator
     ("schedule_validation.py", "."),    # Final reliability validator
     ("validation_sheet.py", "."),       # Validación Excel sheet builder
@@ -140,7 +139,7 @@ hidden += [
     "lab_constants", "data_quality", "kpi_report", "validation_credits",
     "solver_config", "simulation_engine",
     "excel_export_enhanced", "export_manager",  # Phase 3
-    "ui_solver_constraints", "ui_config_preview", "ui_advanced_exports",  # Consolidated UI components
+    "ui_solver_constraints", "ui_config_preview",  # Consolidated UI components
     "ui_infeasibility", "schedule_validation", "validation_sheet",
     "streamlit.runtime.scriptrunner.magic_funcs",
 ]
