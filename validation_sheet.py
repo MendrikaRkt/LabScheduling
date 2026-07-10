@@ -60,6 +60,16 @@ CHECK_LABELS_ES = {
     "group_sizing": "Tamaño de los grupos",
 }
 CHECK_KIND_ES = {"hard": "Restricción dura", "indicator": "Indicador"}
+# Spanish detail text (the sheet matches Daniel's language). The validation
+# module stores French detail; we localise it here for the Excel output.
+CHECK_DETAILS_ES = {
+    "room_conflicts": "Un aula física acoge un solo grupo por (semestre, semana, día, franja).",
+    "student_theory_conflicts": "Ningún estudiante en laboratorio sobre una franja de clase teórica ocupada (mismo semestre).",
+    "student_lab_double_booking": "Ningún estudiante con dos sesiones de laboratorio en la misma (semestre, semana, día, franja).",
+    "professor_double_booking": "Indicador (asignación posterior a la optimización, no restringida por el solver): profesor sin doble sesión en la misma (semestre, semana, día, franja).",
+    "professor_busy": "Indicador (asignación posterior a la optimización): sesión sobre una franja de clase teórica del profesor (mismo semestre, salvo la hora sustituida).",
+    "group_sizing": "Tamaño de grupo dentro de la política (mín. 7 / preferido 12 / máx. 15).",
+}
 STATUS_ES = {
     "PASS": "APTO",
     "WARN": "APTO CON AVISOS",
@@ -219,7 +229,7 @@ def build_validation_sheet(workbook, report, sheet_title="Validación"):
             state,
             chk.get("count", 0),
             aff_total,
-            chk.get("detail", ""),
+            CHECK_DETAILS_ES.get(name, chk.get("detail", "")),
         ]
         for c, val in enumerate(values, start=1):
             cell = ws.cell(row=row, column=c, value=val)
@@ -237,8 +247,20 @@ def build_validation_sheet(workbook, report, sheet_title="Validación"):
 
     # ── Reliability formula ────────────────────────────────────────────
     row = _section(ws, row, "Fórmula del índice de fiabilidad")
+    formula_es = (
+        "índice = 100 × Σ[ peso × (1 − entidades_en_conflicto / entidades_totales) ] "
+        "/ Σ pesos × (1.0 si solver OPTIMAL/FACTIBLE, en caso contrario 0.9). "
+        "Restricciones duras y pesos: conflictos de aula 40, "
+        "conflicto teoría-estudiante 30, doble reserva de laboratorio 30. "
+        "Estado: APTO si no hay violación dura; APTO CON AVISOS si el residuo ≤ 1 % "
+        "de las entidades o hay indicadores señalados; NO APTO si > 1 %. "
+        "Los controles de profesor (doble asignación, profesor ocupado) son "
+        "INDICADORES de calidad — la asignación docente se realiza después de la "
+        "optimización, fuera del modelo CP-SAT; bajan el estado a AVISO pero nunca "
+        "a NO APTO."
+    )
     ws.merge_cells(start_row=row, start_column=1, end_row=row + 2, end_column=6)
-    fcell = ws.cell(row=row, column=1, value=report.get("reliability_formula", ""))
+    fcell = ws.cell(row=row, column=1, value=formula_es)
     fcell.font = Font(size=10, color=NAVY_DEEP)
     fcell.alignment = Alignment(vertical="top", wrap_text=True, indent=1)
     for rr in range(row, row + 3):
