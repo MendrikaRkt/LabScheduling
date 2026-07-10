@@ -176,6 +176,27 @@ def _load_generator():
 # ────────────────────────────────────────────────────────────
 # Core: build all level workbooks for one semester
 # ────────────────────────────────────────────────────────────
+_VALIDATION_REPORT_CACHE = {"done": False, "report": None}
+
+
+def _get_validation_report():
+    """Compute the reliability report once and cache it for the whole run.
+
+    Returns the report dict from schedule_validation.validate_schedule(), or
+    None if the module/data is unavailable. Never raises.
+    """
+    if _VALIDATION_REPORT_CACHE["done"]:
+        return _VALIDATION_REPORT_CACHE["report"]
+    _VALIDATION_REPORT_CACHE["done"] = True
+    try:
+        import schedule_validation
+        _VALIDATION_REPORT_CACHE["report"] = schedule_validation.validate_schedule()
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"  [WARN] validation report unavailable: {exc}")
+        _VALIDATION_REPORT_CACHE["report"] = None
+    return _VALIDATION_REPORT_CACHE["report"]
+
+
 def _build_semester(gen, semester: int, levels: dict) -> list[str]:
     """Replicates the generator's main() loop, parameterised by semester,
     routing all paths through app_paths. Returns list of saved file paths.
@@ -271,6 +292,17 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
                 wb, level_schedule, subjects,
                 credits_by_subject=vp_credits, names_by_subject=vp_names,
             )
+
+        # Feuille « Validación » : rapport de fiabilité final (additif, jamais
+        # bloquant). Le rapport global est calculé une seule fois et mis en
+        # cache ; il est ensuite ajouté à chaque classeur généré.
+        try:
+            report = _get_validation_report()
+            if report is not None:
+                import validation_sheet
+                validation_sheet.build_validation_sheet(wb, report)
+        except Exception as exc:  # never break Excel generation
+            print(f"    [WARN] Validación sheet skipped: {exc}")
 
         folder = os.path.join(out_base, level_config["label"], SEMESTER_FOLDER[semester])
         os.makedirs(folder, exist_ok=True)
