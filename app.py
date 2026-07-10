@@ -190,6 +190,7 @@ LANGS = {
         'nav_export': 'Exportar',
         'nav_student': 'Caso individual',
         'nav_updates': 'Actualizaciones',
+        'nav_simulateur': 'Simulador de infactibilidad',
         'language': 'Idioma',
         'data_loaded_status': 'Datos cargados',
         'pipeline_ran_status': 'Pipeline ejecutado',
@@ -321,6 +322,7 @@ LANGS = {
         'nav_export': 'Export',
         'nav_student': 'Individual case',
         'nav_updates': 'Updates',
+        'nav_simulateur': 'Infeasibility simulator',
         'language': 'Language',
         'data_loaded_status': 'Data loaded',
         'pipeline_ran_status': 'Pipeline executed',
@@ -444,6 +446,7 @@ LANGS = {
         'nav_export': 'Exporter',
         'nav_student': 'Cas individuel',
         'nav_updates': 'Mises à jour',
+        'nav_simulateur': "Simulateur d'infaisabilité",
         'language': 'Langue',
         'data_loaded_status': 'Data loaded',
         'pipeline_ran_status': 'Pipeline exécuté',
@@ -647,7 +650,7 @@ with st.sidebar:
     nav_options = [
         t('nav_home'), t('nav_data'), t('nav_config'), t('nav_optimize'),
         t('nav_results'), t('nav_dashboard'), t('nav_integrity'), t('nav_monitoring'), t('nav_history'), t('nav_edit'), t('nav_groups'), t('nav_compare'), t('nav_export'),
-        t('nav_student'), t('nav_updates')
+        t('nav_student'), t('nav_simulateur'), t('nav_updates')
     ]
 
     # Handle programmatic navigation from wizard buttons
@@ -668,6 +671,7 @@ with st.sidebar:
             'compare': t('nav_compare'),
             'export': t('nav_export'),
             'student': t('nav_student'),
+            'simulateur': t('nav_simulateur'),
             'updates': t('nav_updates'),
         }
         if target in nav_map and nav_map[target] in nav_options:
@@ -5884,6 +5888,20 @@ elif page == t('nav_student'):
                           use_container_width=True):
                 st.session_state[state_key] = set()
                 st.rerun()
+
+# ════════════════════════════════════════════════════════════
+# PAGE: INFEASIBILITY SIMULATOR (read-only what-if)
+# Consolidated into the main radio navigation (Point 4) so it no longer
+# appears as a separate Streamlit multipage entry.
+# ════════════════════════════════════════════════════════════
+elif page == t('nav_simulateur'):
+    page_header(t('nav_simulateur'),
+                "Analyse What-If en lecture seule (capacite & goulots)")
+    try:
+        import ui_infeasibility
+        ui_infeasibility.render()
+    except Exception as exc:
+        safe_error("Impossible de charger le simulateur d'infaisabilite.", exc)
 
 # ════════════════════════════════════════════════════════════
 # PAGE: UPDATES (apply Python patches, show version)
