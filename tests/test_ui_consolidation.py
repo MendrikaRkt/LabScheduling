@@ -27,15 +27,23 @@ def test_ui_advanced_exports_module_exposes_render():
 
 
 def test_old_standalone_pages_removed():
-    pages = os.listdir(os.path.join(ROOT, "pages"))
+    # All standalone Streamlit multipage entries are consolidated into the
+    # single radio navigation; the pages/ directory should no longer exist
+    # (or at least contain none of the old standalone files).
+    pages_dir = os.path.join(ROOT, "pages")
+    pages = os.listdir(pages_dir) if os.path.isdir(pages_dir) else []
     assert "4_Configuration_Solveur.py" not in pages
     assert "6_Exports_Avanc\u00e9s.py" not in pages
     assert "5_Simulateur_Infaisabilite.py" not in pages
+    assert "4_Simulateur_Infaisabilite.py" not in pages
 
 
-def test_simulator_page_present_and_valid():
-    path = os.path.join(ROOT, "pages", "4_Simulateur_Infaisabilite.py")
-    assert os.path.isfile(path)
+def test_simulator_is_render_module():
+    # The infeasibility simulator is now a render() module wired into the
+    # main navigation, not a separate multipage file.
+    mod = importlib.import_module("ui_infeasibility")
+    assert callable(getattr(mod, "render", None))
+    path = os.path.join(ROOT, "ui_infeasibility.py")
     with open(path, encoding="utf-8") as fh:
         source = fh.read()
     ast.parse(source)  # must be valid Python
@@ -44,6 +52,13 @@ def test_simulator_page_present_and_valid():
         "1. Suggestions automatiques")
     assert source.index("1. Suggestions automatiques") < source.index(
         "2. Simulation manuelle : exclure des groupes")
+
+
+def test_app_embeds_simulator():
+    with open(os.path.join(ROOT, "app.py"), encoding="utf-8") as fh:
+        source = fh.read()
+    assert "ui_infeasibility" in source
+    assert "nav_simulateur" in source
 
 
 def test_app_embeds_consolidated_components():
