@@ -71,8 +71,8 @@ def test_build_validation_sheet_creates_tab(report):
     wb = Workbook()
     wb.remove(wb.active)
     ws = vs.build_validation_sheet(wb, report)
-    assert ws.title == "Validación"
-    assert ws["A1"].value == "Validación y fiabilidad de la planificación"
+    assert ws.title == "Validation"
+    assert ws["A1"].value == "Schedule validation and reliability"
     assert ws.max_row > 10
 
 

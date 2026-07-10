@@ -301,16 +301,16 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
                 credits_by_subject=vp_credits, names_by_subject=vp_names,
             )
 
-        # Feuille « Validación » : rapport de fiabilité final (additif, jamais
-        # bloquant). Le rapport global est calculé une seule fois et mis en
-        # cache ; il est ensuite ajouté à chaque classeur généré.
+        # "Validation" sheet: final reliability report (additive, never
+        # blocking). The global report is computed once and cached; it is then
+        # appended to every generated workbook.
         try:
             report = _get_validation_report()
             if report is not None:
                 import validation_sheet
                 validation_sheet.build_validation_sheet(wb, report)
         except Exception as exc:  # never break Excel generation
-            print(f"    [WARN] Validación sheet skipped: {exc}")
+            print(f"    [WARN] Validation sheet skipped: {exc}")
 
         folder = os.path.join(out_base, level_config["label"], SEMESTER_FOLDER[semester])
         os.makedirs(folder, exist_ok=True)

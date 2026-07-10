@@ -56,9 +56,9 @@ def test_tabla_sheet_created_with_headers_filter_and_freeze():
     assert "Vista profesor (tabla)" in wb.sheetnames
     ws = wb["Vista profesor (tabla)"]
 
-    expected_headers = ["Semana", "Fecha", "Día", "Franja horaria", "Asignatura",
-                        "Programa", "Grupo", "Práctica", "Sala", "Estudiantes",
-                        "Profesor"]
+    expected_headers = ["Week", "Date", "Day", "Time slot", "Subject",
+                        "Program", "Group", "Practice", "Room", "Students",
+                        "Professor"]
     actual = [ws.cell(row=4, column=c).value for c in range(1, len(expected_headers) + 1)]
     assert actual == expected_headers
 

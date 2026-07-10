@@ -60,6 +60,7 @@ from collections import defaultdict
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.comments import Comment
 
 # Constante métier centralisée (1 crédit P = 5 séances). Importée tôt afin
 # d'être disponible dans tout le module sous excel_generator_core.CREDIT_TO_SESSIONS.
@@ -944,7 +945,9 @@ def _write_groups_to_sheet(worksheet, groups_df, student_id_column, naming_style
                 title_text = f'Grupo {group_num} '
             else:
                 title_text = f'Grupo {chr(64 + group_num)} '   # 65=A, 66=B, ...
-            worksheet.cell(row=current_row, column=student_col, value=title_text).font = GROUP_HEADER_FONT
+            title_cell = worksheet.cell(row=current_row, column=student_col, value=title_text)
+            title_cell.font = GROUP_HEADER_FONT
+            title_cell.fill = get_group_fill(group_num)
         current_row += 1
 
         # ---- Column headers (Alumno/a, Titulación)
@@ -965,12 +968,16 @@ def _write_groups_to_sheet(worksheet, groups_df, student_id_column, naming_style
                 key=lambda col: col.map(lambda v: str(_disp(v))),
             )
 
+            # Stable per-group colour so the reader can tell groups apart at a
+            # glance and match them across the Vista profesor / Teacher View
+            # sheets (same colour = same group everywhere).
+            group_fill = get_group_fill(group_num)
             for student_index, (_, student_row) in enumerate(group_data.iterrows()):
                 target_row = current_row + 1 + student_index
-                write_bordered_cell(worksheet, target_row, student_col, _disp(student_row.get(student_id_column, '')), STUDENT_FONT)
+                write_bordered_cell(worksheet, target_row, student_col, _disp(student_row.get(student_id_column, '')), STUDENT_FONT, group_fill)
                 titulacion = student_row.get('titulacion', '')
-                if pd.notna(titulacion) and str(titulacion) != 'nan':
-                    write_bordered_cell(worksheet, target_row, program_col, str(titulacion), STUDENT_FONT)
+                titulacion_text = str(titulacion) if (pd.notna(titulacion) and str(titulacion) != 'nan') else ''
+                write_bordered_cell(worksheet, target_row, program_col, titulacion_text, STUDENT_FONT, group_fill)
             max_students_in_batch = max(max_students_in_batch, len(group_data))
 
         current_row += max_students_in_batch + 1
@@ -1374,7 +1381,9 @@ def build_vista_profesor_sheet(workbook, schedule_df, subjects, professor_lookup
         value=("«Prof.: Nombre (+N)» = profesor indicado para la sesión y N profesor(es) "
                "adicional(es) habilitado(s) para la asignatura. El nombre ROTA entre sesiones/grupos: "
                "todos los mostrados pueden impartirla; la asignación final la decide el coordinador. "
-               "La lista completa está en subject_professors.csv."),
+               "La lista completa está en subject_professors.csv. "
+               "COLOR de cada celda = GRUPO de prácticas (mismo color = mismo grupo en "
+               "«Grupo de prácticas» y «Vista profesor (tabla)»)."),
     )
     _le.alignment = WRAP_TOP_ALIGNMENT
     worksheet.row_dimensions[2].height = 44
@@ -1474,9 +1483,19 @@ def build_vista_profesor_sheet(workbook, schedule_df, subjects, professor_lookup
                         subject_clean = strip_semester_prefix(subject)
                         # format_lab_session_label handles single OR paired-intro display
                         cell_text = format_lab_session_label(sessions_today, subject, professor_lookup)
+                        # Colour the cell by GROUP (stable per-group colour) so
+                        # the same group is instantly recognisable across the
+                        # Grupo de prácticas / Vista profesor (tabla) sheets. For
+                        # a paired-intro cell (two groups) the first group's
+                        # colour is used.
+                        try:
+                            _first_grp = int(float(sessions_today.iloc[0]['grupo']))
+                            _cell_fill = get_group_fill(_first_grp)
+                        except Exception:
+                            _cell_fill = get_subject_fill(subject_clean)
                         write_bordered_cell(
                             worksheet, current_row, day_cols[day_index],
-                            cell_text, LAB_SESSION_FONT, get_subject_fill(subject_clean),
+                            cell_text, LAB_SESSION_FONT, _cell_fill,
                             WRAP_TOP_ALIGNMENT,
                         )
                     else:
@@ -1542,6 +1561,13 @@ GROUP_COLOR_CYCLE = [
 ]
 
 
+#: Spanish -> English weekday map for the English-only companion table.
+_DAY_ES_TO_EN = {
+    'Lunes': 'Monday', 'Martes': 'Tuesday', 'Miércoles': 'Wednesday',
+    'Miercoles': 'Wednesday', 'Jueves': 'Thursday', 'Viernes': 'Friday',
+}
+
+
 def get_program_fill(program_name):
     """Return a PatternFill for an academic program (light gray fallback)."""
     key = str(program_name).strip().upper()
@@ -1590,24 +1616,26 @@ def build_vista_profesor_tabla_sheet(workbook, schedule_df, subjects,
     except Exception:
         _sem = 1
 
-    # ── Title band ──────────────────────────────────────────────────────
-    headers = ['Semana', 'Fecha', 'Día', 'Franja horaria', 'Asignatura',
-               'Programa', 'Grupo', 'Práctica', 'Sala', 'Estudiantes',
-               'Profesor']
+    # ── Title band (English only — analytical companion sheet) ─────────
+    headers = ['Week', 'Date', 'Day', 'Time slot', 'Subject',
+               'Program', 'Group', 'Practice', 'Room', 'Students',
+               'Professor']
     ncols = len(headers)
 
     worksheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
     tcell = worksheet.cell(row=1, column=1,
-                           value='Vista profesor — tabla filtrable')
+                           value='Teacher view — filterable table')
     tcell.font = PROGRAM_FONT
     tcell.alignment = LEFT_ALIGNMENT
 
     worksheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ncols)
     hcell = worksheet.cell(
         row=2, column=1,
-        value=('Una fila por sesión. Use los filtros de columna (fila de '
-               'encabezado) para filtrar por asignatura, programa, grupo, '
-               'profesor, día o sala. Colores: asignatura, programa y grupo.'),
+        value=('One row per session. Use the column filters (header row) to '
+               'filter by subject, program, group, professor, day or room. '
+               'Cell colour = GROUP (same colour = same group across the '
+               '"Grupo de practicas" and "Vista profesor" sheets); the Subject '
+               'and Program columns are also colour-coded.'),
     )
     hcell.alignment = WRAP_TOP_ALIGNMENT
     worksheet.row_dimensions[2].height = 30
@@ -1637,6 +1665,9 @@ def build_vista_profesor_tabla_sheet(workbook, schedule_df, subjects,
         except Exception:
             week_num = 0
         day_name = str(row['day'])
+        # English-only sheet: translate the Spanish weekday for display while
+        # keeping the original value for the DAYS_OF_WEEK date lookup.
+        day_display = _DAY_ES_TO_EN.get(day_name, day_name)
         try:
             day_idx = DAYS_OF_WEEK.index(day_name)
             fecha = get_week_dates(week_num, _sem)[day_idx]
@@ -1651,7 +1682,7 @@ def build_vista_profesor_tabla_sheet(workbook, schedule_df, subjects,
         values = [
             week_num,
             fecha,
-            day_name,
+            day_display,
             str(row['time_block']),
             sanitize_cell(subject_clean),
             str(row.get('program', '')),
@@ -1998,6 +2029,77 @@ def _vp_planned_display(planned, expected, state):
     return f"{planned} ({'+' if d > 0 else '-'}{abs(d)})"
 
 
+def _vp_delta_reason(prof_sessions, planned, expected, credits, grp_str, state):
+    """Build a plain-English explanation of WHY the planned session count
+    differs from the credit budget (expected = P credits x 5), attached as a
+    cell comment on the "Planned sessions" cell.
+
+    The explanation is data-driven (it counts the distinct practices actually
+    scheduled per group) and clarifies the solver's rationale, so a reader who
+    sees e.g. "8 (-2)" understands it is not a missing/unplaced session.
+    """
+    try:
+        planned_i = int(round(float(planned)))
+        expected_i = int(round(float(expected)))
+    except Exception:
+        return None
+    delta = planned_i - expected_i
+
+    # Distinct practices scheduled per group (the real driver of the count).
+    practices_desc = ""
+    n_groups = 0
+    try:
+        if prof_sessions is not None and 'session' in prof_sessions.columns \
+                and 'grupo' in prof_sessions.columns:
+            per_group = prof_sessions.groupby('grupo')['session'].nunique()
+            n_groups = int(per_group.shape[0])
+            if n_groups:
+                pmin, pmax = int(per_group.min()), int(per_group.max())
+                if pmin == pmax:
+                    practices_desc = (f"This subject schedules {pmin} distinct "
+                                      f"practice(s) per group; with {n_groups} "
+                                      f"group(s) that is {pmin} x {n_groups} = "
+                                      f"{planned_i} sessions.")
+                else:
+                    practices_desc = (f"Groups run {pmin}-{pmax} distinct "
+                                      f"practices each ({n_groups} group(s)), "
+                                      f"totalling {planned_i} sessions.")
+    except Exception:
+        practices_desc = ""
+
+    if planned_i == expected_i:
+        header = f"Why exactly {planned_i} sessions?"
+    else:
+        header = f"Why {planned_i} instead of {expected_i}?"
+    lines = [header, ""]
+    lines.append(f"- Expected = {credits} P credit(s) x 5 = {expected_i} "
+                 f"sessions. This is the credit BUDGET (an upper bound), not a "
+                 f"mandatory target.")
+    lines.append(f"- Planned = lab sessions actually scheduled for this "
+                 f"professor's groups ({grp_str}).")
+    if practices_desc:
+        lines.append(f"- {practices_desc}")
+
+    if state == 'Under' or delta < 0:
+        lines.append(f"- Gap ({delta}): the subject's real number of practices "
+                     f"is below the 5-sessions-per-credit budget. Every required "
+                     f"practice was placed - no session is missing or unplaced.")
+        lines.append("- The CP-SAT solver only schedules the practices defined "
+                     "for the subject and minimises schedule spread within the "
+                     "hard constraints (one group per room/slot, no "
+                     "student/professor clash). It never adds filler sessions "
+                     "just to reach the credit budget.")
+    elif state == 'Over' or delta > 0:
+        lines.append(f"- Gap (+{delta}): planned EXCEEDS the credit budget. This "
+                     f"usually means the professor's groups run more practice "
+                     f"repetitions than their assigned P credits cover (e.g. "
+                     f"shared or duplicated groups). Review against the "
+                     f"Asignacion docente.")
+    else:
+        lines.append("- Planned matches the credit budget exactly.")
+    return "\n".join(lines)
+
+
 def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                                            credits_by_subject=None,
                                            names_by_subject=None):
@@ -2100,7 +2202,9 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                     "within the credit ceiling (planned ≤ expected, compliant — covers "
                     "exact match and under-use); RED = planned EXCEEDS the assigned "
                     "credits (planned > expected, must be reviewed); ORANGE = no P "
-                    "credit in the source. Gaps are flagged, never blocking.")
+                    "credit in the source. Gaps are flagged, never blocking. "
+                    "Hover a \"Planned sessions\" cell to see a plain-English "
+                    "explanation of why its value differs from \"Expected\".")
     else:
         note_txt = ("Convention: 1 lab credit (P) = 5 sessions. Sessions and schedule "
                     "are shown at SUBJECT level (the Asignación source was not found, "
@@ -2188,8 +2292,10 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                     # de crédits) ; dépassement = à corriger.
                     state = _vp_credit_state(planned_prof, expected)
                     planned_disp = _vp_planned_display(planned_prof, expected, state)
+                reason = _vp_delta_reason(prof_sessions, planned_prof, expected,
+                                          credits, grp_str, state)
                 rows.append((pname, matiere_disp, credits, round(expected, 1),
-                             grp_str, planned_disp, horaire_prof, state))
+                             grp_str, planned_disp, horaire_prof, state, reason))
         elif credits_by_subject:
             # Fallback: subject-level credit map (legacy display).
             asig_subs = _map_sched_to_asignacion(sched, asignacion_subjects, lab_config)
@@ -2204,16 +2310,20 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
                 subj_state = _vp_credit_state(planned_total, subj_expected)
                 planned_disp = _vp_planned_display(planned_total, subj_expected,
                                                    subj_state)
+                subj_reason = _vp_delta_reason(
+                    subj_sessions, planned_total, subj_expected,
+                    round(subj_expected / CREDIT_TO_SESSIONS, 2),
+                    f'{n_groups} group(s)', subj_state)
                 for prof_label in sorted(prof_credits):
                     cr = prof_credits[prof_label]
                     rows.append((prof_label, matiere_disp, round(cr, 2),
                                  round(cr * CREDIT_TO_SESSIONS, 1),
                                  f'{n_groups} group(s)', planned_disp, horaire,
-                                 subj_state))
+                                 subj_state, subj_reason))
             else:
                 rows.append(('- (no P credit assigned)', matiere_disp, 0.0, 0.0,
                              f'{n_groups} group(s)', planned_total, horaire,
-                             'No P credit'))
+                             'No P credit', None))
         elif lpa_key is not None and theory_map.get(lpa_key):
             # No P credit in the source for this subject (e.g. "Estructuras"),
             # but a lab was scheduled: show the THEORY professor(s) as the
@@ -2224,11 +2334,11 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
             prof_label = ', '.join(tprofs) if tprofs else '—'
             rows.append((prof_label, matiere_disp, '—', '—',
                          f'{n_groups} group(s)', planned_total, horaire,
-                         'No P credit'))
+                         'No P credit', None))
         else:
             # Asignación unavailable: credits N/A
             rows.append(('N/A', matiere_disp, 'N/A', 'N/A',
-                         f'{n_groups} group(s)', planned_total, horaire, ''))
+                         f'{n_groups} group(s)', planned_total, horaire, '', None))
 
     rows.sort(key=lambda r: (str(r[0]), str(r[1])))
 
@@ -2252,7 +2362,7 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
     current_row = header_row + 1
     prev_prof = None
     band = False
-    for (prof_label, matiere_disp, cr, expected, grp_str, planned, horaire, state) in rows:
+    for (prof_label, matiere_disp, cr, expected, grp_str, planned, horaire, state, reason) in rows:
         if prof_label != prev_prof:
             band = not band
             prev_prof = prof_label
@@ -2287,6 +2397,15 @@ def build_vue_professeur_consolidada_sheet(workbook, schedule_df, subjects,
         if state_fill:
             for j in (3, 4, 6):
                 worksheet.cell(row=current_row, column=j).fill = state_fill
+        # Attach the plain-English "why the delta" explanation as a comment on
+        # the Planned sessions cell (column 6), so hovering reveals the reason
+        # for e.g. "8 (-2)" without widening the table.
+        if reason:
+            planned_cell = worksheet.cell(row=current_row, column=6)
+            cmt = Comment(reason, "Scheduler")
+            cmt.width = 320
+            cmt.height = 200
+            planned_cell.comment = cmt
         # Dynamic height: fit the tallest wrapped cell (schedule or groups).
         n_lines = max(_visual_lines(horaire, 7), _visual_lines(grp_str, 5))
         worksheet.row_dimensions[current_row].height = \

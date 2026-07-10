@@ -98,10 +98,10 @@ def test_validation_sheet_renders_solver_config_section():
     wb = Workbook()
     wb.remove(wb.active)
     vs.build_validation_sheet(wb, report)
-    ws = wb["Validación"]
+    ws = wb["Validation"]
     texts = [
         str(ws.cell(row=r, column=1).value or "")
         for r in range(1, ws.max_row + 1)
     ]
-    assert any("Configuración del solver" in t for t in texts)
-    assert any("Perfil activo" in t for t in texts)
+    assert any("Solver configuration" in t for t in texts)
+    assert any("Active profile" in t for t in texts)
