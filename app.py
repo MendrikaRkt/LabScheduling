@@ -236,6 +236,8 @@ LANGS = {
         'both_loaded': 'Ambos archivos cargados correctamente',
         'upload_help_1': 'Archivo revisionAulario.xlsx con los horarios de cursos',
         'upload_help_2': 'Archivo report_AlumnosGrupos.xlsx con las inscripciones',
+        'asignacion_label': 'Asignación docente (reference)',
+        'upload_help_3': 'Asignacion_2025-2026_v5.xlsx — professor P/T credit assignment (optional, reference)',
         # Config
         'config_title': 'Configuración',
         'config_sub': 'Parámetros del sistema y de cada materia',
@@ -366,6 +368,8 @@ LANGS = {
         'both_loaded': 'Both files loaded successfully',
         'upload_help_1': 'revisionAulario.xlsx — course timetables',
         'upload_help_2': 'report_AlumnosGrupos.xlsx — enrolments',
+        'asignacion_label': 'Asignación docente (reference)',
+        'upload_help_3': 'Asignacion_2025-2026_v5.xlsx — professor P/T credit assignment (optional, reference)',
         'config_title': 'Configuration',
         'config_sub': 'System parameters and per-subject overrides',
         'global_params': 'Global parameters',
@@ -490,6 +494,8 @@ LANGS = {
         'both_loaded': 'Les deux fichiers sont chargés',
         'upload_help_1': 'Fichier revisionAulario.xlsx avec les horaires de cours',
         'upload_help_2': 'Fichier report_AlumnosGrupos.xlsx avec les inscriptions',
+        'asignacion_label': 'Asignación docente (reference)',
+        'upload_help_3': 'Asignacion_2025-2026_v5.xlsx — professor P/T credit assignment (optional, reference)',
         'config_title': 'Configuration',
         'config_sub': 'Paramètres système et par matière',
         'global_params': 'Paramètres globaux',
@@ -1430,9 +1436,12 @@ elif page == t('nav_data'):
     wizard_stepper('data')
 
     help_tip(
-        "<strong>Step 1 of 4:</strong> Upload the two Excel files provided by Loyola. "
-        "These are the files <em>revisionAulario.xlsx</em> (timetables) and "
-        "<em>report_AlumnosGrupos.xlsx</em> (student enrolments).",
+        "<strong>Step 1 of 4:</strong> Upload the two source Excel files provided by Loyola: "
+        "<em>revisionAulario.xlsx</em> (timetables) and "
+        "<em>report_AlumnosGrupos.xlsx</em> (student enrolments). "
+        "A third reference file, <em>Asignacion_2025-2026_v5.xlsx</em> "
+        "(professor P/T credit assignment), is shown below for full transparency — "
+        "it feeds the Teacher View and credit checks.",
         icon=""
     )
 
@@ -1528,6 +1537,58 @@ elif page == t('nav_data'):
                 st.error(f"Read error: {e}")
         else:
             st.caption("File not yet loaded")
+
+    # ── Reference input: professor credit assignment (Asignación docente) ──
+    # Additive transparency section (never gates the wizard): shows the third
+    # file the pipeline actually consumes for the Teacher View / credit checks.
+    st.markdown("---")
+    section_header(t('asignacion_label'))
+    st.caption(
+        "This reference file is not required to advance, but it is the source of "
+        "the professor P/T credits used by the Teacher View and the reliability "
+        "credit checks. Upload it to preview, or let the pipeline auto-detect it."
+    )
+    asignacion_file = st.file_uploader(
+        t('upload_help_3'),
+        type=['xlsx'], key='asignacion_up',
+        label_visibility="collapsed",
+    )
+    try:
+        _asig_df = None
+        _asig_src = None
+        if asignacion_file:
+            try:
+                _asig_df = pd.read_excel(asignacion_file, sheet_name='Asignación docente')
+            except Exception:
+                _asig_df = pd.read_excel(asignacion_file)
+            _asig_src = asignacion_file.name
+            st.session_state.asignacion_df = _asig_df
+        elif st.session_state.get('asignacion_df') is not None:
+            _asig_df = st.session_state.asignacion_df
+            _asig_src = st.session_state.get('asignacion_src', 'uploaded file')
+        else:
+            # Auto-detect the file the pipeline already resolves.
+            try:
+                import excel_generator_core as _egc
+                _p = _egc._find_asignacion_file()
+                if _p:
+                    try:
+                        _asig_df = pd.read_excel(_p, sheet_name='Asignación docente')
+                    except Exception:
+                        _asig_df = pd.read_excel(_p)
+                    _asig_src = os.path.basename(_p)
+            except Exception:
+                _asig_df = None
+
+        if _asig_df is not None and len(_asig_df):
+            st.success(f"Detected: {_asig_src} ({len(_asig_df):,} rows × {_asig_df.shape[1]} columns)")
+            with st.expander(t('preview')):
+                st.dataframe(_asig_df.head(8), use_container_width=True, hide_index=True)
+        else:
+            st.info("No Asignación docente file detected yet — the Teacher View will "
+                    "fall back to the committed credit cache when unavailable.")
+    except Exception as _asig_exc:
+        st.warning(f"Could not preview the assignment file: {_asig_exc}")
 
     # Checkpoint summary
     if aulario_loaded and alumnos_loaded:
