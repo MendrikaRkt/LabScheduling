@@ -2091,7 +2091,29 @@ def _page_integrity():
             x = _ud.normalize("NFKD", str(x))
             x = "".join(c for c in x if not _ud.combining(c))
             return " ".join(sorted(x.lower().replace(",", " ").split()))
-        _ll_csv = _find_prof_load_csv()
+        # Locate professor_lab_load.csv robustly (workspace + bundled resource
+        # via app_paths, then relative fallbacks). Inlined after the shared
+        # helper was removed with the Integrity credit sections.
+        _ll_csv = None
+        _ll_rels = (
+            "professor_lab_load.csv",
+            "outputs/optimization/professor_lab_load.csv",
+            "outputs/professor_lab_load.csv",
+        )
+        if PATHS_OK:
+            for _rel in _ll_rels:
+                try:
+                    _found = app_paths.resolve_existing(_rel)
+                    if _found:
+                        _ll_csv = _found
+                        break
+                except Exception:
+                    pass
+        if _ll_csv is None:
+            for _rel in _ll_rels:
+                if os.path.exists(_rel):
+                    _ll_csv = _rel
+                    break
         _credit_by_norm = {}
         if _ll_csv:
             try:
