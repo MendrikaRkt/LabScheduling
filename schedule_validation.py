@@ -378,13 +378,22 @@ def validate_schedule(paths=None, max_examples=25):
             student_busy_global[str(r.student_id).strip()].add((int(r.day_idx), int(r.block_id)))
 
     group_students = defaultdict(list)
+    # Manual-override placements are deliberate human-in-the-loop decisions the
+    # planner has arbitrated (a student intentionally placed in a group despite
+    # a clash). They are NOT solver defects and must not count as conflicts.
+    # This mirrors reliability_metrics.py, verify_flow.py, app.py and
+    # monitoring.py, which all exclude is_override placements the same way.
+    override_members = set()  # (subject, grupo, sid) placed by manual override
     comp_ok = comp is not None and {"semester", "subject", "grupo", "student_name"}.issubset(comp.columns)
+    _has_override = comp_ok and "is_override" in comp.columns
     if comp_ok:
         comp = comp.copy()
         for r in comp.itertuples(index=False):
             sid = name_to_id.get(_norm_name(r.student_name))
-            group_students[(str(r.subject).strip(), str(r.grupo).strip())].append(
-                (r.student_name, sid))
+            gkey = (str(r.subject).strip(), str(r.grupo).strip())
+            group_students[gkey].append((r.student_name, sid))
+            if _has_override and bool(getattr(r, "is_override", False)):
+                override_members.add((gkey[0], gkey[1], sid))
 
     def _comp_subject(sched_subject):
         s = str(sched_subject)
@@ -421,6 +430,10 @@ def validate_schedule(paths=None, max_examples=25):
             siblings = subject_shared_map.get(lab_subject, [lab_subject])
             for (sname, sid) in group_students.get(gk, []):
                 if sid is None:
+                    continue
+                # Skip manual-override placements: accepted human decisions,
+                # not defects (consistent with the rest of the codebase).
+                if (gk[0], gk[1], sid) in override_members:
                     continue
                 own_slots = set()
                 for ss in siblings:

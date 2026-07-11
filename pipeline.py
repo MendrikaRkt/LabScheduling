@@ -3571,6 +3571,31 @@ def solve(all_groups):
                         model.Add(week_vars[group[i]['id']] != week_vars[group[j]['id']])
                         c4 += 1
 
+        # ------------------------------------------------------------------ #
+        # C_STUDENT (HARD) — student no-overlap constraint                   #
+        # Groups at the same (day, block) sharing students must have         #
+        # different weeks. This was the missing constraint causing the       #
+        # 19 student double-booking conflicts in the validation.             #
+        # ------------------------------------------------------------------ #
+        c_student = 0
+        by_slot = defaultdict(list)  # (day_idx, block_id) -> [sessions]
+        for s in sessions:
+            by_slot[(s['day_idx'], s['block_id'])].append(s)
+        
+        for slot_sessions in by_slot.values():
+            if len(slot_sessions) < 2:
+                continue
+            # For each pair of sessions at this slot, check if they share students
+            for i in range(len(slot_sessions)):
+                for j in range(i + 1, len(slot_sessions)):
+                    si, sj = slot_sessions[i], slot_sessions[j]
+                    # Get student sets for both groups
+                    students_i = set(si.get('student_ids', []))
+                    students_j = set(sj.get('student_ids', []))
+                    # If they share at least one student, they must have different weeks
+                    if students_i & students_j:
+                        model.Add(week_vars[si['id']] != week_vars[sj['id']])
+                        c_student += 1
 
         c4_res_penalty_terms = []
         for (_bsem, _bsubj), _slots in SUBJECT_BLOCKED_SLOTS.items():
@@ -3743,7 +3768,7 @@ def solve(all_groups):
         # Étape 6.5 — Warm-start : injecter un étalement régulier comme hint.
         n_hints = add_week_hints(model, week_vars, sessions)
 
-        print(f"  Contraintes : C1={c1}, C4={c4}, C5={c5}, C8={c8}, "
+        print(f"  Contraintes : C1={c1}, C4={c4}, C_STUDENT={c_student}, C5={c5}, C8={c8}, "
               f"first_anchor={len(first_excess)}, last_anchor={len(last_deficit)}"
               + (f", parity_groups={n_parity_groups}" if PARITY_ALTERNATION else "")
               + f", hints={n_hints}")
