@@ -2653,7 +2653,12 @@ elif page == t('nav_data'):
                 _asig_df = None
 
         if _asig_df is not None and len(_asig_df):
-            st.success(f"Detected: {_asig_src} ({len(_asig_df):,} rows × {_asig_df.shape[1]} columns)")
+            st.success(f"✓ **Professor assignment loaded:** {_asig_src} ({len(_asig_df):,} rows × {_asig_df.shape[1]} columns)")
+            st.caption(
+                "This file will be used to compute professor credits (1 P credit = 5 sessions) "
+                "and populate the Teacher View sheet. Assignment happens **post-optimization** — "
+                "the solver places sessions, then professors are allocated based on official credits."
+            )
             with st.expander(t('preview')):
                 st.dataframe(_asig_df.head(8), use_container_width=True, hide_index=True)
         else:
@@ -3765,6 +3770,49 @@ elif page == t('nav_results'):
         with c4: stat_card(t('rate_lbl'), _rate_txt, "actual")
         with c5: stat_card("Unassigned", _conf_txt, "actual")
 
+        # ── Applied configuration (solver constraints proof) ──────────
+        section_header("Applied configuration")
+        st.caption(
+            "The solver configuration below was read from `config/solver_constraints.yaml` "
+            "and applied during the last optimization run. "
+            "**Presets optimize temporal placement (weeks)** — they do not change global "
+            "headcounts (sessions/groups), which are fixed by group formation rules."
+        )
+        st.info(
+            "**Professor assignment:** Professors are allocated **after** the CP-SAT solve, "
+            "based on official credits from *Asignación docente* (1 P credit = 5 sessions). "
+            "The solver optimizes session placement; professor-to-group matching is then "
+            "computed proportionally to assigned practice credits. See the Teacher View sheet "
+            "for the detailed breakdown per professor.",
+            icon="👨‍🏫"
+        )
+        try:
+            import solver_config as sc
+            import os
+            import datetime
+            cfg_path = sc.default_config_path()
+            cfg = sc.load_config()
+            profile = cfg.get('active_profile', '?')
+            weights_display = {k: v['weight'] for k, v in cfg['soft_constraints'].items()}
+            
+            cfg_stat_col1, cfg_stat_col2, cfg_stat_col3 = st.columns(3)
+            with cfg_stat_col1:
+                stat_card("Active profile", profile, "Strict / Balanced / Relaxed / Custom")
+            with cfg_stat_col2:
+                timestamp_str = "—"
+                if os.path.exists(cfg_path):
+                    mtime = os.path.getmtime(cfg_path)
+                    timestamp_str = datetime.datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+                stat_card("Config file saved at", timestamp_str, cfg_path)
+            with cfg_stat_col3:
+                total_w = sum(v['weight'] for v in cfg['soft_constraints'].values() if v.get('enabled'))
+                stat_card("Total weight (enabled)", total_w, "Sum of active soft constraints")
+            
+            with st.expander("Effective solver weights"):
+                st.json(weights_display)
+        except Exception as ex:
+            st.warning(f"Could not load solver configuration: {ex}")
+
         # Distribution
         section_header("Distribution")
         c1, c2 = st.columns(2)
@@ -4170,6 +4218,15 @@ elif page == t('nav_edit'):
         "Three guided steps to safely modify the plan. "
         "Changes are staged until explicit validation — "
         "a snapshot is created before each commit."
+    )
+    
+    st.info(
+        "**Manual edits apply locally** and preserve the optimized solution. "
+        "They do not trigger a re-optimization unless you explicitly re-run "
+        "the pipeline from the Optimize page. Use this workflow to make targeted "
+        "adjustments (move a session to a different week, swap two sessions) without "
+        "discarding the CP-SAT solve.",
+        icon="✏️"
     )
 
     if not run_ok:
