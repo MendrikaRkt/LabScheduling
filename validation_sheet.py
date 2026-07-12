@@ -244,13 +244,15 @@ def build_validation_sheet(workbook, report, sheet_title="Validation"):
     """
     ws = workbook.create_sheet(sheet_title)
     ws.sheet_view.showGridLines = False
-    widths = [34, 20, 16, 16, 16, 22]
+    # Column widths tuned so the wide "Detail" column (F) fits its text without
+    # overlapping neighbouring rows; the narrow numeric columns stay compact.
+    widths = [34, 20, 14, 12, 18, 52]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
     row = 1
     row = _title(ws, row, "Schedule validation and reliability")
-    row += 1
+    row += 2
 
     # ── Global verdict ─────────────────────────────────────────────────
     status = report.get("status", "NO_DATA")
@@ -293,7 +295,7 @@ def build_validation_sheet(workbook, report, sheet_title="Validation"):
     row = _kv(ws, row, "Subjects", counts.get("subjects", 0))
     row = _kv(ws, row, "Semesters", counts.get("semesters", 0))
     row = _kv(ws, row, "Students involved", counts.get("students", 0))
-    row += 1
+    row += 2
 
     # ── Breakdown by semester (authenticity: per-slice reconciles to total)
     by_sem = report.get("counts_by_semester") or []
@@ -388,9 +390,9 @@ def build_validation_sheet(workbook, report, sheet_title="Validation"):
             if c == 3:
                 cell.font = Font(bold=True, color=sfg)
                 cell.fill = PatternFill("solid", fgColor=sbg)
-        ws.row_dimensions[row].height = 30
+        ws.row_dimensions[row].height = 44
         row += 1
-    row += 1
+    row += 2
 
     # ── Reliability formula (laid out for readability) ─────────────────
     row = _section(ws, row, "Reliability index formula")
@@ -586,4 +588,7 @@ def build_validation_sheet(workbook, report, sheet_title="Validation"):
             row += 1
 
     ws.sheet_view.showGridLines = False
+    # Freeze the report title so section banners stay in context while scrolling
+    # through the (potentially long) checks / examples tables.
+    ws.freeze_panes = "A2"
     return ws

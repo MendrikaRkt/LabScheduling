@@ -1378,15 +1378,12 @@ def build_vista_profesor_sheet(workbook, schedule_df, subjects, professor_lookup
     _lc.font = PROGRAM_FONT
     _le = worksheet.cell(
         row=2, column=1,
-        value=("«Prof.: Nombre (+N)» = profesor indicado para la sesión y N profesor(es) "
-               "adicional(es) habilitado(s) para la asignatura. El nombre ROTA entre sesiones/grupos: "
-               "todos los mostrados pueden impartirla; la asignación final la decide el coordinador. "
-               "La lista completa está en subject_professors.csv. "
-               "COLOR de cada celda = GRUPO de prácticas (mismo color = mismo grupo en "
-               "«Grupo de prácticas» y «Vista profesor (tabla)»)."),
+        value=("«Prof.: Nombre (+N)» = profesor principal (+N docentes habilitados). "
+               "ROTACIÓN entre grupos/sesiones; la asignación final la decide el coordinador. "
+               "COLOR de celda = grupo de prácticas (mismo color = mismo grupo)."),
     )
     _le.alignment = WRAP_TOP_ALIGNMENT
-    worksheet.row_dimensions[2].height = 44
+    worksheet.row_dimensions[2].height = 30
 
     current_row = 4  # leave the legend (rows 1-2) + a blank row 3 above the grid
 

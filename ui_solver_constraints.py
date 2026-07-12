@@ -187,3 +187,141 @@ def _sync_widget_state() -> None:
     for key, entry in (cfg.get("soft_constraints") or {}).items():
         st.session_state[f"scfg_en_{key}"] = bool(entry.get("enabled", True))
         st.session_state[f"scfg_w_{key}"] = min(int(entry.get("weight", 0)), 1000)
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Constraints reference (C1–C9) — read-only documentation table
+# ─────────────────────────────────────────────────────────────────────────────
+# Authoritative, human-readable summary of every academic / operational
+# constraint the scheduler accounts for. This is documentation only: it renders
+# a table and changes no solver behaviour. Sources: docs/PROBLEM_FORMULATION.md,
+# pipeline.solve() hard constraints, and schedule_validation.py checks.
+
+# Each row: (id, name, type, enforcement, description, relaxation)
+_CONSTRAINTS_REFERENCE = [
+    (
+        "C1", "Subject slot conflict", "Hard", "CP-SAT + construction",
+        "Two groups of the same subject sharing the same slot (day, block) "
+        "are placed in different weeks.",
+        "None — always enforced.",
+    ),
+    (
+        "C2", "Student vs theory clash", "Hard", "Validated",
+        "A student is never scheduled for a lab session at the same slot as "
+        "one of their theory courses.",
+        "None — a violation is a blocking conflict.",
+    ),
+    (
+        "C3", "Group sizing / capacity", "Hard", "By construction",
+        "Lab group size respects the operational policy "
+        "(min 7 / preferred 12 / max 15 students per group).",
+        "Under/over-sized groups are flagged as an indicator when a formation "
+        "cannot be split cleanly.",
+    ),
+    (
+        "C4", "Room conflict", "Hard", "CP-SAT",
+        "A physical room hosts a single group per (day, block, week) — "
+        "no double room booking.",
+        "None — always enforced.",
+    ),
+    (
+        "C5", "Session chronological order", "Hard", "CP-SAT",
+        "Sessions of the same group run in order: práctica k+1 is in a later "
+        "week than práctica k.",
+        "None — always enforced.",
+    ),
+    (
+        "C6", "Student lab double-booking", "Hard", "CP-SAT",
+        "A student is never placed in two lab sessions in the same "
+        "(day, block, week).",
+        "None — always enforced.",
+    ),
+    (
+        "C7", "Year → time-of-day preference", "Hard", "By construction",
+        "Blocks are filtered per academic year so cohorts land in their "
+        "expected morning / afternoon window.",
+        "Applied at group construction; not re-checked after manual edits.",
+    ),
+    (
+        "C8", "External room reservation", "Soft (quasi-hard)", "Penalty 100 000",
+        "Avoid weeks where a room is reserved by an external activity. The "
+        "very high penalty makes it behave almost like a hard rule.",
+        "Relaxable: the solver may still use a reserved week if there is no "
+        "feasible alternative.",
+    ),
+    (
+        "C9", "Friday-evening avoidance", "Soft (relaxed)", "Placement penalty",
+        "Labs are steered away from late Friday blocks (17:00–21:00).",
+        "Relaxed by design: handled as a placement penalty in the heuristic — "
+        "Friday evening is discouraged but never forbidden.",
+    ),
+]
+
+_TYPE_COLORS = {
+    "Hard": ("var(--good-bg)", "var(--good)"),
+    "Soft (quasi-hard)": ("var(--warn-bg)", "var(--warn)"),
+    "Soft (relaxed)": ("var(--surface-2)", "var(--cyan)"),
+}
+
+
+def render_constraints_reference() -> None:
+    """Render the full C1–C9 constraints reference as a styled table.
+
+    Read-only documentation — does not affect solver behaviour.
+    """
+    st.markdown("##### Constraints reference (C1–C9)")
+    st.caption(
+        "Every academic and operational constraint enforced by the scheduler. "
+        "Hard constraints are guaranteed (by the CP-SAT solver or by "
+        "construction); soft constraints are preferences that may be relaxed "
+        "when no feasible alternative exists."
+    )
+
+    rows_html = []
+    for cid, name, ctype, enf, desc, relax in _CONSTRAINTS_REFERENCE:
+        bg, fg = _TYPE_COLORS.get(ctype, ("var(--surface-2)", "var(--ink-soft)"))
+        badge = (
+            f"<span style='display:inline-block;padding:2px 10px;border-radius:999px;"
+            f"background:{bg};color:{fg};font-size:0.72rem;font-weight:600;"
+            f"white-space:nowrap;'>{ctype}</span>"
+        )
+        rows_html.append(
+            "<tr style='border-bottom:1px solid var(--line);'>"
+            f"<td style='padding:10px 12px;font-family:var(--font-mono);"
+            f"font-weight:600;color:var(--cyan);vertical-align:top;'>{cid}</td>"
+            f"<td style='padding:10px 12px;font-weight:600;color:var(--ink);"
+            f"vertical-align:top;'>{name}</td>"
+            f"<td style='padding:10px 12px;vertical-align:top;'>{badge}</td>"
+            f"<td style='padding:10px 12px;color:var(--ink-soft);font-size:0.82rem;"
+            f"vertical-align:top;white-space:nowrap;'>{enf}</td>"
+            f"<td style='padding:10px 12px;color:var(--ink-soft);font-size:0.86rem;"
+            f"line-height:1.5;vertical-align:top;'>{desc}</td>"
+            f"<td style='padding:10px 12px;color:var(--ink-mute);font-size:0.82rem;"
+            f"line-height:1.5;vertical-align:top;'>{relax}</td>"
+            "</tr>"
+        )
+
+    header_cells = "".join(
+        f"<th style='padding:11px 12px;text-align:left;font-size:0.72rem;"
+        f"text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-mute);"
+        f"border-bottom:2px solid var(--line-bright);white-space:nowrap;'>{h}</th>"
+        for h in ("ID", "Name", "Type", "Enforcement", "Description", "Relaxation")
+    )
+
+    table_html = (
+        "<div style='overflow-x:auto;border:1px solid var(--line);"
+        "border-radius:var(--radius);background:var(--surface);margin:6px 0 10px;'>"
+        "<table style='width:100%;border-collapse:collapse;font-family:var(--font-body);'>"
+        f"<thead><tr>{header_cells}</tr></thead>"
+        f"<tbody>{''.join(rows_html)}</tbody>"
+        "</table></div>"
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
+
+    st.caption(
+        "Note: professor double-booking and professor-busy checks are tracked "
+        "as post-optimization **indicators** (surfaced in the Validation sheet), "
+        "not as hard solver constraints — professor assignment is finalized by "
+        "the coordinator."
+    )

@@ -41,7 +41,13 @@ _CSS = """
   background-attachment:fixed;
 }
 [data-testid="stHeader"]{background:transparent}
-.main .block-container{padding-top:2.5rem;max-width:1100px}
+.main .block-container{padding-top:2.75rem;padding-bottom:3.5rem;max-width:1100px}
+
+/* ── Consistent vertical rhythm: give stacked blocks a little breathing room
+   so pages feel less cramped without touching per-page layout code. ── */
+[data-testid="stVerticalBlock"]{gap:0.85rem}
+[data-testid="stExpander"]{margin:0.4rem 0}
+[data-testid="stDataFrame"]{margin:0.3rem 0 0.6rem}
 
 html,body,[data-testid="stAppViewContainer"],[class*="css"]{
   font-family:var(--font-body);color:var(--ink);
@@ -361,6 +367,35 @@ h1,h2,h3{font-family:var(--font-display);letter-spacing:-.02em;color:var(--ink)}
 }
 .validation-badge.is-info{
   background:var(--surface-2);border-color:var(--line-bright);color:var(--cyan);
+}
+
+/* ── APP FOOTER (branded, consistent on every page) ── */
+.app-footer{
+  margin:3rem 0 0.5rem;padding:22px 26px;
+  border-top:1px solid var(--line);
+  border-radius:var(--radius);
+  background:linear-gradient(180deg,var(--surface),var(--surface-2));
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:14px;
+}
+.app-footer .footer-brand{
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--font-display);font-weight:600;font-size:0.98rem;color:var(--ink);
+}
+.app-footer .footer-brand .footer-mark{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:30px;height:30px;border-radius:8px;
+  background:linear-gradient(135deg,var(--navy),var(--navy-deep));
+  color:#fff;font-family:var(--font-display);font-weight:700;font-size:0.82rem;
+  border:1px solid var(--line-bright);
+}
+.app-footer .footer-meta{
+  font-size:0.8rem;color:var(--ink-mute);line-height:1.5;text-align:right;
+}
+.app-footer .footer-meta strong{color:var(--ink-soft);font-weight:600;}
+.app-footer .footer-tag{
+  font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;
+  color:var(--cyan);font-weight:600;
 }
 
 </style>"""
