@@ -1340,7 +1340,7 @@ def _page_reliability():
             <div class="stat-card">
                 <div class="stat-label">Total sessions</div>
                 <div class="stat-value">{a.get('total_sessions', 0)}</div>
-                <div class="stat-desc">{a.get('total_groups', 0)} groupes</div>
+                <div class="stat-desc">{a.get('total_groups', 0)} groups</div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -1419,7 +1419,7 @@ def _page_reliability():
                     st.success("Balanced distribution across days")
 
         with col_b:
-            st.markdown("**Distribution par bloc horaire**")
+            st.markdown("**Distribution by time block**")
             by_block = d.get('by_block', {})
             if by_block:
                 block_df = pd.DataFrame([
@@ -1553,7 +1553,7 @@ def _page_reliability():
                 <div class="stat-card">
                     <div class="stat-label">Avg Pn offset</div>
                     <div class="stat-value">{sp.get('avg_last_deficit', 0):.1f}</div>
-                    <div class="stat-desc">semaines avant max_week</div>
+                    <div class="stat-desc">weeks before max_week</div>
                 </div>
             """, unsafe_allow_html=True)
 
@@ -2382,11 +2382,15 @@ if page == t('nav_home'):
         cta_btn_label = "View results →"
         cta_target = 'results'
 
+    # ─── Single, state-aware welcome + primary call-to-action ───
+    # (Previously two stacked "WELCOME" blocks — a tour card and a static intro
+    #  card — repeated the same message. Consolidated into one clean hero band
+    #  followed by the primary action for a more premium, uncluttered layout.)
     st.markdown(f"""
-        <div class="tour-card" style="margin: 0.4rem 0 1.3rem;">
-            <div style="font-size: 0.78rem; font-weight: 700; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 0.55rem;">{cta_eyebrow}</div>
-            <div style="font-size: 1.45rem; font-weight: 700; color: var(--text-heading); line-height: 1.25; margin-bottom: 0.6rem;">{cta_title}</div>
-            <div style="font-size: 0.98rem; color: var(--text-secondary); line-height: 1.6; max-width: 64ch;">{cta_desc}</div>
+        <div class="tour-card" style="margin: 0.6rem 0 1.4rem; padding: 26px 30px;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.6rem;">{cta_eyebrow}</div>
+            <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-heading); line-height: 1.25; margin-bottom: 0.7rem;">{cta_title}</div>
+            <div style="font-size: 1rem; color: var(--text-secondary); line-height: 1.65; max-width: 68ch;">{cta_desc}</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -2396,17 +2400,7 @@ if page == t('nav_home'):
             st.session_state['_nav_to'] = cta_target
             st.rerun()
 
-    # Welcome intro
-    st.markdown(f"""
-        <div class="info-card" style="margin-bottom: 2rem;">
-            <div style="font-size: 0.75rem; font-weight: 600; color: var(--cyan); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem;">
-                {t('home_welcome')}
-            </div>
-            <div style="font-size: 1rem; color: var(--text-secondary); line-height: 1.6;">
-                {t('home_intro')}
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
 
     # Persistent run history — survives application restarts. Demonstrates the
     # persistent-memory feature and lets the user see past results at a glance.
@@ -3404,8 +3398,14 @@ elif page == t('nav_config'):
     # ════════════════════════════════════════
     with tab5:
         try:
-            from ui_solver_constraints import render_solver_constraints_section
+            from ui_solver_constraints import (
+                render_solver_constraints_section,
+                render_constraints_reference,
+            )
             render_solver_constraints_section()
+            st.markdown("<div style='height: 1.4rem'></div>", unsafe_allow_html=True)
+            with st.expander("View all constraints (C1–C9) reference", expanded=False):
+                render_constraints_reference()
         except Exception as _scfg_exc:
             st.error(f"Solver constraints panel unavailable: {_scfg_exc}")
 
@@ -4037,7 +4037,7 @@ elif page == t('nav_history'):
                           use_container_width=True,
                           help="Replaces the current plan with this version. "
                                "The current state will be automatically saved before replacement."):
-                with st.spinner("Restauration en cours..."):
+                with st.spinner("Restoring..."):
                     ok = vm.restore_snapshot(selected_id, create_safety_snapshot=True)
                 if ok:
                     st.success(f"Version restored: {selected_id}")
@@ -4052,7 +4052,7 @@ elif page == t('nav_history'):
                     value=selected_snap.get('description', ''),
                     key=f"rename_{selected_id}",
                 )
-                if st.button("Enregistrer", key=f"save_rename_{selected_id}"):
+                if st.button("Save", key=f"save_rename_{selected_id}"):
                     if vm.update_description(selected_id, new_desc):
                         st.success("Description updated")
                         st.rerun()
@@ -4078,7 +4078,7 @@ elif page == t('nav_history'):
     # ───────────────────────────────────────────────────
     if len(snapshots) >= 2:
         st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
-        section_header("Comparer deux versions")
+        section_header("Compare two versions")
 
         c1, c2 = st.columns(2)
         with c1:
@@ -4404,7 +4404,7 @@ elif page == t('nav_edit'):
                 st.warning("No groups for this subject.")
                 st.stop()
             selected_group = st.selectbox(
-                "Groupe", groups, key='edit_group_select',
+                "Group", groups, key='edit_group_select',
             )
 
         sessions_in_group = edit_session.list_sessions(selected_subject, selected_group)
@@ -4419,16 +4419,16 @@ elif page == t('nav_edit'):
 
             # Show current sessions as context
             with st.expander(
-                f"Sessions actuelles de "
+                f"Current sessions of "
                 f"{selected_subject.replace('S1_', '').replace('S2_', '')} G{selected_group}",
                 expanded=False,
             ):
                 ses_df = pd.DataFrame([
                     {
-                        'Práctica': f"P{s['session']}",
+                        'Practica': f"Practica {s['session']}",
                         'Week': f"W{s['week']}",
                         'Day': s['day'],
-                        'Bloc': s['time_block'],
+                        'Block': s['time_block'],
                         'Room(s)': s['lab_rooms'],
                     }
                     for s in sessions_in_group
@@ -4451,7 +4451,7 @@ elif page == t('nav_edit'):
                     "Which session?",
                     options=[s['session'] for s in sessions_in_group],
                     format_func=lambda n: (
-                        f"Práctica {n} — actuellement "
+                        f"Practica {n} — currently "
                         f"W{next(s['week'] for s in sessions_in_group if s['session'] == n)} "
                         f"{next(s['day'] for s in sessions_in_group if s['session'] == n)} "
                         f"{next(s['time_block'] for s in sessions_in_group if s['session'] == n)}"
@@ -4794,7 +4794,7 @@ elif page == t('nav_edit'):
                 st.stop()
 
             grupo_b_choice = st.selectbox(
-                "Groupe destination",
+                "Target group",
                 options=[g['grupo'] for g in other_groups],
                 format_func=lambda gn: (
                     f"G{gn} — "
@@ -4935,7 +4935,7 @@ elif page == t('nav_edit'):
                     st.markdown(
                         f"**Type:** Session move  \n"
                         f"**Subject:** {last_op['subject'].replace('S1_', 'S1 · ').replace('S2_', 'S2 · ')}  \n"
-                        f"**Groupe :** G{last_op['grupo']} · Práctica {last_op['session']}  \n"
+                        f"**Group:** G{last_op['grupo']} · Practica {last_op['session']}  \n"
                         f"**New slot:** W{last_op['new_week']} "
                         f"{last_op['new_day']} {last_op['new_block']}"
                     )
@@ -5172,7 +5172,7 @@ elif page == t('nav_export'):
                                 Download Curso 2025-2026 (full archive)
                             </div>
                             <div style="font-size: 0.85rem; color: var(--text-secondary);">
-                                Tous les fichiers Excel (S1 + S2 × Primero + Segundo + Tercero) dans une archive ZIP unique
+                                All Excel files (S1 + S2 × Primero + Segundo + Tercero) in a single ZIP archive
                             </div>
                         </div>
                     </div>
@@ -5732,9 +5732,9 @@ elif page == t('nav_student'):
                 if pick:
                     cap_rem = pick['capacity_max'] - pick['capacity_used']
                     summary_lines.append(
-                        f"{subject} -> Groupe {pick['grupo']} "
+                        f"{subject} -> Group {pick['grupo']} "
                         f"({pick['day']} {pick['time_block']}, "
-                        f"{cap_rem} place(s) libre(s))"
+                        f"{cap_rem} free slot(s))"
                     )
                 else:
                     summary_lines.append(f"{subject} -> No compatible group")
@@ -5768,7 +5768,7 @@ elif page == t('nav_student'):
     st.markdown("### 4. Group details")
 
     filter_choice = st.radio(
-        "Afficher :",
+        "Show:",
         options=[
             "Solutions only",
             "All groups",
@@ -5888,7 +5888,7 @@ elif page == t('nav_simulateur'):
         import ui_infeasibility
         ui_infeasibility.render()
     except Exception as exc:
-        safe_error("Impossible de charger le simulateur d'infaisabilite.", exc)
+        safe_error("Unable to load the infeasibility simulator.", exc)
 
 # ════════════════════════════════════════════════════════════
 # PAGE: UPDATES (apply Python patches, show version)
@@ -6003,6 +6003,13 @@ elif page == t('nav_updates'):
 # ════════════════════════════════════════════════════════════
 st.markdown(f"""
     <div class="app-footer">
-        <div>{t('footer')}</div>
+        <div class="footer-brand">
+            <span class="footer-mark">UL</span>
+            <span>Universidad Loyola<br><span class="footer-tag">Lab Scheduling Automation</span></span>
+        </div>
+        <div class="footer-meta">
+            <strong>Intelligent Timetable Automation</strong> · CP-SAT (Google OR-Tools)<br>
+            © 2026 Universidad Loyola Sevilla · Version 1.0.0 · All rights reserved
+        </div>
     </div>
 """, unsafe_allow_html=True)
