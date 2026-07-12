@@ -90,3 +90,73 @@ def test_effective_busy_context_available():
     if ctx["available"]:
         assert 1 in ctx["student_busy_sem"]
         assert 2 in ctx["student_busy_sem"]
+
+
+
+# ---------------------------------------------------------------------------
+# Breakdown coherence — the per-slice figures must reconcile with the global
+# totals for the ADDITIVE metrics, proving the Validation-sheet numbers are
+# authentic. Distinct-student head-counts are deliberately non-additive.
+# ---------------------------------------------------------------------------
+_ADDITIVE = ("sessions", "groups", "subjects", "enrollments")
+
+
+def test_breakdown_keys_present(report):
+    for key in ("counts_by_semester", "counts_by_level",
+                "counts_by_level_semester", "counts_by_titulacion",
+                "counts_by_subject"):
+        assert key in report, f"missing breakdown key: {key}"
+
+
+def test_global_counts_have_enrollments(report):
+    counts = report["counts"]
+    assert "enrollments" in counts
+    assert "avg_sessions_per_group" in counts
+    # Enrollments >= distinct students (a student can register in many groups).
+    if counts.get("students"):
+        assert counts["enrollments"] >= counts["students"]
+
+
+@pytest.mark.parametrize("bkey", ["counts_by_semester", "counts_by_level",
+                                  "counts_by_level_semester"])
+def test_additive_metrics_reconcile(report, bkey):
+    slices = report.get(bkey) or []
+    if not slices:
+        pytest.skip(f"no data for {bkey}")
+    counts = report["counts"]
+    for metric in _ADDITIVE:
+        gtotal = int(counts.get(metric, 0) or 0)
+        if gtotal == 0:
+            continue
+        ssum = sum(int(s.get(metric, 0) or 0) for s in slices)
+        assert ssum == gtotal, (
+            f"{bkey}: {metric} sums to {ssum}, expected global {gtotal}")
+
+
+def test_titulacion_students_partition_exactly(report):
+    by_tit = report.get("counts_by_titulacion") or []
+    if not by_tit:
+        pytest.skip("no titulación data")
+    g_students = int(report["counts"].get("students", 0) or 0)
+    tsum = sum(int(t.get("students", 0) or 0) for t in by_tit)
+    # Each student has exactly one degree -> distinct students partition.
+    assert tsum == g_students
+    # Enrollments across degrees also reconcile with the global total.
+    g_enrol = int(report["counts"].get("enrollments", 0) or 0)
+    esum = sum(int(t.get("enrollments", 0) or 0) for t in by_tit)
+    assert esum == g_enrol
+
+
+def test_by_subject_totals_reconcile(report):
+    by_subj = report.get("counts_by_subject") or []
+    if not by_subj:
+        pytest.skip("no subject data")
+    counts = report["counts"]
+    assert sum(int(s.get("sessions", 0) or 0) for s in by_subj) == \
+        int(counts.get("sessions", 0) or 0)
+    assert sum(int(s.get("groups", 0) or 0) for s in by_subj) == \
+        int(counts.get("groups", 0) or 0)
+    assert sum(int(s.get("enrollments", 0) or 0) for s in by_subj) == \
+        int(counts.get("enrollments", 0) or 0)
+    # One row per subject, matching the global subject count.
+    assert len(by_subj) == int(counts.get("subjects", 0) or 0)

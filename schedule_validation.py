@@ -672,9 +672,21 @@ def validate_schedule(paths=None, max_examples=25):
     }
 
     # ------------------------------------------------------------------ #
-    # Breakdown by semester and by level (curso) — authenticity proof.    #
-    # These granular tables let a reviewer confirm that the per-slice     #
-    # figures reconcile exactly with the global totals above.            #
+    # Breakdowns — authenticity & COHERENCE proof.                        #
+    #                                                                     #
+    # A reviewer must be able to confirm the per-slice figures reconcile  #
+    # with the global totals. The subtlety that made earlier tables look  #
+    # "wrong": a *student* can be enrolled in subjects that belong to     #
+    # several years (curso) AND both semesters, so a distinct-student      #
+    # headcount is deliberately NON-additive (Σ slices > global total).   #
+    #                                                                     #
+    # We therefore expose, for every slice, BOTH families of metrics:     #
+    #   - sessions, groups, subjects, enrollments -> ADDITIVE (reconcile) #
+    #   - students (distinct headcount)           -> informational only   #
+    # "enrollments" = distinct (student × group) registrations: this is   #
+    # the additive student-side metric that reconciles exactly with the   #
+    # global total. Per-titulación, distinct students DO partition the    #
+    # cohort exactly (each student has one degree), so that table sums.   #
     # ------------------------------------------------------------------ #
     def _norm_sem(v):
         """Normalise a semester token ('S1', '1', 1) to the digit string."""
@@ -689,18 +701,19 @@ def validate_schedule(paths=None, max_examples=25):
             s = s[3:]
         return s.strip().lower()
 
-    # Prepare composition helpers (normalised semester + subject) so we can
-    # attribute unique students to each slice without depending on the exact
-    # raw key formats, which differ between the schedule and composition files.
-    if comp_ok:
-        try:
-            comp["_sem_n"] = comp["semester"].map(_norm_sem)
-            comp["_subj_n"] = comp["subject"].map(_norm_subj)
-        except Exception:
-            comp["_sem_n"] = ""
-            comp["_subj_n"] = ""
+    def _disp_subj(v):
+        """Human-readable subject label, semester prefix stripped."""
+        s = str(v).strip()
+        if len(s) > 3 and s[0].upper() == "S" and s[1].isdigit() and s[2] == "_":
+            s = s[3:]
+        return s.strip()
 
-    # Map (normalised semester, normalised subject) -> level, from the schedule.
+    _YEAR_TO_LEVEL = {"primero": "1", "segundo": "2", "tercero": "3",
+                      "cuarto": "4", "quinto": "5", "sexto": "6"}
+    _LEVEL_TO_YEAR = {"1": "Primero", "2": "Segundo", "3": "Tercero",
+                      "4": "Cuarto", "5": "Quinto", "6": "Sexto"}
+
+    # -- schedule side: normalise keys, resolve the level column ---------
     _level_col = None
     for cand in ("curso_num", "curso", "curso_asignatura", "nivel"):
         if cand in sched.columns:
@@ -709,57 +722,166 @@ def validate_schedule(paths=None, max_examples=25):
     sched = sched.copy()
     sched["_sem_n"] = sched["semester"].map(_norm_sem)
     sched["_subj_n"] = sched["subject"].map(_norm_subj)
-    subj_level = {}
     if _level_col is not None:
-        for _, r in sched[["_sem_n", "_subj_n", _level_col]].dropna().iterrows():
-            subj_level[(r["_sem_n"], r["_subj_n"])] = str(r[_level_col])
+        sched["_level_n"] = sched[_level_col].map(
+            lambda v: str(v).strip().split(".")[0])
+    else:
+        sched["_level_n"] = ""
 
-    def _students_for(mask_sched):
-        """Unique students enrolled in the groups covered by a schedule mask."""
-        if not comp_ok:
+    # -- composition side: normalise keys + level from `año` -------------
+    if comp_ok:
+        try:
+            comp["_sem_n"] = comp["semester"].map(_norm_sem)
+            comp["_subj_n"] = comp["subject"].map(_norm_subj)
+        except Exception:
+            comp["_sem_n"] = ""
+            comp["_subj_n"] = ""
+        # Level from the enrolment source of truth (`año`); fall back to the
+        # schedule-derived (semester, subject) -> level map when absent.
+        if "año" in comp.columns:
+            comp["_level_n"] = comp["año"].map(
+                lambda v: _YEAR_TO_LEVEL.get(str(v).strip().lower(), ""))
+        else:
+            comp["_level_n"] = ""
+        if _level_col is not None and (comp["_level_n"] == "").any():
+            _sl = {}
+            for _, r in sched[["_sem_n", "_subj_n", "_level_n"]].dropna().iterrows():
+                _sl[(r["_sem_n"], r["_subj_n"])] = r["_level_n"]
+            comp["_level_n"] = comp.apply(
+                lambda r: r["_level_n"] or _sl.get((r["_sem_n"], r["_subj_n"]), ""),
+                axis=1)
+        # Distinct student × group registration key (additive student metric).
+        comp["_enrol_key"] = (comp["_sem_n"].astype(str) + "|"
+                              + comp["_subj_n"].astype(str) + "|"
+                              + comp["grupo"].astype(str))
+
+    # Degree-program column (partitions students exactly).
+    _tcol = None
+    if comp_ok:
+        for cand in ("titulacion", "titulación", "program"):
+            if cand in comp.columns:
+                _tcol = cand
+                break
+
+    def _enrollments(csub):
+        """Distinct (student × group) registrations in a composition slice."""
+        if csub is None or csub.empty:
             return 0
-        pairs = set(
-            zip(mask_sched["_sem_n"].tolist(), mask_sched["_subj_n"].tolist())
-        )
-        cmask = comp.apply(
-            lambda r: (r["_sem_n"], r["_subj_n"]) in pairs, axis=1
-        )
-        return int(comp.loc[cmask, "student_name"].nunique())
+        return int(csub.drop_duplicates(["student_name", "_enrol_key"]).shape[0])
+
+    def _slice_counts(smask, cmask):
+        """Assemble one breakdown row from a schedule mask + composition mask."""
+        d = {
+            "sessions": int(len(smask)),
+            "groups": int(smask["group_key"].nunique()) if len(smask) else 0,
+            "subjects": int(smask["subject"].nunique()) if len(smask) else 0,
+        }
+        if comp_ok and cmask is not None:
+            csub = comp.loc[cmask]
+            d["students"] = int(csub["student_name"].nunique())
+            d["enrollments"] = _enrollments(csub)
+        else:
+            d["students"] = 0
+            d["enrollments"] = 0
+        return d
+
+    # Enrich global counts with the additive enrolment total + density.
+    if comp_ok:
+        report["counts"]["enrollments"] = _enrollments(comp)
+    else:
+        report["counts"]["enrollments"] = 0
+    report["counts"]["avg_sessions_per_group"] = (
+        round(n_sessions / n_groups, 1) if n_groups else 0.0)
 
     # --- by semester ---------------------------------------------------
     counts_by_semester = []
     try:
-        for sem_val in sorted(sched["semester"].dropna().unique(),
-                              key=lambda x: str(x)):
-            sub = sched[sched["semester"] == sem_val]
-            counts_by_semester.append({
-                "semester": f"S{_norm_sem(sem_val)}",
-                "sessions": int(len(sub)),
-                "groups": int(sub["group_key"].nunique()),
-                "subjects": int(sub["subject"].nunique()),
-                "students": _students_for(sub),
-            })
+        for sem_n in sorted(sched["_sem_n"].dropna().unique()):
+            smask = sched[sched["_sem_n"] == sem_n]
+            cmask = (comp["_sem_n"] == sem_n) if comp_ok else None
+            row = {"semester": f"S{sem_n}"}
+            row.update(_slice_counts(smask, cmask))
+            counts_by_semester.append(row)
     except Exception as exc:  # pragma: no cover - defensive
         report["warnings"].append(f"breakdown by semester: {exc}")
     report["counts_by_semester"] = counts_by_semester
 
     # --- by level (curso) ---------------------------------------------
     counts_by_level = []
-    if _level_col is not None:
+    try:
+        levels = sorted(x for x in sched["_level_n"].dropna().unique() if x != "")
+        for lvl in levels:
+            smask = sched[sched["_level_n"] == lvl]
+            cmask = (comp["_level_n"] == lvl) if comp_ok else None
+            row = {"level": lvl,
+                   "level_name": _LEVEL_TO_YEAR.get(lvl, f"Curso {lvl}")}
+            row.update(_slice_counts(smask, cmask))
+            counts_by_level.append(row)
+    except Exception as exc:  # pragma: no cover - defensive
+        report["warnings"].append(f"breakdown by level: {exc}")
+    report["counts_by_level"] = counts_by_level
+
+    # --- by level × semester (cross-tab) — e.g. "Primero · S1" ---------
+    counts_by_level_semester = []
+    try:
+        levels = sorted(x for x in sched["_level_n"].dropna().unique() if x != "")
+        sems = sorted(sched["_sem_n"].dropna().unique())
+        for lvl in levels:
+            for sem_n in sems:
+                smask = sched[(sched["_level_n"] == lvl) &
+                              (sched["_sem_n"] == sem_n)]
+                if len(smask) == 0:
+                    continue
+                cmask = ((comp["_level_n"] == lvl) &
+                         (comp["_sem_n"] == sem_n)) if comp_ok else None
+                row = {"level": lvl,
+                       "level_name": _LEVEL_TO_YEAR.get(lvl, f"Curso {lvl}"),
+                       "semester": f"S{sem_n}",
+                       "label": f"{_LEVEL_TO_YEAR.get(lvl, 'Curso ' + lvl)} · S{sem_n}"}
+                row.update(_slice_counts(smask, cmask))
+                counts_by_level_semester.append(row)
+    except Exception as exc:  # pragma: no cover - defensive
+        report["warnings"].append(f"breakdown by level×semester: {exc}")
+    report["counts_by_level_semester"] = counts_by_level_semester
+
+    # --- by titulación (degree) — distinct students partition EXACTLY --
+    counts_by_titulacion = []
+    if comp_ok and _tcol is not None:
         try:
-            for lvl_val in sorted(sched[_level_col].dropna().unique(),
-                                  key=lambda x: str(x)):
-                sub = sched[sched[_level_col] == lvl_val]
-                counts_by_level.append({
-                    "level": str(lvl_val),
-                    "sessions": int(len(sub)),
-                    "groups": int(sub["group_key"].nunique()),
-                    "subjects": int(sub["subject"].nunique()),
-                    "students": _students_for(sub),
+            for tval in sorted(comp[_tcol].dropna().astype(str).unique()):
+                csub = comp[comp[_tcol].astype(str) == tval]
+                counts_by_titulacion.append({
+                    "titulacion": tval,
+                    "students": int(csub["student_name"].nunique()),
+                    "enrollments": _enrollments(csub),
+                    "groups": int(csub["_enrol_key"].nunique()),
                 })
         except Exception as exc:  # pragma: no cover - defensive
-            report["warnings"].append(f"breakdown by level: {exc}")
-    report["counts_by_level"] = counts_by_level
+            report["warnings"].append(f"breakdown by titulacion: {exc}")
+    report["counts_by_titulacion"] = counts_by_titulacion
+
+    # --- by subject (practica) -----------------------------------------
+    counts_by_subject = []
+    try:
+        for subj_raw in sorted(sched["subject"].dropna().astype(str).unique()):
+            smask = sched[sched["subject"].astype(str) == subj_raw]
+            subj_n = smask["_subj_n"].iloc[0]
+            sem_n = smask["_sem_n"].iloc[0]
+            lvl = smask["_level_n"].iloc[0]
+            cmask = ((comp["_sem_n"] == sem_n) &
+                     (comp["_subj_n"] == subj_n)) if comp_ok else None
+            row = {"subject": _disp_subj(subj_raw),
+                   "semester": f"S{sem_n}",
+                   "level": lvl,
+                   "level_name": _LEVEL_TO_YEAR.get(lvl, f"Curso {lvl}" if lvl else "")}
+            row.update(_slice_counts(smask, cmask))
+            grp = row["groups"] or 0
+            row["avg_group_size"] = (
+                round(row["enrollments"] / grp, 1) if grp else 0.0)
+            counts_by_subject.append(row)
+    except Exception as exc:  # pragma: no cover - defensive
+        report["warnings"].append(f"breakdown by subject: {exc}")
+    report["counts_by_subject"] = counts_by_subject
 
     # ------------------------------------------------------------------ #
     # Reliability score — transparent formula                            #
