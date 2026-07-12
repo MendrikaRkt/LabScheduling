@@ -45,6 +45,15 @@ def render_solver_constraints_section() -> None:
         "The HARD constraints (C1 overlap, C4 weeks >= credits, C5 no double "
         "lab on the same day) are always active and cannot be changed here."
     )
+    st.info(
+        "**What presets change:** Presets optimize the **temporal placement** of sessions "
+        "(which week each session lands in). They do **not** change global headcounts "
+        "(total sessions/groups/students), which are determined by group formation rules "
+        "and the academic calendar. Strict/Balanced/Relaxed will always return OPTIMAL "
+        "status with the same aggregate stats — the differences are in the week-by-week "
+        "distribution (visible in the Excel Week column and detailed schedule reports).",
+        icon="ℹ️"
+    )
 
     # Load current configuration into session state (once).
     if "solver_cfg" not in st.session_state:
