@@ -146,6 +146,93 @@ def _status_colors(status):
     }.get(status, (WARN, WARN_BG))
 
 
+def _breakdown_table(ws, row, first_header, slice_labels, metrics, slices,
+                     global_counts):
+    """Render a compact breakdown grid: one row per metric, one column per
+    slice (semester or level), plus a final 'Global (Total)' column.
+
+    A ✓ mark next to the total confirms that the per-slice figures sum exactly
+    to the global total — the visual proof of authenticity requested.
+    Columns used: A (metric) .. then one per slice .. then Total (2 cols).
+    """
+    n_slices = len(slice_labels)
+    # Header row -------------------------------------------------------------
+    hc = ws.cell(row=row, column=1, value=first_header)
+    hc.font = Font(bold=True, color=WHITE)
+    hc.fill = PatternFill("solid", fgColor=NAVY)
+    hc.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    hc.border = BORDER
+    col = 2
+    for lbl in slice_labels:
+        c = ws.cell(row=row, column=col, value=lbl)
+        c.font = Font(bold=True, color=WHITE)
+        c.fill = PatternFill("solid", fgColor=NAVY)
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c.border = BORDER
+        col += 1
+    # 'Global (Total)' spanning the remaining columns (up to col 6).
+    gcol = col
+    tc = ws.cell(row=row, column=gcol, value="Global (Total)")
+    tc.font = Font(bold=True, color=NAVY_DEEP)
+    tc.fill = PatternFill("solid", fgColor=GOLD)
+    tc.alignment = Alignment(horizontal="center", vertical="center")
+    last_col = max(gcol, 6)
+    if last_col > gcol:
+        ws.merge_cells(start_row=row, start_column=gcol,
+                       end_row=row, end_column=last_col)
+    for cc in range(gcol, last_col + 1):
+        ws.cell(row=row, column=cc).fill = PatternFill("solid", fgColor=GOLD)
+        ws.cell(row=row, column=cc).border = BORDER
+    ws.row_dimensions[row].height = 22
+    row += 1
+
+    # Metric rows ------------------------------------------------------------
+    for label, key in metrics:
+        mc = ws.cell(row=row, column=1, value=label)
+        mc.font = Font(bold=True, color=NAVY_DEEP)
+        mc.fill = PatternFill("solid", fgColor=GREY_BG)
+        mc.alignment = Alignment(vertical="center", indent=1)
+        mc.border = BORDER
+        col = 2
+        slice_sum = 0
+        for s in slices:
+            val = int(s.get(key, 0) or 0)
+            slice_sum += val
+            c = ws.cell(row=row, column=col, value=val)
+            c.alignment = Alignment(horizontal="center", vertical="center")
+            c.border = BORDER
+            col += 1
+        gtotal = int(global_counts.get(key, 0) or 0)
+        # For 'subjects' and 'students' a slice sum may exceed the global total
+        # because a subject/student can appear in more than one slice; only the
+        # additive metrics (sessions, groups) are expected to reconcile exactly.
+        reconciles = key in ("sessions", "groups") and slice_sum == gtotal
+        mark = "  ✓" if reconciles else ""
+        gv = ws.cell(row=row, column=gcol, value=f"{gtotal}{mark}")
+        gv.font = Font(bold=True, color=NAVY_DEEP)
+        gv.alignment = Alignment(horizontal="center", vertical="center")
+        if last_col > gcol:
+            ws.merge_cells(start_row=row, start_column=gcol,
+                           end_row=row, end_column=last_col)
+        for cc in range(gcol, last_col + 1):
+            ws.cell(row=row, column=cc).border = BORDER
+        row += 1
+
+    # Footnote ---------------------------------------------------------------
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+    fn = ws.cell(
+        row=row, column=1,
+        value=("✓ = per-slice figures sum exactly to the global total "
+               "(Lab sessions, Practice groups). Subjects and Students may "
+               "recur across slices, so their per-slice values can overlap."),
+    )
+    fn.font = Font(size=9, italic=True, color=NAVY_DEEP)
+    fn.alignment = Alignment(vertical="top", wrap_text=True, indent=1)
+    ws.row_dimensions[row].height = 26
+    row += 1
+    return row
+
+
 def build_validation_sheet(workbook, report, sheet_title="Validation"):
     """Append a styled 'Validation' sheet built from a validation *report*.
 
@@ -207,6 +294,44 @@ def build_validation_sheet(workbook, report, sheet_title="Validation"):
     row = _kv(ws, row, "Semesters", counts.get("semesters", 0))
     row = _kv(ws, row, "Students involved", counts.get("students", 0))
     row += 1
+
+    # ── Breakdown by semester (authenticity: per-slice reconciles to total)
+    by_sem = report.get("counts_by_semester") or []
+    if by_sem:
+        row = _section(ws, row, "Breakdown by semester")
+        row = _breakdown_table(
+            ws, row,
+            first_header="Metric",
+            slice_labels=[s.get("semester", "?") for s in by_sem],
+            metrics=[
+                ("Lab sessions", "sessions"),
+                ("Practice groups", "groups"),
+                ("Subjects", "subjects"),
+                ("Students involved", "students"),
+            ],
+            slices=by_sem,
+            global_counts=counts,
+        )
+        row += 2
+
+    # ── Breakdown by level / course ────────────────────────────────────
+    by_lvl = report.get("counts_by_level") or []
+    if by_lvl:
+        row = _section(ws, row, "Breakdown by level (course)")
+        row = _breakdown_table(
+            ws, row,
+            first_header="Metric",
+            slice_labels=["Course " + str(s.get("level", "?")) for s in by_lvl],
+            metrics=[
+                ("Lab sessions", "sessions"),
+                ("Practice groups", "groups"),
+                ("Subjects", "subjects"),
+                ("Students involved", "students"),
+            ],
+            slices=by_lvl,
+            global_counts=counts,
+        )
+        row += 2
 
     # ── Checks table ───────────────────────────────────────────────────
     row = _section(ws, row, "Conflict checks")

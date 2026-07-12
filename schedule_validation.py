@@ -672,6 +672,96 @@ def validate_schedule(paths=None, max_examples=25):
     }
 
     # ------------------------------------------------------------------ #
+    # Breakdown by semester and by level (curso) — authenticity proof.    #
+    # These granular tables let a reviewer confirm that the per-slice     #
+    # figures reconcile exactly with the global totals above.            #
+    # ------------------------------------------------------------------ #
+    def _norm_sem(v):
+        """Normalise a semester token ('S1', '1', 1) to the digit string."""
+        s = str(v).strip().upper()
+        return s[1:] if s.startswith("S") else s
+
+    def _norm_subj(v):
+        """Strip the 'S1_'/'S2_' semester prefix so schedule and composition
+        subject names line up ('S1_Física' <-> 'Física')."""
+        s = str(v).strip()
+        if len(s) > 3 and s[0].upper() == "S" and s[1].isdigit() and s[2] == "_":
+            s = s[3:]
+        return s.strip().lower()
+
+    # Prepare composition helpers (normalised semester + subject) so we can
+    # attribute unique students to each slice without depending on the exact
+    # raw key formats, which differ between the schedule and composition files.
+    if comp_ok:
+        try:
+            comp["_sem_n"] = comp["semester"].map(_norm_sem)
+            comp["_subj_n"] = comp["subject"].map(_norm_subj)
+        except Exception:
+            comp["_sem_n"] = ""
+            comp["_subj_n"] = ""
+
+    # Map (normalised semester, normalised subject) -> level, from the schedule.
+    _level_col = None
+    for cand in ("curso_num", "curso", "curso_asignatura", "nivel"):
+        if cand in sched.columns:
+            _level_col = cand
+            break
+    sched = sched.copy()
+    sched["_sem_n"] = sched["semester"].map(_norm_sem)
+    sched["_subj_n"] = sched["subject"].map(_norm_subj)
+    subj_level = {}
+    if _level_col is not None:
+        for _, r in sched[["_sem_n", "_subj_n", _level_col]].dropna().iterrows():
+            subj_level[(r["_sem_n"], r["_subj_n"])] = str(r[_level_col])
+
+    def _students_for(mask_sched):
+        """Unique students enrolled in the groups covered by a schedule mask."""
+        if not comp_ok:
+            return 0
+        pairs = set(
+            zip(mask_sched["_sem_n"].tolist(), mask_sched["_subj_n"].tolist())
+        )
+        cmask = comp.apply(
+            lambda r: (r["_sem_n"], r["_subj_n"]) in pairs, axis=1
+        )
+        return int(comp.loc[cmask, "student_name"].nunique())
+
+    # --- by semester ---------------------------------------------------
+    counts_by_semester = []
+    try:
+        for sem_val in sorted(sched["semester"].dropna().unique(),
+                              key=lambda x: str(x)):
+            sub = sched[sched["semester"] == sem_val]
+            counts_by_semester.append({
+                "semester": f"S{_norm_sem(sem_val)}",
+                "sessions": int(len(sub)),
+                "groups": int(sub["group_key"].nunique()),
+                "subjects": int(sub["subject"].nunique()),
+                "students": _students_for(sub),
+            })
+    except Exception as exc:  # pragma: no cover - defensive
+        report["warnings"].append(f"breakdown by semester: {exc}")
+    report["counts_by_semester"] = counts_by_semester
+
+    # --- by level (curso) ---------------------------------------------
+    counts_by_level = []
+    if _level_col is not None:
+        try:
+            for lvl_val in sorted(sched[_level_col].dropna().unique(),
+                                  key=lambda x: str(x)):
+                sub = sched[sched[_level_col] == lvl_val]
+                counts_by_level.append({
+                    "level": str(lvl_val),
+                    "sessions": int(len(sub)),
+                    "groups": int(sub["group_key"].nunique()),
+                    "subjects": int(sub["subject"].nunique()),
+                    "students": _students_for(sub),
+                })
+        except Exception as exc:  # pragma: no cover - defensive
+            report["warnings"].append(f"breakdown by level: {exc}")
+    report["counts_by_level"] = counts_by_level
+
+    # ------------------------------------------------------------------ #
     # Reliability score — transparent formula                            #
     # ------------------------------------------------------------------ #
     # score = 100 * weighted pass-rate of the HARD solver constraints only.
