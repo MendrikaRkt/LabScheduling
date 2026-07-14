@@ -732,6 +732,42 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
 
+    # ── Global help / FAQ (always available, English) ────────────────
+    # A single, persistent reference so the coordinator never has to leave
+    # the app to understand the workflow or the key concepts.
+    st.markdown("<div style='height: 1.2rem'></div>", unsafe_allow_html=True)
+    with st.expander("❓ Help & FAQ"):
+        st.markdown(
+            "**How do I generate a schedule?**\n"
+            "1. **Data** — upload the timetable and enrollment files.\n"
+            "2. **Configuration** — review the per-subject and global settings "
+            "(warnings appear in real time).\n"
+            "3. **Optimize** — run the pipeline; the button stays disabled while "
+            "blocking errors remain.\n"
+            "4. **Results / Export** — read the report and download the Excel files.\n\n"
+            "**What does the reliability index mean?**  \n"
+            "A 0–100 score based on the hard solver constraints (room conflicts, "
+            "student clashes). 100 = no conflict. The full formula and each "
+            "variable are documented in the Excel *Validation* sheet.\n\n"
+            "**Why is a result OPTIMAL but still flagged?**  \n"
+            "OPTIMAL means the solver found the best solution for the model — it "
+            "does **not** guarantee every business rule is met. The *Business "
+            "Audit & Remedies* sheet lists any rule gaps and proposes quantified "
+            "remedies (nothing is applied automatically; you decide).\n\n"
+            "**What do MIXED / OVERFLOW mean in the Program column?**  \n"
+            "`MIXED(<code>+N)` = a group mixing students from several programs "
+            "(dominant program + N others); `OVERFLOW` = an extra group opened to "
+            "absorb students beyond the normal room capacity; `ALT_ROOM` = a group "
+            "recovered in an alternative room.\n\n"
+            "**The schedule is infeasible — what now?**  \n"
+            "Open the **Infeasibility simulator**: it runs a business audit, shows "
+            "the latest solver status, and proposes automatic suggestions plus "
+            "manual levers (exclude groups, add resources).\n\n"
+            "**How do I switch the interface language?**  \n"
+            "Use the language selector on the Home page. The app defaults to "
+            "English; Spanish and French are also available."
+        )
+
     # ── Quit button: cleanly shut the local server down ──────────────
     # A packaged Streamlit app is really a local web server; closing the
     # browser tab leaves it running in the background. This button stops the
