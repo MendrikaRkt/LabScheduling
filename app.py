@@ -4081,7 +4081,7 @@ elif page == t('nav_history'):
                     else:
                         st.error("Failed — check that a plan exists to archive")
                 else:
-                    st.warning("Veuillez entrer un nom de snapshot")
+                    st.warning("Please enter a snapshot name")
 
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
 
@@ -6008,8 +6008,8 @@ elif page == t('nav_student'):
 # ════════════════════════════════════════════════════════════
 elif page == t('nav_simulateur'):
     page_header(t('nav_simulateur'),
-                "Test de robustesse : forcer un scénario tendu, voir le solveur "
-                "détecter l'infaisabilité et proposer des remèdes")
+                "Robustness test: force a tight scenario, watch the solver "
+                "detect infeasibility and propose remedies")
     try:
         import ui_infeasibility
         ui_infeasibility.render()
