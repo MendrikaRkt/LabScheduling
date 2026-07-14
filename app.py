@@ -2851,45 +2851,77 @@ elif page == t('nav_config'):
         c1, c2, c3 = st.columns(3)
         with c1:
             st.session_state.advanced_config['preferred_size'] = st.number_input(
-                t('pref_size'), 8, 20, 12, help="Daniel: 12"
+                t('pref_size'), 
+                min_value=8, 
+                max_value=20, 
+                value=st.session_state.advanced_config.get('preferred_size', 12),
+                help="Daniel: 12"
             )
         with c2:
             st.session_state.advanced_config['default_max'] = st.number_input(
-                t('max_size'), 12, 35, 15, help="Standard labs"
+                t('max_size'), 
+                min_value=12, 
+                max_value=35, 
+                value=st.session_state.advanced_config.get('default_max', 15),
+                help="Standard labs"
             )
         with c3:
             st.session_state.advanced_config['min_size'] = st.number_input(
-                t('min_size'), 2, 10, 7, help="Auto-merge below"
+                t('min_size'), 
+                min_value=2, 
+                max_value=10, 
+                value=st.session_state.advanced_config.get('min_size', 7),
+                help="Auto-merge below"
             )
 
         st.markdown(f"##### Special lab maximums")
         c4, c5 = st.columns(2)
         with c4:
             st.session_state.advanced_config['computer_lab_max'] = st.number_input(
-                t('comp_max'), 12, 40, 24, help="Computer labs accept more students"
+                t('comp_max'), 
+                min_value=12, 
+                max_value=40, 
+                value=st.session_state.advanced_config.get('computer_lab_max', 24),
+                help="Computer labs accept more students"
             )
         with c5:
             st.session_state.advanced_config['reduced_max_size'] = st.number_input(
-                t('reduced_max'), 8, 15, 12, help="Resistencia, Mecánica de Fluidos"
+                t('reduced_max'), 
+                min_value=8, 
+                max_value=15, 
+                value=st.session_state.advanced_config.get('reduced_max_size', 12),
+                help="Resistencia, Mecánica de Fluidos"
             )
 
         st.markdown(f"##### Calendar")
         c6, c7 = st.columns(2)
         with c6:
             st.session_state.advanced_config['start_week'] = st.number_input(
-                t('start_week'), 1, 10, 4, help="Week 3 or 4 typically"
+                t('start_week'), 
+                min_value=1, 
+                max_value=10, 
+                value=st.session_state.advanced_config.get('start_week', 4),
+                help="Week 3 or 4 typically"
             )
         with c7:
             st.session_state.advanced_config.setdefault('s1_total_weeks', 14)
             st.session_state.advanced_config['s1_total_weeks'] = st.number_input(
-                "S1 total weeks", 12, 18, 14, help="Last available week in S1"
+                "S1 total weeks", 
+                min_value=12, 
+                max_value=18, 
+                value=st.session_state.advanced_config.get('s1_total_weeks', 14),
+                help="Last available week in S1"
             )
 
         c8, c9, _ = st.columns(3)
         with c8:
             st.session_state.advanced_config.setdefault('s2_total_weeks', 20)
             st.session_state.advanced_config['s2_total_weeks'] = st.number_input(
-                "S2 total weeks", 14, 24, 20, help="Last available week in S2"
+                "S2 total weeks", 
+                min_value=14, 
+                max_value=24, 
+                value=st.session_state.advanced_config.get('s2_total_weeks', 20),
+                help="Last available week in S2"
             )
 
         # ────────────────────────────────────────────────────────────
