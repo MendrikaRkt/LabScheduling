@@ -105,9 +105,27 @@ except Exception:
 # ════════════════════════════════════════════════════════════
 # PAGE CONFIG
 # ════════════════════════════════════════════════════════════
+def _resolve_favicon():
+    """Resolve the Loyola logo for the browser tab icon (favicon).
+
+    Falls back to a plain emoji if the asset cannot be located, so the app
+    never crashes on startup because of a missing icon.
+    """
+    rel_candidates = ["assets/loyola_logo.png", "assets/app_icon.ico"]
+    if PATHS_OK:
+        for rel in rel_candidates:
+            found = app_paths.resolve_existing(rel)
+            if found and os.path.exists(found):
+                return found
+    for rel in rel_candidates:
+        if os.path.exists(rel):
+            return rel
+    return "🧪"
+
+
 st.set_page_config(
     page_title="Lab Scheduling — Universidad Loyola",
-    page_icon="L",
+    page_icon=_resolve_favicon(),
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
@@ -714,6 +732,42 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
 
+    # ── Global help / FAQ (always available, English) ────────────────
+    # A single, persistent reference so the coordinator never has to leave
+    # the app to understand the workflow or the key concepts.
+    st.markdown("<div style='height: 1.2rem'></div>", unsafe_allow_html=True)
+    with st.expander("❓ Help & FAQ"):
+        st.markdown(
+            "**How do I generate a schedule?**\n"
+            "1. **Data** — upload the timetable and enrollment files.\n"
+            "2. **Configuration** — review the per-subject and global settings "
+            "(warnings appear in real time).\n"
+            "3. **Optimize** — run the pipeline; the button stays disabled while "
+            "blocking errors remain.\n"
+            "4. **Results / Export** — read the report and download the Excel files.\n\n"
+            "**What does the reliability index mean?**  \n"
+            "A 0–100 score based on the hard solver constraints (room conflicts, "
+            "student clashes). 100 = no conflict. The full formula and each "
+            "variable are documented in the Excel *Validation* sheet.\n\n"
+            "**Why is a result OPTIMAL but still flagged?**  \n"
+            "OPTIMAL means the solver found the best solution for the model — it "
+            "does **not** guarantee every business rule is met. The *Business "
+            "Audit & Remedies* sheet lists any rule gaps and proposes quantified "
+            "remedies (nothing is applied automatically; you decide).\n\n"
+            "**What do MIXED / OVERFLOW mean in the Program column?**  \n"
+            "`MIXED(<code>+N)` = a group mixing students from several programs "
+            "(dominant program + N others); `OVERFLOW` = an extra group opened to "
+            "absorb students beyond the normal room capacity; `ALT_ROOM` = a group "
+            "recovered in an alternative room.\n\n"
+            "**The schedule is infeasible — what now?**  \n"
+            "Open the **Infeasibility simulator**: it runs a business audit, shows "
+            "the latest solver status, and proposes automatic suggestions plus "
+            "manual levers (exclude groups, add resources).\n\n"
+            "**How do I switch the interface language?**  \n"
+            "Use the language selector on the Home page. The app defaults to "
+            "English; Spanish and French are also available."
+        )
+
     # ── Quit button: cleanly shut the local server down ──────────────
     # A packaged Streamlit app is really a local web server; closing the
     # browser tab leaves it running in the background. This button stops the
@@ -998,11 +1052,9 @@ def render_run_report(log_text="", elapsed_s=None):
         unsafe_allow_html=True,
     )
 
-    # ── Raw log: demoted, collapsed, clearly labelled as technical ──
-    # The full quality / KPI / unplaced / solver breakdown lives on the
-    # Results page — not duplicated here to keep the run report concise.
-    with st.expander("Technical solver log (for developers)"):
-        st.code(log_text or "(no log captured)", language="text")
+    # NOTE: the raw technical solver log display was removed to keep the run
+    # report concise (Point 3). The full quality / KPI / unplaced / solver
+    # breakdown remains available on the Results page.
 
 
 def _load_report_json(rel):
@@ -2363,8 +2415,9 @@ if page == t('nav_home'):
         if not data_ok_home:
             cta_eyebrow = "Welcome"
             cta_title = "Start by loading your data"
-            cta_desc = ("This application will guide you through 4 steps: importing Excel files, "
-                        "optional configuration, optimization, then export of plans in Daniel's format.")
+            cta_desc = ("This application guides you through 4 steps: import the Excel files, "
+                        "optionally adjust the configuration, run the optimization, then export "
+                        "the plans in the required Excel format.")
             cta_btn_label = "Get started →"
             cta_target = 'data'
         else:
@@ -2378,7 +2431,7 @@ if page == t('nav_home'):
         cta_eyebrow = "Pipeline complete"
         cta_title = "View your results"
         cta_desc = ("The plan has been generated. View the statistics, "
-                    "check the groups, or download the Excel files in Daniel's format.")
+                    "check the groups, or download the Excel files in the required format.")
         cta_btn_label = "View results →"
         cta_target = 'results'
 
@@ -2845,7 +2898,7 @@ elif page == t('nav_config'):
         # avec des contraintes nécessaires à un résultat conforme.
         # ────────────────────────────────────────────────────────────
         st.markdown("---")
-        st.markdown("##### Validation des paramètres")
+        st.markdown("##### Parameter validation")
         try:
             import ui_validation as _uiv
             _g_issues = _uiv.validate_global_params(
@@ -2855,29 +2908,29 @@ elif page == t('nav_config'):
             _g_warnings = [i for i in _g_issues if i.level == _uiv.LEVEL_WARNING]
             if not _g_issues:
                 st.success(
-                    "Paramètres globaux valides — plages respectées "
-                    "(taille min ≤ préférée ≤ max, semaine de départ dans "
-                    "le semestre)."
+                    "Global parameters valid — ranges respected "
+                    "(min size ≤ preferred ≤ max, start week within "
+                    "the semester)."
                 )
             else:
                 for _iss in _g_errors:
                     _txt = f"**{_iss.message}**"
                     if _iss.hint:
-                        _txt += f"\n\nValeurs acceptables : {_iss.hint}"
+                        _txt += f"\n\nAcceptable values: {_iss.hint}"
                     st.error(_txt)
                 for _iss in _g_warnings:
                     _txt = _iss.message
                     if _iss.hint:
-                        _txt += f"\n\nRecommandation : {_iss.hint}"
+                        _txt += f"\n\nRecommendation: {_iss.hint}"
                     st.warning(_txt)
                 if _g_errors:
                     st.caption(
-                        "Tant qu'une erreur (rouge) subsiste, le bouton "
-                        "« Lancer le pipeline » restera désactivé à l'étape "
-                        "Optimiser."
+                        "As long as an error (red) remains, the "
+                        "\"Run the pipeline\" button stays disabled on the "
+                        "Optimize step."
                     )
         except Exception as _uiv_exc:  # pragma: no cover - garde-fou UI
-            st.info(f"Validation des paramètres indisponible : {_uiv_exc}")
+            st.info(f"Parameter validation unavailable: {_uiv_exc}")
 
     # ════════════════════════════════════════
     # TAB 2: Per-subject configuration (enriched with all options)
@@ -3531,40 +3584,40 @@ elif page == t('nav_optimize'):
         _launch_blocked = _report.is_blocking
         if _report.is_blocking:
             st.error(
-                f"**Configuration invalide — {len(_report.errors)} erreur(s) "
-                f"bloquante(s).** Corrigez-les à l'étape *Configuration* avant "
-                f"de lancer l'optimisation :"
+                f"**Invalid configuration — {len(_report.errors)} blocking "
+                f"error(s).** Fix them on the *Configuration* step before "
+                f"running the optimisation:"
             )
             for _iss in _report.errors:
                 _txt = f"- {_iss.message}"
                 if _iss.hint:
-                    _txt += f"  \n  _Valeurs acceptables : {_iss.hint}_"
+                    _txt += f"  \n  _Acceptable values: {_iss.hint}_"
                 st.markdown(_txt)
-            if st.button("← Aller à la Configuration", key="opt_goto_config"):
+            if st.button("← Go to Configuration", key="opt_goto_config"):
                 st.session_state['_nav_to'] = 'config'
                 st.rerun()
         elif _report.warnings:
             with st.expander(
-                f"{len(_report.warnings)} avertissement(s) — lancement "
-                f"autorisé (cliquez pour voir le détail)"
+                f"{len(_report.warnings)} warning(s) — launch allowed "
+                f"(click to see the details)"
             ):
                 for _iss in _report.warnings:
                     _txt = _iss.message
                     if _iss.hint:
-                        _txt += f"\n\nRecommandation : {_iss.hint}"
+                        _txt += f"\n\nRecommendation: {_iss.hint}"
                     st.warning(_txt)
         else:
             st.success(
-                "Configuration valide — tous les paramètres respectent les "
-                "contraintes métier. Vous pouvez lancer l'optimisation."
+                "Valid configuration — all parameters respect the business "
+                "constraints. You can run the optimisation."
             )
     except Exception as _uiv_exc:  # pragma: no cover - garde-fou UI
-        st.info(f"Validation préventive indisponible : {_uiv_exc}")
+        st.info(f"Preventive validation unavailable: {_uiv_exc}")
 
     if st.button(f"{t('run_btn')}", type="primary", use_container_width=True,
                  disabled=_launch_blocked,
-                 help=("Corrigez les erreurs de configuration ci-dessus pour "
-                       "activer le lancement." if _launch_blocked else None)):
+                 help=("Fix the configuration errors above to enable "
+                       "the launch." if _launch_blocked else None)):
         import threading
         import time as time_module
         import json
@@ -3857,48 +3910,9 @@ elif page == t('nav_results'):
         with c4: stat_card(t('rate_lbl'), _rate_txt, "actual")
         with c5: stat_card("Unassigned", _conf_txt, "actual")
 
-        # ── Applied configuration (solver constraints proof) ──────────
-        section_header("Applied configuration")
-        st.caption(
-            "The solver configuration below was read from `config/solver_constraints.yaml` "
-            "and applied during the last optimization run. "
-            "**Presets optimize temporal placement (weeks)** — they do not change global "
-            "headcounts (sessions/groups), which are fixed by group formation rules."
-        )
-        st.info(
-            "**Professor assignment:** Professors are allocated **after** the CP-SAT solve, "
-            "based on official credits from *Asignación docente* (1 P credit = 5 sessions). "
-            "The solver optimizes session placement; professor-to-group matching is then "
-            "computed proportionally to assigned practice credits. See the Teacher View sheet "
-            "for the detailed breakdown per professor.",
-            icon="👨‍🏫"
-        )
-        try:
-            import solver_config as sc
-            import os
-            import datetime
-            cfg_path = sc.default_config_path()
-            cfg = sc.load_config()
-            profile = cfg.get('active_profile', '?')
-            weights_display = {k: v['weight'] for k, v in cfg['soft_constraints'].items()}
-            
-            cfg_stat_col1, cfg_stat_col2, cfg_stat_col3 = st.columns(3)
-            with cfg_stat_col1:
-                stat_card("Active profile", profile, "Strict / Balanced / Relaxed / Custom")
-            with cfg_stat_col2:
-                timestamp_str = "—"
-                if os.path.exists(cfg_path):
-                    mtime = os.path.getmtime(cfg_path)
-                    timestamp_str = datetime.datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
-                stat_card("Config file saved at", timestamp_str, cfg_path)
-            with cfg_stat_col3:
-                total_w = sum(v['weight'] for v in cfg['soft_constraints'].values() if v.get('enabled'))
-                stat_card("Total weight (enabled)", total_w, "Sum of active soft constraints")
-            
-            with st.expander("Effective solver weights"):
-                st.json(weights_display)
-        except Exception as ex:
-            st.warning(f"Could not load solver configuration: {ex}")
+        # NOTE: The "Applied configuration" panel was removed from the Results
+        # page per request — the applied solver configuration is already shown
+        # on the dedicated Configuration page, so repeating it here was noise.
 
         # Distribution
         section_header("Distribution")
@@ -3952,13 +3966,20 @@ elif page == t('nav_analytics'):
         "All quality metrics for the generated plan in one place: "
         "reliability, flow integrity, and pipeline monitoring."
     )
+    # NOTE: each tab body is wrapped in its own st.container() so Streamlit
+    # keeps their DOM subtrees isolated. Without this, fast tab switching could
+    # briefly "bleed" content rendered by the previously active page (e.g. the
+    # Results page) into the Integrity tab before the rerun settled.
     _an_tabs = st.tabs(["Reliability", "Integrity", "Monitoring"])
     with _an_tabs[0]:
-        _page_reliability()
+        with st.container():
+            _page_reliability()
     with _an_tabs[1]:
-        _page_integrity()
+        with st.container():
+            _page_integrity()
     with _an_tabs[2]:
-        _page_monitoring()
+        with st.container():
+            _page_monitoring()
 
 
 
@@ -4096,7 +4117,7 @@ elif page == t('nav_history'):
                     else:
                         st.error("Failed — check that a plan exists to archive")
                 else:
-                    st.warning("Veuillez entrer un nom de snapshot")
+                    st.warning("Please enter a snapshot name")
 
     st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
 
@@ -5278,10 +5299,11 @@ elif page == t('nav_export'):
             elif r1["ok"] or r2["ok"]:
                 st.warning(f"Partial success — {n_files} file(s) generated")
             else:
-                st.error("Generation failed — see the log below")
-
-            with st.expander("Full log"):
-                st.code((r1["log"] or "") + "\n" + (r2["log"] or ""), language="text")
+                st.error("Generation failed")
+                # Error log kept only on failure (useful diagnostic).
+                with st.expander("Error log"):
+                    st.code((r1["log"] or "") + "\n" + (r2["log"] or ""),
+                            language="text")
             st.rerun()  # refresh the file tree / download buttons below
         except Exception as e:
             import traceback
@@ -5362,8 +5384,6 @@ elif page == t('nav_export'):
                     r = _xl.generate_semester(1)
                     if r["ok"]:
                         st.success(f"{t('done')} — {len(r['files'])} file(s) S1")
-                        with st.expander("Log"):
-                            st.code(r["log"], language="text")
                         st.rerun()
                     else:
                         st.error("Error generating S1 files")
@@ -5386,8 +5406,6 @@ elif page == t('nav_export'):
                     r = _xl.generate_semester(2)
                     if r["ok"]:
                         st.success(f"{t('done')} — {len(r['files'])} file(s) S2")
-                        with st.expander("Log"):
-                            st.code(r["log"], language="text")
                         st.rerun()
                     else:
                         st.error("Error generating S2 files")
@@ -6026,8 +6044,8 @@ elif page == t('nav_student'):
 # ════════════════════════════════════════════════════════════
 elif page == t('nav_simulateur'):
     page_header(t('nav_simulateur'),
-                "Test de robustesse : forcer un scénario tendu, voir le solveur "
-                "détecter l'infaisabilité et proposer des remèdes")
+                "Robustness test: force a tight scenario, watch the solver "
+                "detect infeasibility and propose remedies")
     try:
         import ui_infeasibility
         ui_infeasibility.render()
@@ -6145,10 +6163,15 @@ elif page == t('nav_updates'):
 # ════════════════════════════════════════════════════════════
 # FOOTER
 # ════════════════════════════════════════════════════════════
+_footer_mark = (
+    f'<img class="footer-logo" src="data:image/png;base64,{LOGO_B64}" '
+    f'alt="Universidad Loyola"/>'
+    if LOGO_B64 else '<span class="footer-mark">UL</span>'
+)
 st.markdown(f"""
     <div class="app-footer">
         <div class="footer-brand">
-            <span class="footer-mark">UL</span>
+            {_footer_mark}
             <span>Universidad Loyola<br><span class="footer-tag">Lab Scheduling Automation</span></span>
         </div>
         <div class="footer-meta">

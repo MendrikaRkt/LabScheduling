@@ -180,39 +180,39 @@ def validate_global_params(cfg: Dict[str, Any]) -> List[Issue]:
     if min_size is not None and default_max is not None and min_size > default_max:
         issues.append(Issue(
             LEVEL_ERROR, "G_MIN_GT_MAX",
-            f"La taille minimale ({min_size}) est supérieure à la taille "
-            f"maximale ({default_max}) : aucun groupe ne peut être formé.",
-            hint=f"La taille min doit être ≤ à la taille max ({default_max}).",
+            f"The minimum size ({min_size}) is larger than the maximum "
+            f"size ({default_max}): no group can be formed.",
+            hint=f"The min size must be ≤ the max size ({default_max}).",
         ))
 
     # R2 — cohérence taille préférée entre min et max (bloquant si > max)
     if preferred is not None and default_max is not None and preferred > default_max:
         issues.append(Issue(
             LEVEL_ERROR, "G_PREF_GT_MAX",
-            f"La taille préférée ({preferred}) dépasse la taille maximale "
+            f"The preferred size ({preferred}) exceeds the maximum size "
             f"({default_max}).",
-            hint=f"La taille préférée doit être comprise entre la taille min "
-                 f"et la taille max ({default_max}).",
+            hint=f"The preferred size must be between the min size "
+                 f"and the max size ({default_max}).",
         ))
     if (preferred is not None and min_size is not None
             and preferred < min_size):
         issues.append(Issue(
             LEVEL_WARNING, "G_PREF_LT_MIN",
-            f"La taille préférée ({preferred}) est inférieure à la taille "
-            f"minimale ({min_size}) : des groupes sous le minimum risquent "
-            f"d'être fusionnés.",
-            hint=f"Recommandé : min ({min_size}) ≤ préférée ≤ max.",
+            f"The preferred size ({preferred}) is smaller than the minimum "
+            f"size ({min_size}): groups below the minimum may be "
+            f"merged.",
+            hint=f"Recommended: min ({min_size}) ≤ preferred ≤ max.",
         ))
 
     # R3 — taille minimale sous le seuil métier recommandé (avertissement)
     if min_size is not None and min_size < GROUP_MIN:
         issues.append(Issue(
             LEVEL_WARNING, "G_MIN_BELOW_POLICY",
-            f"La taille minimale ({min_size}) est inférieure au seuil métier "
-            f"recommandé ({GROUP_MIN}). Des groupes trop petits (voire "
-            f"solitaires) pourraient être créés.",
-            hint=f"Le seuil recommandé du coordinateur est {GROUP_MIN} "
-                 f"étudiants minimum.",
+            f"The minimum size ({min_size}) is below the recommended "
+            f"business threshold ({GROUP_MIN}). Very small (or even "
+            f"single-student) groups could be created.",
+            hint=f"The coordinator's recommended threshold is {GROUP_MIN} "
+                 f"students minimum.",
         ))
 
     # R4 — capacité salle informatique cohérente avec le max standard
@@ -220,10 +220,10 @@ def validate_global_params(cfg: Dict[str, Any]) -> List[Issue]:
             and computer_max < default_max):
         issues.append(Issue(
             LEVEL_WARNING, "G_COMPUTER_LT_MAX",
-            f"La capacité des salles informatiques ({computer_max}) est "
-            f"inférieure à la taille max standard ({default_max}).",
-            hint="Les salles informatiques accueillent généralement plus "
-                 "d'étudiants que les labos standards.",
+            f"The computer-room capacity ({computer_max}) is "
+            f"below the standard max size ({default_max}).",
+            hint="Computer rooms usually hold more "
+                 "students than standard labs.",
         ))
 
     # R5 — max réduit cohérent
@@ -231,26 +231,26 @@ def validate_global_params(cfg: Dict[str, Any]) -> List[Issue]:
             and reduced_max > default_max):
         issues.append(Issue(
             LEVEL_WARNING, "G_REDUCED_GT_MAX",
-            f"Le maximum spécial/réduit ({reduced_max}) dépasse le maximum "
-            f"standard ({default_max}).",
-            hint=f"Le maximum réduit devrait être ≤ {default_max}.",
+            f"The special/reduced maximum ({reduced_max}) exceeds the "
+            f"standard maximum ({default_max}).",
+            hint=f"The reduced maximum should be ≤ {default_max}.",
         ))
 
     # R6 — semaine de départ dans les bornes du semestre (bloquant)
     if start_week is not None and start_week < 1:
         issues.append(Issue(
             LEVEL_ERROR, "G_START_WEEK_LT_1",
-            f"La première semaine ({start_week}) doit être ≥ 1.",
-            hint="Valeur typique : 3 ou 4.",
+            f"The first week ({start_week}) must be ≥ 1.",
+            hint="Typical value: 3 or 4.",
         ))
     if (start_week is not None and s1_weeks is not None
             and start_week >= s1_weeks):
         issues.append(Issue(
             LEVEL_ERROR, "G_START_WEEK_GE_S1",
-            f"La première semaine ({start_week}) est postérieure ou égale à "
-            f"la dernière semaine du S1 ({s1_weeks}) : aucune semaine "
-            f"disponible pour planifier au S1.",
-            hint=f"La première semaine doit être < {s1_weeks}.",
+            f"The first week ({start_week}) is on or after "
+            f"the last week of S1 ({s1_weeks}): no week is "
+            f"available to schedule in S1.",
+            hint=f"The first week must be < {s1_weeks}.",
         ))
 
     # R7 — durée des semestres cohérente (avertissement)
@@ -258,9 +258,9 @@ def validate_global_params(cfg: Dict[str, Any]) -> List[Issue]:
             and s2_weeks < s1_weeks):
         issues.append(Issue(
             LEVEL_WARNING, "G_S2_LT_S1",
-            f"Le nombre de semaines du S2 ({s2_weeks}) est inférieur à celui "
-            f"du S1 ({s1_weeks}), ce qui est inhabituel.",
-            hint="Vérifiez le calendrier académique.",
+            f"The number of S2 weeks ({s2_weeks}) is smaller than "
+            f"S1 ({s1_weeks}), which is unusual.",
+            hint="Check the academic calendar.",
         ))
 
     return issues
@@ -310,20 +310,20 @@ def validate_subject_override(code: str,
         if window < n_sess:
             issues.append(Issue(
                 LEVEL_ERROR, "S_WINDOW_TOO_SMALL",
-                f"[{code}] Fenêtre trop courte : {window} semaine(s) "
-                f"disponible(s) pour {n_sess} séance(s). Augmentez la "
-                f"« Semaine de fin » ou réduisez le nombre de séances.",
-                hint=f"Il faut au moins {n_sess} semaines "
-                     f"(actuellement de S{min_week} à S{max_week}).",
+                f"[{code}] Window too short: {window} week(s) "
+                f"available for {n_sess} session(s). Increase the "
+                f"\"End week\" or reduce the number of sessions.",
+                hint=f"At least {n_sess} weeks are needed "
+                     f"(currently from W{min_week} to W{max_week}).",
                 scope=code,
             ))
         elif window == n_sess:
             issues.append(Issue(
                 LEVEL_WARNING, "S_WINDOW_TIGHT",
-                f"[{code}] Fenêtre serrée : exactement {window} semaines pour "
-                f"{n_sess} séances. Aucune marge — un jour férié pourrait "
-                f"provoquer un conflit.",
-                hint="Prévoyez idéalement 1 à 2 semaines de marge.",
+                f"[{code}] Tight window: exactly {window} weeks for "
+                f"{n_sess} sessions. No margin — a public holiday could "
+                f"cause a conflict.",
+                hint="Ideally allow 1 to 2 weeks of margin.",
                 scope=code,
             ))
 
@@ -332,9 +332,9 @@ def validate_subject_override(code: str,
             and min_size > max_students):
         issues.append(Issue(
             LEVEL_ERROR, "S_MIN_GT_MAX",
-            f"[{code}] La taille min ({min_size}) dépasse la taille max "
-            f"({max_students}) : impossible de former un groupe.",
-            hint=f"La taille min doit être ≤ {max_students}.",
+            f"[{code}] The min size ({min_size}) exceeds the max size "
+            f"({max_students}): a group cannot be formed.",
+            hint=f"The min size must be ≤ {max_students}.",
             scope=code,
         ))
 
@@ -342,17 +342,17 @@ def validate_subject_override(code: str,
     if n_sess is not None and n_sess < MIN_SESSIONS:
         issues.append(Issue(
             LEVEL_ERROR, "S_NO_SESSION",
-            f"[{code}] Au moins {MIN_SESSIONS} séance est requise.",
-            hint=f"Nombre de séances recommandé : {MIN_SESSIONS} à "
+            f"[{code}] At least {MIN_SESSIONS} session is required.",
+            hint=f"Recommended number of sessions: {MIN_SESSIONS} to "
                  f"{MAX_SESSIONS_SOFT}.",
             scope=code,
         ))
     elif n_sess is not None and n_sess > MAX_SESSIONS_SOFT:
         issues.append(Issue(
             LEVEL_WARNING, "S_MANY_SESSIONS",
-            f"[{code}] Nombre de séances élevé ({n_sess}). Vérifiez que "
-            f"c'est intentionnel.",
-            hint=f"Valeur habituelle : {MIN_SESSIONS} à {MAX_SESSIONS_SOFT}.",
+            f"[{code}] High number of sessions ({n_sess}). Make sure "
+            f"this is intentional.",
+            hint=f"Usual value: {MIN_SESSIONS} to {MAX_SESSIONS_SOFT}.",
             scope=code,
         ))
 
@@ -360,17 +360,17 @@ def validate_subject_override(code: str,
     if max_students is not None and max_students < 5:
         issues.append(Issue(
             LEVEL_WARNING, "S_CAPACITY_LOW",
-            f"[{code}] Capacité de groupe très faible ({max_students}) : de "
-            f"nombreux groupes seront créés.",
-            hint=f"Plage recommandée : {GROUP_MIN} à {GROUP_MAX}.",
+            f"[{code}] Very low group capacity ({max_students}): many "
+            f"groups will be created.",
+            hint=f"Recommended range: {GROUP_MIN} to {GROUP_MAX}.",
             scope=code,
         ))
     if max_students is not None and max_students > 25:
         issues.append(Issue(
             LEVEL_WARNING, "S_CAPACITY_HIGH",
-            f"[{code}] Capacité de groupe élevée ({max_students}) : vérifiez "
-            f"que la salle peut l'accueillir.",
-            hint=f"Plage recommandée : {GROUP_MIN} à {GROUP_MAX}.",
+            f"[{code}] High group capacity ({max_students}): check "
+            f"that the room can hold it.",
+            hint=f"Recommended range: {GROUP_MIN} to {GROUP_MAX}.",
             scope=code,
         ))
 
@@ -378,10 +378,10 @@ def validate_subject_override(code: str,
     if not rooms:
         issues.append(Issue(
             LEVEL_ERROR, "S_NO_ROOM",
-            f"[{code}] Aucune salle sélectionnée : cette matière ne peut pas "
-            f"être planifiée.",
-            hint="Sélectionnez au moins un laboratoire dans l'onglet "
-                 "« Lab rooms ».",
+            f"[{code}] No room selected: this subject cannot "
+            f"be scheduled.",
+            hint="Select at least one laboratory in the "
+                 "\"Lab rooms\" tab.",
             scope=code,
         ))
 
@@ -389,9 +389,9 @@ def validate_subject_override(code: str,
     if not keywords:
         issues.append(Issue(
             LEVEL_WARNING, "S_NO_KEYWORD",
-            f"[{code}] Aucun mot-clé défini : cette matière risque de ne pas "
-            f"être détectée dans les données sources.",
-            hint="Ajoutez des mots-clés dans l'onglet « Advanced ».",
+            f"[{code}] No keyword defined: this subject may not "
+            f"be detected in the source data.",
+            hint="Add keywords in the \"Advanced\" tab.",
             scope=code,
         ))
 
@@ -403,20 +403,20 @@ def validate_subject_override(code: str,
                 and not allow_pm_13):
             issues.append(Issue(
                 LEVEL_WARNING, "S_PERIOD_MISMATCH",
-                f"[{code}] Année {curso_num} (matin attendu) configurée en "
-                f"après-midi. Ceci contredit la règle année → période.",
-                hint="Activez « autoriser l'après-midi pour 1re/3e année » "
-                     "si c'est voulu, sinon repassez en « morning ».",
+                f"[{code}] Year {curso_num} (morning expected) configured for "
+                f"the afternoon. This contradicts the year → period rule.",
+                hint="Enable \"allow afternoon for years 1/3\" "
+                     "if intended, otherwise switch back to \"morning\".",
                 scope=code,
             ))
         elif (curso_num in AFTERNOON_YEARS and schedule_pref == "morning"
               and not allow_am_24):
             issues.append(Issue(
                 LEVEL_WARNING, "S_PERIOD_MISMATCH",
-                f"[{code}] Année {curso_num} (après-midi attendu) configurée "
-                f"en matin. Ceci contredit la règle année → période.",
-                hint="Activez « autoriser le matin pour 2e/4e année » si "
-                     "c'est voulu, sinon repassez en « afternoon ».",
+                f"[{code}] Year {curso_num} (afternoon expected) configured "
+                f"for the morning. This contradicts the year → period rule.",
+                hint="Enable \"allow morning for years 2/4\" if "
+                     "intended, otherwise switch back to \"afternoon\".",
                 scope=code,
             ))
 

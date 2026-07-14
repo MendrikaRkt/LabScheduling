@@ -9,7 +9,7 @@ entry — see Point 4 of the consolidation request.
 
 Read-only tool: it never modifies the real optimisation data; it only reads
 existing artifacts from ``reports/`` and reconstructs a hypothetical session
-list. All UI labels are in French per project convention; no emojis are used.
+list. All UI labels are in English per project convention; no emojis are used.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ except Exception:
     _LAB_ROOMS = {}
 
 
-DAYS_FR = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]
+DAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
 _REL_CANDIDATES = [
     os.path.join("outputs", "optimization", "group_composition.csv"),
@@ -77,9 +77,9 @@ def _find_schedule_source() -> str:
 
 
 def _load_audit(path: str, mtime: float):
-    """Audit métier de la solution via diagnostics.audit_schedule (read-only).
+    """Business audit of the solution via diagnostics.audit_schedule (read-only).
 
-    Retourne le dict d'audit ou None. ``mtime`` sert de clé de fraîcheur.
+    Returns the audit dict or None. ``mtime`` is used as a freshness key.
     """
     if not path:
         return None
@@ -164,118 +164,121 @@ def _fmt_mtime(path: str) -> str:
         ts = os.path.getmtime(path)
         return datetime.datetime.fromtimestamp(ts).strftime("%d/%m/%Y %H:%M")
     except Exception:
-        return "inconnue"
+        return "unknown"
 
 
 def _render_diff(result: dict) -> None:
     """Render the before/after diff metrics of a simulation result."""
     diff = result["diff"]
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Faisable avant", "Oui" if diff["feasible_before"] else "Non")
-    c2.metric("Faisable après", "Oui" if diff["feasible_after"] else "Non")
-    c3.metric("Goulots (après)", diff["n_bottlenecks_after"],
+    c1.metric("Feasible before", "Yes" if diff["feasible_before"] else "No")
+    c2.metric("Feasible after", "Yes" if diff["feasible_after"] else "No")
+    c3.metric("Bottlenecks (after)", diff["n_bottlenecks_after"],
               delta=diff["n_bottlenecks_after"] - diff["n_bottlenecks_before"])
-    c4.metric("Réduction dépassement", diff["overflow_reduction"],
-              help="Nombre de semaines de demande excédentaire éliminées "
-                   "par ce scénario.")
+    c4.metric("Overflow reduction", diff["overflow_reduction"],
+              help="Number of weeks of excess demand removed by this "
+                   "scenario.")
     if diff["became_feasible"]:
-        st.success("Scénario prometteur : le planning devient FAISABLE.")
+        st.success("Promising scenario: the schedule becomes FEASIBLE.")
     elif diff["overflow_reduction"] > 0:
-        st.info("Amélioration partielle : dépassement réduit mais non nul.")
+        st.info("Partial improvement: overflow reduced but not eliminated.")
     else:
-        st.warning("Aucune amélioration mesurable avec ce scénario.")
+        st.warning("No measurable improvement with this scenario.")
 
 
-_TYPE_LABELS_FR = {
-    "tiny_group": "Groupe sous-dimensionné",
-    "wrong_period": "Séance hors-période",
-    "oversubscription": "Matière sur-souscrite",
-    "bottleneck": "Goulot d'étranglement",
-    "credit_overload": "Surcharge professeur",
+_TYPE_LABELS_EN = {
+    "tiny_group": "Under-sized group",
+    "wrong_period": "Session outside period",
+    "oversubscription": "Over-subscribed subject",
+    "bottleneck": "Capacity bottleneck",
+    "credit_overload": "Professor credit overload",
 }
-_SEV_LABELS_FR = {
-    "critique": "Critique",
-    "avertissement": "Avertissement",
+_SEV_LABELS_EN = {
+    "critique": "Critical",
+    "avertissement": "Warning",
     "info": "Info",
 }
 
 
 def _render_business_audit() -> None:
-    """Surface l'audit métier (diagnostics.audit_schedule) dans le simulateur.
+    """Surface the business audit (diagnostics.audit_schedule) in the simulator.
 
-    Démontre la thèse centrale : un statut solveur « OPTIMAL » ne garantit pas
-    une solution CONFORME. Affiche les anomalies détectées dans le planning
-    produit et le remède PROPOSÉ (chiffré) pour chacune.
+    Demonstrates the central thesis: a solver status of "OPTIMAL" does NOT
+    guarantee a COMPLIANT solution. Shows the anomalies detected in the
+    produced schedule and the PROPOSED (quantified) remedy for each.
     """
-    st.header("Audit métier de la solution (au-delà du statut solveur)")
+    st.header("Step 1 — Business audit of the solution "
+              "(beyond the solver status)")
     st.caption(
-        "Un statut solveur « OPTIMAL » signifie seulement que le modèle a "
-        "trouvé une affectation des semaines respectant ses contraintes dures. "
-        "Il ne garantit PAS que la solution est conforme aux règles de "
-        "l'établissement : le pré-traitement peut absorber une infaisabilité "
-        "en déformant la solution (groupes minuscules/solo, séances "
-        "hors-période). Cet audit scanne le planning produit et propose un "
-        "remède chiffré pour chaque anomalie (jamais appliqué automatiquement)."
+        "A solver status of \u201cOPTIMAL\u201d only means the model found a "
+        "week assignment that satisfies its hard constraints. It does NOT "
+        "guarantee the solution complies with the institution's rules: "
+        "pre-processing can absorb an infeasibility by distorting the "
+        "solution (tiny/solo groups, sessions outside the expected period). "
+        "This audit scans the produced schedule and proposes a quantified "
+        "remedy for every anomaly (never applied automatically)."
     )
 
     sched = _find_schedule_source()
     if not sched:
         st.warning(
-            "Planning optimisé introuvable (optimized_schedule_v5.csv). Lancez "
-            "d'abord une optimisation pour alimenter l'audit."
+            "Optimised schedule not found (optimized_schedule_v5.csv). Run an "
+            "optimisation first to feed the audit."
         )
         return
 
     audit = _load_audit(sched, os.path.getmtime(sched))
     if audit is None:
-        st.warning("Audit indisponible (lecture du planning impossible).")
+        st.warning("Audit unavailable (unable to read the schedule).")
         return
 
     a1, a2, a3, a4 = st.columns(4)
-    a1.metric("Anomalies détectées", audit.get("n_total", 0))
-    a2.metric("Dont critiques", audit.get("n_critical", 0))
-    a3.metric("Groupes analysés", audit.get("n_groups_analyzed", 0))
+    a1.metric("Anomalies detected", audit.get("n_total", 0))
+    a2.metric("Of which critical", audit.get("n_critical", 0))
+    a3.metric("Groups analysed", audit.get("n_groups_analyzed", 0))
     a4.metric("Verdict",
-              "CONFORME" if audit.get("healthy") else "À CORRIGER")
+              "COMPLIANT" if audit.get("healthy") else "TO FIX")
 
     if audit.get("healthy"):
         st.success(
-            "Aucune anomalie métier détectée : tous les groupes respectent la "
-            "taille minimale et la période attendue pour leur niveau."
+            "No business anomaly detected: all groups respect the minimum "
+            "size and the expected period for their year level."
         )
         return
 
     st.error(
-        f"{audit.get('n_total', 0)} anomalie(s) métier détectée(s) malgré un "
-        f"statut solveur potentiellement « OPTIMAL » — la preuve que "
-        f"« OPTIMAL » ≠ « conforme »."
+        f"{audit.get('n_total', 0)} business anomaly(ies) detected despite a "
+        f"potentially \u201cOPTIMAL\u201d solver status \u2014 the proof that "
+        f"\u201cOPTIMAL\u201d \u2260 \u201ccompliant\u201d."
     )
 
     by_type = audit.get("by_type", {})
     if by_type:
-        st.markdown("**Synthèse par type d'anomalie**")
+        st.markdown("**Summary by anomaly type**")
         st.table({
-            "Type": [_TYPE_LABELS_FR.get(k, k) for k in by_type],
-            "Nombre": list(by_type.values()),
+            "Type": [_TYPE_LABELS_EN.get(k, k) for k in by_type],
+            "Count": list(by_type.values()),
         })
 
-    st.markdown("**Détail des anomalies et remèdes proposés**")
+    st.markdown("**Detailed anomalies and proposed remedies**")
     rows = []
     for an in audit.get("anomalies", []):
         rows.append({
-            "Niveau": an.get("level", ""),
+            "Level": an.get("level", ""),
             "Sem.": an.get("semester", ""),
-            "Matière": an.get("subject", ""),
-            "Grp.": str(an.get("grupo", "")),
-            "Sévérité": _SEV_LABELS_FR.get(an.get("severity"),
+            "Subject": an.get("subject", ""),
+            "Group": str(an.get("grupo", "")),
+            "Severity": _SEV_LABELS_EN.get(an.get("severity"),
                                            an.get("severity", "")),
-            "Anomalie": an.get("detail", ""),
-            "Remède proposé (chiffré)": (an.get("remedy") or {}).get("text", ""),
+            "Anomaly": an.get("detail", ""),
+            "Proposed remedy (quantified)": (
+                an.get("remedy") or {}).get("text", ""),
         })
     st.dataframe(rows, use_container_width=True, hide_index=True)
     st.caption(
-        "Ces mêmes anomalies et remèdes sont exportés dans la feuille Excel "
-        "« Diagnostic & Remèdes » de chaque classeur généré."
+        "These same anomalies and remedies are exported to the "
+        "\u201cBusiness Audit & Remedies\u201d Excel sheet of every generated "
+        "workbook."
     )
     st.divider()
 
@@ -285,9 +288,11 @@ def render() -> None:
     # NOTE: the page title is already rendered by app.py via page_header();
     # we intentionally do not repeat it here to avoid a duplicate heading.
     st.info(
-        "Cet outil est en LECTURE SEULE. Aucune donnée d'optimisation réelle "
-        "n'est modifiée. Les résultats sont des estimations basées sur le modèle "
-        "de capacité (mêmes règles que le diagnostic du solveur)."
+        "This tool is READ-ONLY. No real optimisation data is modified. The "
+        "results are estimates based on the capacity model (same rules as the "
+        "solver diagnostic). Work through the numbered steps below: audit the "
+        "current solution, review the automatic suggestions, then test manual "
+        "what-if scenarios until the schedule becomes feasible."
     )
 
     _render_business_audit()
@@ -300,83 +305,83 @@ def render() -> None:
 
     if not sessions:
         st.warning(
-            "Aucune donnée de groupes trouvée (group_composition.csv). Lancez "
-            "d'abord une optimisation pour alimenter le simulateur."
+            "No group data found (group_composition.csv). Run an optimisation "
+            "first to feed the simulator."
         )
 
     group_ids = sorted({str(s["group_id"]) for s in sessions})
 
     # ── At-a-glance summary of the latest run ──────────────────────────
-    st.header("État du dernier run")
+    st.header("Step 2 — Latest run status")
 
     baseline = se.analyze_bottlenecks(sessions) if sessions else None
     is_feasible = bool(baseline and baseline.get("feasible"))
     n_bottlenecks = len(baseline.get("bottlenecks", [])) if baseline else 0
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Faisabilité estimée", "FAISABLE" if is_feasible else
-              ("INFAISABLE" if baseline else "n/d"))
-    m2.metric("Goulots détectés", n_bottlenecks,
-              help="Créneaux (salle × jour × bloc) où la demande "
-                   "en semaines dépasse la capacité disponible.")
-    m3.metric("Étudiants non placés", len(unplaced),
-              help="Étudiants sans groupe dans le dernier run réel "
+    m1.metric("Estimated feasibility", "FEASIBLE" if is_feasible else
+              ("INFEASIBLE" if baseline else "n/a"))
+    m2.metric("Bottlenecks detected", n_bottlenecks,
+              help="Slots (room × day × block) where week demand exceeds the "
+                   "available capacity.")
+    m3.metric("Unplaced students", len(unplaced),
+              help="Students without a group in the last real run "
                    "(reports/unplaced_students.json).")
-    m4.metric("Groupes analysés", len(group_ids))
+    m4.metric("Groups analysed", len(group_ids))
 
     if _src:
         st.caption(
-            f"Source des données : "
+            f"Data source: "
             f"{os.path.relpath(_src, _ROOT) if _src.startswith(_ROOT) else _src} "
-            f"(mise à jour : {_fmt_mtime(_src)})."
+            f"(updated: {_fmt_mtime(_src)})."
         )
 
     if baseline is not None:
         if is_feasible:
             st.success(
-                "Aucun goulot détecté dans le dernier run : le planning est "
-                "faisable en l'état. Vous pouvez tout de même explorer des "
-                "scénarios hypothétiques ci-dessous (mode exploratoire)."
+                "No bottleneck detected in the last run: the schedule is "
+                "feasible as-is. You can still explore hypothetical scenarios "
+                "below (exploratory mode)."
             )
         else:
             st.error(
-                f"{n_bottlenecks} goulot(s) de capacité détecté(s). Consultez "
-                "les suggestions automatiques ci-dessous pour identifier les "
-                "actions correctives les plus efficaces."
+                f"{n_bottlenecks} capacity bottleneck(s) detected. Review the "
+                "automatic suggestions below to identify the most effective "
+                "corrective actions."
             )
 
     if bottlenecks_reported:
-        with st.expander("Goulots rapportés par le dernier diagnostic du solveur"):
-            st.json(bottlenecks_reported)
+        with st.expander("Bottlenecks reported by the last solver diagnostic"):
+            st.dataframe(bottlenecks_reported, use_container_width=True)
 
     # ── Section 1 — Automatic suggestions ──────────────────────────────
-    st.header("1. Suggestions automatiques")
+    st.header("Step 3 — Automatic suggestions")
     st.caption(
-        "Analyse des goulots détectés pour proposer les groupes à exclure ou les "
-        "ressources à ajouter, classés par impact décroissant. C'est le point de "
-        "départ recommandé en cas d'infaisabilité."
+        "Analyses the detected bottlenecks to propose groups to exclude or "
+        "resources to add, ranked by decreasing impact. This is the "
+        "recommended starting point when the schedule is infeasible."
     )
 
     _auto_analyze = (not is_feasible) and bool(sessions)
-    if st.button("Analyser et suggérer", key="run_suggest",
+    if st.button("Analyse and suggest", key="run_suggest",
                  disabled=not sessions) or (
             _auto_analyze and "sim_suggestions" not in st.session_state):
         try:
             st.session_state["sim_suggestions"] = se.suggest_actions(sessions)
         except Exception as exc:  # pragma: no cover - UI feedback
-            st.error(f"Échec de l'analyse : {exc}")
+            st.error(f"Analysis failed: {exc}")
 
     sug = st.session_state.get("sim_suggestions")
     if sug:
         if sug["feasible"]:
-            st.success("Aucun goulot détecté : le planning est faisable en "
-                       "l'état. Aucune action corrective n'est nécessaire.")
+            st.success("No bottleneck detected: the schedule is feasible "
+                       "as-is. No corrective action is required.")
         s1, s2 = st.columns(2)
         with s1:
-            st.markdown("**Groupes à exclure (par impact)**")
+            st.markdown("**Groups to exclude (by impact)**")
             st.caption(
-                "Retirer un groupe libère ses semaines de séances sur le "
-                "créneau en tension. Impact = semaines libérées."
+                "Removing a group frees its session weeks on the congested "
+                "slot. Impact = weeks freed."
             )
             if sug["exclude_groups"]:
                 st.dataframe(sug["exclude_groups"], use_container_width=True)
@@ -384,89 +389,90 @@ def render() -> None:
                     g["group_id"] for g in sug["exclude_groups"]
                 ]
             else:
-                st.caption("Aucune suggestion d'exclusion.")
+                st.caption("No exclusion suggestion.")
         with s2:
-            st.markdown("**Ressources à ajouter**")
+            st.markdown("**Resources to add**")
             st.caption(
-                "Ouvrir des semaines supplémentaires sur un créneau "
-                "(salle × jour × bloc) absorbe le dépassement détecté."
+                "Opening extra weeks on a slot (room × day × block) absorbs "
+                "the detected overflow."
             )
             if sug["add_resources"]:
                 st.dataframe(sug["add_resources"], use_container_width=True)
             else:
-                st.caption("Aucune suggestion de ressource.")
+                st.caption("No resource suggestion.")
 
     if st.session_state.get("suggested_exclude"):
-        if st.button("Appliquer la suggestion d'exclusion", key="apply_sug"):
+        if st.button("Apply the exclusion suggestion", key="apply_sug"):
             try:
                 result = se.simulate_without_groups(
                     sessions, st.session_state["suggested_exclude"])
-                st.markdown("**Résultat de la suggestion appliquée :**")
+                st.markdown("**Result of the applied suggestion:**")
                 _render_diff(result)
             except Exception as exc:  # pragma: no cover - UI feedback
-                st.error(f"Échec de la simulation : {exc}")
+                st.error(f"Simulation failed: {exc}")
 
     # ── Section 2 — Exclude groups (manual scenario) ───────────────────
-    st.header("2. Simulation manuelle : exclure des groupes")
+    st.header("Step 4 — Manual scenario: exclude groups")
     st.caption(
-        "Sélectionnez des groupes à retirer pour estimer le gain de faisabilité "
-        "et le nombre d'étudiants impactés. Utile pour tester une hypothèse "
-        "précise (ex. un groupe signalé par le décanat)."
+        "Select groups to remove to estimate the feasibility gain and the "
+        "number of impacted students. Useful to test a specific hypothesis "
+        "(e.g. a group flagged by the dean's office)."
     )
 
     selected_groups = st.multiselect(
-        "Groupes à exclure", options=group_ids, key="excl_groups",
+        "Groups to exclude", options=group_ids, key="excl_groups",
     )
-    run_excl = st.button("Lancer la simulation", key="run_excl",
+    run_excl = st.button("Run the simulation", key="run_excl",
                          disabled=not (sessions and selected_groups))
     if run_excl:
         try:
             result = se.simulate_without_groups(sessions, selected_groups)
             _render_diff(result)
             r1, r2 = st.columns(2)
-            r1.metric("Sessions retirées", result["removed_sessions"],
-                      help="Nombre de séances de laboratoire supprimées du "
-                           "planning hypothétique.")
-            r2.metric("Étudiants impactés", result["affected_students"],
-                      help="Étudiants membres des groupes exclus, qui devraient "
-                           "être replacés ailleurs.")
-            with st.expander("Détails des goulots restants"):
-                st.json(result["after"]["bottlenecks"][:20])
+            r1.metric("Sessions removed", result["removed_sessions"],
+                      help="Number of lab sessions removed from the "
+                           "hypothetical schedule.")
+            r2.metric("Impacted students", result["affected_students"],
+                      help="Students in the excluded groups, who would need "
+                           "to be placed elsewhere.")
+            with st.expander("Details of remaining bottlenecks"):
+                st.dataframe(result["after"]["bottlenecks"][:20],
+                             use_container_width=True)
             # Optional real CP-SAT dry-run on the reduced session list.
             kept = [s for s in sessions
                     if str(s["group_id"]) not in set(selected_groups)]
             dry = se.dry_run_feasibility(kept, time_limit=15)
-            st.caption(f"Vérification CP-SAT (dry-run) : statut = {dry.get('status')}, "
-                       f"temps = {dry.get('wall_time_s', 'n/a')}s")
+            st.caption(f"CP-SAT check (dry-run): status = {dry.get('status')}, "
+                       f"time = {dry.get('wall_time_s', 'n/a')}s")
         except Exception as exc:  # pragma: no cover - UI feedback
-            st.error(f"Échec de la simulation : {exc}")
+            st.error(f"Simulation failed: {exc}")
 
     # ── Section 3 — Add resources (manual scenario) ────────────────────
-    st.header("3. Simulation manuelle : ajouter des ressources")
+    st.header("Step 5 — Manual scenario: add resources")
     st.caption(
-        "Ajoutez de la capacité (salle × jour × bloc) et estimez le gain de "
-        "placement potentiel. Utile pour négocier l'ouverture d'un créneau "
-        "supplémentaire auprès de l'aulario."
+        "Add capacity (room × day × block) and estimate the potential "
+        "placement gain. Useful to negotiate opening an additional slot with "
+        "the aulario (room booking office)."
     )
 
     with st.form("add_res_form"):
         fc1, fc2, fc3, fc4 = st.columns(4)
         with fc1:
-            res_name = st.text_input("Salle / ressource", value="")
+            res_name = st.text_input("Room / resource", value="")
         with fc2:
-            res_day = st.selectbox("Jour", options=list(range(5)),
-                                   format_func=lambda i: DAYS_FR[i])
+            res_day = st.selectbox("Day", options=list(range(5)),
+                                   format_func=lambda i: DAYS_EN[i])
         with fc3:
-            res_block = st.text_input("Bloc horaire (block_id)", value="")
+            res_block = st.text_input("Time block (block_id)", value="")
         with fc4:
-            res_weeks = st.number_input("Semaines ajoutées", min_value=1,
+            res_weeks = st.number_input("Weeks added", min_value=1,
                                         max_value=20, value=1, step=1)
-        submitted = st.form_submit_button("Tester le scénario",
+        submitted = st.form_submit_button("Test the scenario",
                                           disabled=not sessions)
 
     if submitted:
         if not res_name.strip() or not res_block.strip():
-            st.error("Veuillez renseigner la salle et le bloc horaire.")
+            st.error("Please fill in the room and the time block.")
         else:
             try:
                 extra = [{
@@ -477,8 +483,9 @@ def render() -> None:
                 }]
                 result = se.simulate_with_extra_capacity(sessions, extra)
                 _render_diff(result)
-                st.metric("Capacité ajoutée (semaines)", result["added_capacity"])
-                with st.expander("Détails des goulots restants"):
-                    st.json(result["after"]["bottlenecks"][:20])
+                st.metric("Capacity added (weeks)", result["added_capacity"])
+                with st.expander("Details of remaining bottlenecks"):
+                    st.dataframe(result["after"]["bottlenecks"][:20],
+                                 use_container_width=True)
             except Exception as exc:  # pragma: no cover - UI feedback
-                st.error(f"Échec de la simulation : {exc}")
+                st.error(f"Simulation failed: {exc}")

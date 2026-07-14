@@ -953,16 +953,18 @@ def validate_schedule(paths=None, max_examples=25):
 
     # Reliability formula, spelled out for the review sheet
     report["reliability_formula"] = (
-        "score = 100 × Σ[ poids × (1 − entités_en_conflit / entités_totales) ] "
-        "/ Σ poids  × (1.0 si solveur OPTIMAL/FAISABLE sinon 0.9). "
-        "Contraintes dures et poids : conflits de salle 40, "
-        "conflit théorie-étudiant 30, double réservation labo-étudiant 30. "
-        "Statut : PASS si aucune violation dure ; WARN si résiduel ≤ 1 % des "
-        "entités ou indicateurs signalés ; FAIL si > 1 %. "
-        "Les contrôles professeur (double affectation, prof occupé) sont des "
-        "INDICATEURS de qualité — l'affectation des enseignants est réalisée "
-        "après l'optimisation, hors du modèle CP-SAT ; ils abaissent le statut "
-        "à WARN mais jamais à FAIL."
+        "score = 100 x Σ[ weight x (1 - conflicting_entities / total_entities) ] "
+        "/ Σ weights  x  solver_factor. "
+        "Variables: weight = importance of each hard constraint (room conflicts 40, "
+        "student theory clash 30, student lab double-booking 30); "
+        "conflicting_entities = number of entities (sessions/students/rooms) that "
+        "violate the check; total_entities = number of entities the check inspected; "
+        "solver_factor = 1.0 when the solver status is OPTIMAL/FEASIBLE, else 0.9. "
+        "Status: PASS if there is no hard violation; PASS WITH WARNINGS if the "
+        "residual is <= 1% of entities or indicators are flagged; FAIL if > 1%. "
+        "Professor checks (double-booking, busy) are quality INDICATORS — the "
+        "teaching assignment is done AFTER optimisation, outside the CP-SAT model; "
+        "they lower the status to WARNING but never to FAIL."
     )
 
     return report

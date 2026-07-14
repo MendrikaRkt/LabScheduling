@@ -25,6 +25,7 @@ _CSS = """
   --success:#2E86AB; --danger:#B26575; --warning:#D2A24A;
   --green:#2E86AB; --red:#B26575;
   --text-secondary:#A9BBD4; --text-muted:#6B7E9E; --accent:#6FAED9;
+  --text-heading:#EAF1FA;
   --radius:16px; --radius-lg:20px;
   --shadow:0 8px 28px rgba(8,22,41,.45);
   --font-display:'Fraunces',Georgia,serif;
@@ -62,6 +63,30 @@ html,body,[data-testid="stAppViewContainer"],[class*="css"]{
 
 /* ── Hide Streamlit chrome ── */
 #MainMenu,footer,[data-testid="stToolbar"]{visibility:hidden}
+
+/* ── Keep the sidebar collapse/expand control ALWAYS visible & clickable ──
+   Bug fix (Point 8): once the sidebar was collapsed from the left it could not
+   be reopened, because the expand arrow lives in the (styled-away) header and
+   was being covered / dimmed. We force every Streamlit version's variant of
+   the control to stay visible, opaque and on top of the page overlays. */
+[data-testid="stHeader"]{visibility:visible;z-index:1000}
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stExpandSidebarButton"],
+button[kind="header"]{
+  visibility:visible !important;
+  opacity:1 !important;
+  display:flex !important;
+  z-index:1001 !important;
+  pointer-events:auto !important;
+  color:var(--navy) !important;
+}
+/* When the sidebar is collapsed, the floating expand arrow must sit above the
+   grain overlay and any hero background. */
+[data-testid="collapsedControl"]{
+  top:0.6rem;left:0.6rem;
+  background:rgba(255,255,255,.9);border-radius:8px;
+}
 
 /* ── Typography ── */
 h1,h2,h3{font-family:var(--font-display);letter-spacing:-.02em;color:var(--ink)}
@@ -180,6 +205,31 @@ h1,h2,h3{font-family:var(--font-display);letter-spacing:-.02em;color:var(--ink)}
 [data-testid="stSidebar"] [role="radiogroup"] label:hover{
   background:rgba(111,174,217,.08);color:var(--ink);
 }
+
+/* ── SESSION STATUS INDICATORS (Point 6) ──
+   Each session state gets a clear green (ready) / red (pending) icon plus its
+   text label, so the state is legible at a glance without relying on colour
+   alone. */
+.status-indicator{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 14px;font-size:.82rem;color:var(--ink-soft);
+}
+.status-indicator .status-dot{
+  width:11px;height:11px;border-radius:50%;flex:0 0 auto;position:relative;
+  background:var(--red);
+  box-shadow:0 0 0 3px rgba(178,101,117,.18);
+  transition:background .2s, box-shadow .2s;
+}
+.status-indicator .status-dot.active{
+  background:var(--green);
+  box-shadow:0 0 0 3px rgba(46,134,171,.20);
+}
+/* Glyph reinforces the meaning (✓ ready / • pending) beyond colour. */
+.status-indicator .status-dot::after{
+  content:"";position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;font-size:.6rem;font-weight:700;color:#fff;
+}
+.status-indicator .status-dot.active::after{content:"\2713"}
 
 /* ── BUTTONS ── */
 .stButton>button,.stDownloadButton>button{
@@ -378,6 +428,23 @@ h1,h2,h3{font-family:var(--font-display);letter-spacing:-.02em;color:var(--ink)}
   display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
   gap:14px;
 }
+/* Home hero / onboarding call-to-action card */
+.tour-card{
+  position:relative;
+  background:linear-gradient(135deg,var(--surface-2),var(--surface));
+  border:1px solid var(--line-bright);
+  border-left:4px solid var(--cyan);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.tour-card::after{
+  content:"";position:absolute;top:-40px;right:-40px;
+  width:160px;height:160px;border-radius:50%;
+  background:radial-gradient(circle,var(--cyan-glow),transparent 70%);
+  pointer-events:none;
+}
+
 .app-footer .footer-brand{
   display:flex;align-items:center;gap:10px;
   font-family:var(--font-display);font-weight:600;font-size:0.98rem;color:var(--ink);
@@ -388,6 +455,11 @@ h1,h2,h3{font-family:var(--font-display);letter-spacing:-.02em;color:var(--ink)}
   background:linear-gradient(135deg,var(--navy),var(--navy-deep));
   color:#fff;font-family:var(--font-display);font-weight:700;font-size:0.82rem;
   border:1px solid var(--line-bright);
+}
+.app-footer .footer-brand .footer-logo{
+  height:34px;width:auto;border-radius:6px;
+  background:#fff;padding:3px 6px;border:1px solid var(--line-bright);
+  object-fit:contain;
 }
 .app-footer .footer-meta{
   font-size:0.8rem;color:var(--ink-mute);line-height:1.5;text-align:right;

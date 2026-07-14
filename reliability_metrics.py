@@ -763,16 +763,16 @@ def compute_health_score(metrics: Dict) -> Tuple[int, str, List[str]]:
     # 1. CONFLICTS — these are real, hard failures (-50 / -50 / -30)
     if conflicts.get('c1_violations', 0) > 0:
         score -= 50
-        issues.append(f"{conflicts['c1_violations']} violation(s) C1 (matière en double)")
+        issues.append(f"{conflicts['c1_violations']} C1 violation(s) (duplicate subject)")
     if conflicts.get('c4_violations', 0) > 0:
         score -= 50
-        issues.append(f"{conflicts['c4_violations']} violation(s) C4 (salle en double)")
+        issues.append(f"{conflicts['c4_violations']} C4 violation(s) (duplicate room)")
     if conflicts.get('c5_violations', 0) > 0:
         score -= 50
-        issues.append(f"{conflicts['c5_violations']} violation(s) C5 (séances hors ordre chronologique)")
+        issues.append(f"{conflicts['c5_violations']} C5 violation(s) (sessions out of chronological order)")
     if conflicts.get('student_conflicts', 0) > 0:
         score -= 30
-        issues.append(f"{conflicts['student_conflicts']} étudiant(s) avec conflit horaire")
+        issues.append(f"{conflicts['student_conflicts']} student(s) with a schedule clash")
 
     # 2. ASSIGNMENT RATE — penalise only if < 100% (the real headline number)
     assignment_rate = assignment.get('assignment_rate', 100.0)
@@ -780,7 +780,7 @@ def compute_health_score(metrics: Dict) -> Tuple[int, str, List[str]]:
         # Linear penalty: 10 points per missing % of unique-student coverage
         gap = 100.0 - assignment_rate
         score -= min(40, int(gap * 10))
-        issues.append(f"Taux d'assignation {assignment_rate:.1f}% (< 100%)")
+        issues.append(f"Assignment rate {assignment_rate:.1f}% (< 100%)")
 
     # 3. OVERFLOW GROUPS — Daniel himself uses afternoon groups to absorb
     # year-2/3 students that don't fit in morning slots. Only penalise if the
@@ -792,14 +792,14 @@ def compute_health_score(metrics: Dict) -> Tuple[int, str, List[str]]:
         overflow_rate = overflow / total_groups
         if overflow_rate > 0.20:   # > 20% — abnormal
             score -= 10
-            issues.append(f"{overflow} groupes overflow ({overflow_rate*100:.0f}% du total — élevé)")
+            issues.append(f"{overflow} overflow groups ({overflow_rate*100:.0f}% of total — high)")
 
     # 4. GROUP SIZES — small groups are the real defect. <5 students is bad,
     # solo (=1) is critical.
     below_min = assignment.get('groups_below_min', 0)
     if below_min > 0:
         score -= min(20, below_min * 5)
-        issues.append(f"{below_min} groupe(s) sous le seuil de 5 étudiants")
+        issues.append(f"{below_min} group(s) below the 5-student threshold")
 
     # 5. STUDENT WEEKLY OVERLOAD — this measures students' COURSE load, not a
     # planning defect. A student enrolled in 5 lab subjects will always have
@@ -812,8 +812,8 @@ def compute_health_score(metrics: Dict) -> Tuple[int, str, List[str]]:
     if overloaded_rate > 0.30:
         score -= 10
         issues.append(
-            f"{overloaded} étudiant(s) avec > {MAX_LABS_PER_STUDENT_PER_WEEK} "
-            f"labs la même semaine ({overloaded_rate*100:.0f}% — pic anormal)"
+            f"{overloaded} student(s) with > {MAX_LABS_PER_STUDENT_PER_WEEK} "
+            f"labs in the same week ({overloaded_rate*100:.0f}% — abnormal peak)"
         )
 
     # 6. ROOM OVER-OCCUPANCY — real concern
@@ -821,7 +821,7 @@ def compute_health_score(metrics: Dict) -> Tuple[int, str, List[str]]:
     if critical_rooms:
         score -= min(15, len(critical_rooms) * 5)
         issues.append(
-            f"{len(critical_rooms)} salle(s) en sur-occupation (> {WARNING_ROOM_OCCUPANCY*100:.0f}%)"
+            f"{len(critical_rooms)} room(s) over-occupied (> {WARNING_ROOM_OCCUPANCY*100:.0f}%)"
         )
 
     # 7. COVERAGE vs DANIEL — penalise only if we cover LESS than Daniel.
@@ -836,13 +836,13 @@ def compute_health_score(metrics: Dict) -> Tuple[int, str, List[str]]:
         score -= min(15, len(critical_coverage) * 5)
         names = ', '.join(c['subject'] for c in critical_coverage[:3])
         more = f" (+{len(critical_coverage)-3})" if len(critical_coverage) > 3 else ""
-        issues.append(f"Sous-couverture vs Daniel : {names}{more}")
+        issues.append(f"Under-coverage vs the reference baseline: {names}{more}")
 
     # 8. BALANCE — minor penalty for very uneven group sizes
     balance = distribution.get('balance_score', 0)
     if balance < 40:
         score -= 5
-        issues.append(f"Tailles de groupes déséquilibrées (balance {balance}/100)")
+        issues.append(f"Unbalanced group sizes (balance {balance}/100)")
 
     score = max(0, min(100, score))
 

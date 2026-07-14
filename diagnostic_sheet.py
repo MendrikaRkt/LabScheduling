@@ -48,19 +48,19 @@ from validation_sheet import (
 import diagnostics as _dg
 
 
-# Libellés FR par type d'anomalie.
+# English labels per anomaly type.
 _TYPE_LABELS = {
-    "tiny_group": "Groupe sous-dimensionné",
-    "wrong_period": "Séance hors-période",
-    "oversubscription": "Matière sur-souscrite",
-    "bottleneck": "Goulot d'étranglement",
-    "credit_overload": "Surcharge professeur",
+    "tiny_group": "Under-sized group",
+    "wrong_period": "Session outside period",
+    "oversubscription": "Over-subscribed subject",
+    "bottleneck": "Capacity bottleneck",
+    "credit_overload": "Professor credit overload",
 }
 
-# Libellés FR par sévérité + couleurs (texte, fond).
+# English labels per severity + colours (text, background).
 _SEV_LABELS = {
-    _dg.SEV_CRITICAL: "Critique",
-    _dg.SEV_WARNING: "Avertissement",
+    _dg.SEV_CRITICAL: "Critical",
+    _dg.SEV_WARNING: "Warning",
     _dg.SEV_INFO: "Info",
 }
 _SEV_COLORS = {
@@ -78,12 +78,12 @@ def _kpi_band(ws, row, report: Dict[str, Any]) -> int:
     healthy = report.get("healthy", n_total == 0)
 
     cells = [
-        ("Anomalies détectées", n_total,
+        ("Anomalies detected", n_total,
          (GOOD if n_total == 0 else BAD), (GOOD_BG if n_total == 0 else BAD_BG)),
-        ("Dont critiques", n_crit,
+        ("Of which critical", n_crit,
          (GOOD if n_crit == 0 else BAD), (GOOD_BG if n_crit == 0 else BAD_BG)),
-        ("Groupes analysés", n_groups, NAVY_DEEP, GREY_BG),
-        ("Verdict", "CONFORME" if healthy else "À CORRIGER",
+        ("Groups analysed", n_groups, NAVY_DEEP, GREY_BG),
+        ("Verdict", "COMPLIANT" if healthy else "TO FIX",
          (GOOD if healthy else BAD), (GOOD_BG if healthy else BAD_BG)),
     ]
     for i, (label, value, fg, bg) in enumerate(cells):
@@ -105,13 +105,13 @@ def _kpi_band(ws, row, report: Dict[str, Any]) -> int:
 
 
 def build_diagnostic_sheet(workbook, report: Dict[str, Any],
-                           sheet_title="Diagnostic & Remèdes"):
-    """Construit la feuille « Diagnostic & Remèdes » dans *workbook*.
+                           sheet_title="Business Audit & Remedies"):
+    """Build the « Business Audit & Remedies » sheet in *workbook*.
 
     Args:
-        workbook: classeur openpyxl cible.
-        report: dict retourné par ``diagnostics.audit_schedule``.
-        sheet_title: nom de l'onglet.
+        workbook: target openpyxl workbook.
+        report: dict returned by ``diagnostics.audit_schedule``.
+        sheet_title: worksheet tab name.
     """
     # Nettoie la feuille par défaut vide si présente.
     if "Sheet" in workbook.sheetnames and len(workbook.sheetnames) == 1:
@@ -126,17 +126,18 @@ def build_diagnostic_sheet(workbook, report: Dict[str, Any],
         ws.column_dimensions[get_column_letter(i)].width = w
 
     row = 1
-    row = _title(ws, row, "Diagnostic & Remèdes — Audit métier de la solution",
+    row = _title(ws, row,
+                 "Business Audit & Remedies — Beyond the solver status",
                  ncols=7)
 
-    # Encart explicatif (la thèse du projet).
+    # Explanatory banner (the project's core thesis).
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
     intro = ws.cell(row=row, column=1, value=(
-        "Un statut solveur « OPTIMAL » ne garantit pas une solution CONFORME. "
-        "Le pré-traitement peut absorber une infaisabilité en déformant la "
-        "solution. Cette feuille liste les anomalies métier détectées et "
-        "propose pour chacune un remède chiffré (à décider par l'utilisateur, "
-        "jamais appliqué automatiquement)."))
+        "A solver status of \"OPTIMAL\" does NOT guarantee a COMPLIANT solution. "
+        "Pre-processing can absorb an infeasibility by deforming the solution. "
+        "This sheet lists the business anomalies detected and proposes a "
+        "quantified remedy for each one (to be decided by the user, never "
+        "applied automatically)."))
     intro.font = Font(size=10, italic=True, color=NAVY_DEEP)
     intro.alignment = Alignment(vertical="top", wrap_text=True, indent=1)
     ws.row_dimensions[row].height = 46
@@ -149,12 +150,12 @@ def build_diagnostic_sheet(workbook, report: Dict[str, Any],
 
     # Cas sain : message et sortie anticipée.
     if report.get("healthy", report.get("n_total", 0) == 0):
-        row = _section(ws, row, "Résultat", ncols=7)
+        row = _section(ws, row, "Result", ncols=7)
         ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
         c = ws.cell(row=row, column=1, value=(
-            "Aucune anomalie métier détectée : tous les groupes respectent la "
-            "taille minimale et la période attendue pour leur niveau. La "
-            "solution est conforme aux règles vérifiées."))
+            "No business anomaly detected: every group meets the minimum size "
+            "and the expected period for its year level. The solution is "
+            "compliant with the rules that were checked."))
         c.font = Font(size=11, color=NAVY_DEEP)
         c.fill = PatternFill("solid", fgColor=GOOD_BG)
         c.alignment = Alignment(vertical="center", wrap_text=True, indent=1)
@@ -162,19 +163,19 @@ def build_diagnostic_sheet(workbook, report: Dict[str, Any],
         ws.freeze_panes = "A2"
         return ws
 
-    # Synthèse par type d'anomalie.
-    row = _section(ws, row, "Synthèse par type d'anomalie", ncols=7)
+    # Summary by anomaly type.
+    row = _section(ws, row, "Summary by anomaly type", ncols=7)
     by_type = report.get("by_type", {})
     type_rows = [
         [_TYPE_LABELS.get(k, k), v]
         for k, v in sorted(by_type.items(), key=lambda kv: -kv[1])
     ]
-    row = _plain_table(ws, row, ["Type d'anomalie", "Nombre"], type_rows,
+    row = _plain_table(ws, row, ["Anomaly type", "Count"], type_rows,
                        col_widths=[30, 12])
     row += 1
 
-    # Réconciliation par niveau × semestre.
-    row = _section(ws, row, "Répartition par niveau × semestre", ncols=7)
+    # Reconciliation by year level × semester.
+    row = _section(ws, row, "Breakdown by year level × semester", ncols=7)
     bls = report.get("by_level_semester", {})
     ls_rows = []
     for key in sorted(bls.keys()):
@@ -189,17 +190,17 @@ def build_diagnostic_sheet(workbook, report: Dict[str, Any],
         ])
     row = _plain_table(
         ws, row,
-        ["Niveau · Semestre", "Groupes\nsous-dim.", "Hors-\npériode",
-         "Autres", "Total"],
+        ["Year level · Semester", "Under-sized\ngroups", "Outside\nperiod",
+         "Other", "Total"],
         ls_rows, col_widths=[24, 12, 12, 12, 10])
     row += 1
 
-    # Détail des anomalies + remèdes proposés.
-    row = _section(ws, row, "Détail des anomalies et remèdes proposés",
+    # Detailed anomalies + proposed remedies.
+    row = _section(ws, row, "Detailed anomalies and proposed remedies",
                    ncols=7)
 
-    headers = ["Niveau", "Sem.", "Grp.", "Matière", "Sévérité",
-               "Anomalie", "Remède proposé (chiffré)"]
+    headers = ["Level", "Sem.", "Group", "Subject", "Severity",
+               "Anomaly", "Proposed remedy (quantified)"]
     for c, h in enumerate(headers, start=1):
         cell = ws.cell(row=row, column=c, value=h)
         cell.font = Font(bold=True, color=WHITE)
