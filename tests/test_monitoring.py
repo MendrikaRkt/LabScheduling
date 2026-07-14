@@ -362,10 +362,10 @@ def test_build_report_flags_duplicate_and_missing_config(
         solver_stats_path=str(tmp_path / "absent.json"),
         reports_dir=str(tmp_path / "noreports"))
     cats = {a["category"] for a in report["anomalies"]}
-    # Étudiant dupliqué -> avertissement « Inscriptions ».
-    assert "Inscriptions" in cats
-    # Aucune config -> info « Entrées ».
-    assert "Entrées" in cats
+    # Duplicated student -> "Enrollments" warning.
+    assert "Enrollments" in cats
+    # No config -> "Inputs" info.
+    assert "Inputs" in cats
     # Le planning est propre -> aucune erreur de contraintes.
     assert report["constraints"]["all_passed"] is True
 
