@@ -586,6 +586,16 @@ def build_validation_sheet(workbook, report, sheet_title="Validation"):
 
     # Legend / interpretation of the factors, as bullet lines.
     legend_lines = [
+        "weight = importance of each hard constraint (see the weights table "
+        "above); a higher weight means a violation of that constraint costs "
+        "more points.",
+        "conflicting_entities = number of entities (sessions, students or rooms) "
+        "that violate the check; total_entities = number of entities the check "
+        "inspected. Their ratio is the violation rate for that constraint.",
+        "Σ (sum) runs over the three hard constraints: the numerator adds each "
+        "weight x (1 - violation_rate); the denominator is the sum of weights, "
+        "so a perfectly conflict-free schedule scores 100 before the solver "
+        "factor.",
         "solver_factor = 1.0 if the solver status is OPTIMAL/FEASIBLE, else 0.9.",
         "Status = PASS if there is no hard violation; PASS WITH WARNINGS if the "
         "residual is <= 1% of entities OR indicators are flagged; FAIL if > 1%.",

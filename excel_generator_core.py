@@ -1374,16 +1374,18 @@ def build_vista_profesor_sheet(workbook, schedule_df, subjects, professor_lookup
         worksheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=max(6, _legend_last_col))
     except Exception:
         pass
-    _lc = worksheet.cell(row=1, column=1, value="Leyenda — Profesores")
+    _lc = worksheet.cell(row=1, column=1, value="Legend — Teacher view")
     _lc.font = PROGRAM_FONT
     _le = worksheet.cell(
         row=2, column=1,
-        value=("«Prof.: Nombre (+N)» = profesor principal (+N docentes habilitados). "
-               "ROTACIÓN entre grupos/sesiones; la asignación final la decide el coordinador. "
-               "COLOR de celda = grupo de prácticas (mismo color = mismo grupo)."),
+        value=("\"Prof.: Name (+N)\" = lead professor for the session, with (+N) other "
+               "eligible teachers who may cover it (one is shown per cell, ROTATING "
+               "across groups/sessions); the coordinator makes the final assignment. "
+               "CELL COLOUR = practice group: the same colour means the same group "
+               "across the \"Grupo de practicas\" and \"Vista profesor\" sheets."),
     )
     _le.alignment = WRAP_TOP_ALIGNMENT
-    worksheet.row_dimensions[2].height = 30
+    worksheet.row_dimensions[2].height = 42
 
     current_row = 4  # leave the legend (rows 1-2) + a blank row 3 above the grid
 
@@ -1628,14 +1630,20 @@ def build_vista_profesor_tabla_sheet(workbook, schedule_df, subjects,
     worksheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ncols)
     hcell = worksheet.cell(
         row=2, column=1,
-        value=('One row per session. Use the column filters (header row) to '
-               'filter by subject, program, group, professor, day or room. '
-               'Cell colour = GROUP (same colour = same group across the '
-               '"Grupo de practicas" and "Vista profesor" sheets); the Subject '
-               'and Program columns are also colour-coded.'),
+        value=('One row per session. Use the column filters (header row) to filter '
+               'by subject, program, group, professor, day or room. '
+               'COLOUR CODING: the Group column colour identifies each practice '
+               'group (same colour = same group across the "Grupo de practicas" and '
+               '"Vista profesor" sheets); the Subject and Program columns are also '
+               'colour-coded. '
+               'PROGRAM column values: a program code (e.g. GITI) = single-program '
+               'group; "MIXED(<code>+N)" = group mixing students from several '
+               'programs, shown as the dominant program plus N other programs; '
+               '"OVERFLOW" = extra group opened to absorb students beyond the normal '
+               'room capacity; "ALT_ROOM" = group recovered in an alternative room.'),
     )
     hcell.alignment = WRAP_TOP_ALIGNMENT
-    worksheet.row_dimensions[2].height = 30
+    worksheet.row_dimensions[2].height = 62
 
     # ── Header row ──────────────────────────────────────────────────────
     header_row = 4
