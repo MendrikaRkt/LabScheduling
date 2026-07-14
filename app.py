@@ -2839,6 +2839,46 @@ elif page == t('nav_config'):
                 "S2 total weeks", 14, 24, 20, help="Last available week in S2"
             )
 
+        # ────────────────────────────────────────────────────────────
+        # VALIDATION PRÉVENTIVE EN TEMPS RÉEL (paramètres globaux)
+        # Bloque en amont les combinaisons de paramètres incompatibles
+        # avec des contraintes nécessaires à un résultat conforme.
+        # ────────────────────────────────────────────────────────────
+        st.markdown("---")
+        st.markdown("##### Validation des paramètres")
+        try:
+            import ui_validation as _uiv
+            _g_issues = _uiv.validate_global_params(
+                st.session_state.advanced_config
+            )
+            _g_errors = [i for i in _g_issues if i.level == _uiv.LEVEL_ERROR]
+            _g_warnings = [i for i in _g_issues if i.level == _uiv.LEVEL_WARNING]
+            if not _g_issues:
+                st.success(
+                    "Paramètres globaux valides — plages respectées "
+                    "(taille min ≤ préférée ≤ max, semaine de départ dans "
+                    "le semestre)."
+                )
+            else:
+                for _iss in _g_errors:
+                    _txt = f"**{_iss.message}**"
+                    if _iss.hint:
+                        _txt += f"\n\nValeurs acceptables : {_iss.hint}"
+                    st.error(_txt)
+                for _iss in _g_warnings:
+                    _txt = _iss.message
+                    if _iss.hint:
+                        _txt += f"\n\nRecommandation : {_iss.hint}"
+                    st.warning(_txt)
+                if _g_errors:
+                    st.caption(
+                        "Tant qu'une erreur (rouge) subsiste, le bouton "
+                        "« Lancer le pipeline » restera désactivé à l'étape "
+                        "Optimiser."
+                    )
+        except Exception as _uiv_exc:  # pragma: no cover - garde-fou UI
+            st.info(f"Validation des paramètres indisponible : {_uiv_exc}")
+
     # ════════════════════════════════════════
     # TAB 2: Per-subject configuration (enriched with all options)
     # ════════════════════════════════════════
@@ -3478,7 +3518,53 @@ elif page == t('nav_optimize'):
         include_names = st.checkbox(t('include_names'), value=True)
         solver_timeout = st.slider(t('solver_timeout'), 30, 600, 300)
 
-    if st.button(f"{t('run_btn')}", type="primary", use_container_width=True):
+    # ════════════════════════════════════════════════════════════════
+    # VALIDATION PRÉVENTIVE (pre-flight) — bloque le lancement du solveur
+    # tant que la configuration viole une contrainte nécessaire à un
+    # résultat conforme. Réutilise ui_validation (règles globales + par
+    # matière) fondé sur diagnostics.py / schedule_validation.py.
+    # ════════════════════════════════════════════════════════════════
+    _launch_blocked = False
+    try:
+        import ui_validation as _uiv
+        _report = _uiv.validate_all(st.session_state.advanced_config)
+        _launch_blocked = _report.is_blocking
+        if _report.is_blocking:
+            st.error(
+                f"**Configuration invalide — {len(_report.errors)} erreur(s) "
+                f"bloquante(s).** Corrigez-les à l'étape *Configuration* avant "
+                f"de lancer l'optimisation :"
+            )
+            for _iss in _report.errors:
+                _txt = f"- {_iss.message}"
+                if _iss.hint:
+                    _txt += f"  \n  _Valeurs acceptables : {_iss.hint}_"
+                st.markdown(_txt)
+            if st.button("← Aller à la Configuration", key="opt_goto_config"):
+                st.session_state['_nav_to'] = 'config'
+                st.rerun()
+        elif _report.warnings:
+            with st.expander(
+                f"{len(_report.warnings)} avertissement(s) — lancement "
+                f"autorisé (cliquez pour voir le détail)"
+            ):
+                for _iss in _report.warnings:
+                    _txt = _iss.message
+                    if _iss.hint:
+                        _txt += f"\n\nRecommandation : {_iss.hint}"
+                    st.warning(_txt)
+        else:
+            st.success(
+                "Configuration valide — tous les paramètres respectent les "
+                "contraintes métier. Vous pouvez lancer l'optimisation."
+            )
+    except Exception as _uiv_exc:  # pragma: no cover - garde-fou UI
+        st.info(f"Validation préventive indisponible : {_uiv_exc}")
+
+    if st.button(f"{t('run_btn')}", type="primary", use_container_width=True,
+                 disabled=_launch_blocked,
+                 help=("Corrigez les erreurs de configuration ci-dessus pour "
+                       "activer le lancement." if _launch_blocked else None)):
         import threading
         import time as time_module
         import json
