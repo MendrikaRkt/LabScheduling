@@ -1016,11 +1016,9 @@ def render_run_report(log_text="", elapsed_s=None):
         unsafe_allow_html=True,
     )
 
-    # ── Raw log: demoted, collapsed, clearly labelled as technical ──
-    # The full quality / KPI / unplaced / solver breakdown lives on the
-    # Results page — not duplicated here to keep the run report concise.
-    with st.expander("Technical solver log (for developers)"):
-        st.code(log_text or "(no log captured)", language="text")
+    # NOTE: the raw technical solver log display was removed to keep the run
+    # report concise (Point 3). The full quality / KPI / unplaced / solver
+    # breakdown remains available on the Results page.
 
 
 def _load_report_json(rel):
@@ -3932,13 +3930,20 @@ elif page == t('nav_analytics'):
         "All quality metrics for the generated plan in one place: "
         "reliability, flow integrity, and pipeline monitoring."
     )
+    # NOTE: each tab body is wrapped in its own st.container() so Streamlit
+    # keeps their DOM subtrees isolated. Without this, fast tab switching could
+    # briefly "bleed" content rendered by the previously active page (e.g. the
+    # Results page) into the Integrity tab before the rerun settled.
     _an_tabs = st.tabs(["Reliability", "Integrity", "Monitoring"])
     with _an_tabs[0]:
-        _page_reliability()
+        with st.container():
+            _page_reliability()
     with _an_tabs[1]:
-        _page_integrity()
+        with st.container():
+            _page_integrity()
     with _an_tabs[2]:
-        _page_monitoring()
+        with st.container():
+            _page_monitoring()
 
 
 
@@ -5258,10 +5263,11 @@ elif page == t('nav_export'):
             elif r1["ok"] or r2["ok"]:
                 st.warning(f"Partial success — {n_files} file(s) generated")
             else:
-                st.error("Generation failed — see the log below")
-
-            with st.expander("Full log"):
-                st.code((r1["log"] or "") + "\n" + (r2["log"] or ""), language="text")
+                st.error("Generation failed")
+                # Error log kept only on failure (useful diagnostic).
+                with st.expander("Error log"):
+                    st.code((r1["log"] or "") + "\n" + (r2["log"] or ""),
+                            language="text")
             st.rerun()  # refresh the file tree / download buttons below
         except Exception as e:
             import traceback
@@ -5342,8 +5348,6 @@ elif page == t('nav_export'):
                     r = _xl.generate_semester(1)
                     if r["ok"]:
                         st.success(f"{t('done')} — {len(r['files'])} file(s) S1")
-                        with st.expander("Log"):
-                            st.code(r["log"], language="text")
                         st.rerun()
                     else:
                         st.error("Error generating S1 files")
@@ -5366,8 +5370,6 @@ elif page == t('nav_export'):
                     r = _xl.generate_semester(2)
                     if r["ok"]:
                         st.success(f"{t('done')} — {len(r['files'])} file(s) S2")
-                        with st.expander("Log"):
-                            st.code(r["log"], language="text")
                         st.rerun()
                     else:
                         st.error("Error generating S2 files")

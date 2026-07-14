@@ -130,7 +130,7 @@ def load_weights():
     if not isinstance(cache, dict):
         return out
     out["available"] = True
-    out["convention"] = cache.get("convention", "1 crédit P = 5 séances")
+    out["convention"] = cache.get("convention", "1 P credit = 5 sessions")
     out["generated_from"] = cache.get("generated_from", "")
     expected = cache.get("expected", {}) or {}
     out["n_subjects"] = len(expected)
@@ -172,8 +172,8 @@ def estimate_model_size(schedule_df):
         "n_sessions": 0, "est_variables": 0,
         "c1_families": 0, "c4_families": 0, "c5_constraints": 0,
         "total_constraints_est": 0,
-        "note": ("Estimation dérivée du planning produit ; le modèle CP-SAT réel "
-                 "est construit dans pipeline.main()."),
+        "note": ("Estimate derived from the produced schedule; the real CP-SAT "
+                 "model is built in pipeline.main()."),
     }
     if schedule_df is None or len(schedule_df) == 0:
         return base
@@ -239,13 +239,13 @@ def collect_constraint_checks(schedule_df, groups_df):
         pass
 
     checks = [
-        {"code": "C1", "label": "Matière unique par créneau",
+        {"code": "C1", "label": "One subject per slot",
          "violations": int(conflicts.get("c1_violations", 0))},
-        {"code": "C4", "label": "Salle unique par créneau",
+        {"code": "C4", "label": "One room per slot",
          "violations": int(conflicts.get("c4_violations", 0))},
-        {"code": "C5", "label": "Séances en ordre chronologique",
+        {"code": "C5", "label": "Sessions in chronological order",
          "violations": int(conflicts.get("c5_violations", 0))},
-        {"code": "STU", "label": "Étudiant jamais en double réservation",
+        {"code": "STU", "label": "Student never double-booked",
          "violations": int(conflicts.get("student_conflicts", 0))},
     ]
     for c in checks:
@@ -936,49 +936,49 @@ def build_report(schedule_df, groups_df, config_path=DEFAULT_CONFIG_PATH,
 
     c = report["constraints"]
     if c.get("c1_violations"):
-        add("error", "Contraintes", f"{c['c1_violations']} violation(s) C1 (matière en double)")
+        add("error", "Constraints", f"{c['c1_violations']} C1 violation(s) (duplicate subject)")
     if c.get("c4_violations"):
-        add("error", "Contraintes", f"{c['c4_violations']} violation(s) C4 (salle en double)")
+        add("error", "Constraints", f"{c['c4_violations']} C4 violation(s) (duplicate room)")
     if c.get("c5_violations"):
-        add("error", "Contraintes", f"{c['c5_violations']} violation(s) C5 (ordre chronologique)")
+        add("error", "Constraints", f"{c['c5_violations']} C5 violation(s) (chronological order)")
     if c.get("student_conflicts"):
-        add("error", "Emplois du temps",
-            f"{c['student_conflicts']} étudiant(s) en double réservation")
+        add("error", "Timetables",
+            f"{c['student_conflicts']} student(s) double-booked")
 
     if report["professor_conflicts"].get("count"):
-        add("error", "Emplois du temps",
-            f"{report['professor_conflicts']['count']} conflit(s) horaire professeur")
+        add("error", "Timetables",
+            f"{report['professor_conflicts']['count']} professor timetable conflict(s)")
 
     if report["student_duplicates"].get("count"):
-        add("warning", "Inscriptions",
-            f"{report['student_duplicates']['count']} étudiant(s) dupliqué(s) entre groupes")
+        add("warning", "Enrollments",
+            f"{report['student_duplicates']['count']} student(s) duplicated across groups")
 
     cc = report["credit_compliance"]
     if cc.get("n_over"):
-        add("error", "Crédits",
-            f"{cc['n_over']} professeur(s) dépassant leurs crédits (séances > attendues)")
+        add("error", "Credits",
+            f"{cc['n_over']} professor(s) exceeding their credits (sessions > expected)")
 
     os = report["oversubscription"]
     if os.get("count"):
-        msg = f"{os['count']} matière(s) sur-souscrite(s) (groupes planifiés > budget)"
+        msg = f"{os['count']} over-subscribed subject(s) (scheduled groups > budget)"
         if os.get("single_prof_count"):
-            msg += f" — dont {os['single_prof_count']} à prof unique (critique)"
-        add("warning", "Capacité", msg)
+            msg += f" — of which {os['single_prof_count']} with a single professor (critical)"
+        add("warning", "Capacity", msg)
 
     rooms_crit = [r for r in report["free_busy"].get("rooms", [])
                   if r.get("status") == "critical"]
     if rooms_crit:
-        add("warning", "Salles", f"{len(rooms_crit)} salle(s) en sur-occupation (> 90%)")
+        add("warning", "Rooms", f"{len(rooms_crit)} room(s) over-occupied (> 90%)")
 
     if report["infeasibility"].get("files") or report["infeasibility"].get("infeasible_runs"):
         n = len(report["infeasibility"].get("files", [])) + \
             len(report["infeasibility"].get("infeasible_runs", []))
-        add("error", "Infaisabilité",
-            f"{n} diagnostic(s) d'infaisabilité détecté(s) — voir le point de départ des erreurs")
+        add("error", "Infeasibility",
+            f"{n} infeasibility diagnostic(s) detected — see the error starting point")
 
     if not report["inputs"].get("available"):
-        add("info", "Entrées",
-            "Aucune configuration utilisateur enregistrée (paramètres par défaut appliqués)")
+        add("info", "Inputs",
+            "No saved user configuration (default parameters applied)")
 
     report["anomalies"] = anomalies
     report["n_errors"] = sum(1 for a in anomalies if a["severity"] == "error")
