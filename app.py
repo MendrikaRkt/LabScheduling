@@ -105,9 +105,27 @@ except Exception:
 # ════════════════════════════════════════════════════════════
 # PAGE CONFIG
 # ════════════════════════════════════════════════════════════
+def _resolve_favicon():
+    """Resolve the Loyola logo for the browser tab icon (favicon).
+
+    Falls back to a plain emoji if the asset cannot be located, so the app
+    never crashes on startup because of a missing icon.
+    """
+    rel_candidates = ["assets/loyola_logo.png", "assets/app_icon.ico"]
+    if PATHS_OK:
+        for rel in rel_candidates:
+            found = app_paths.resolve_existing(rel)
+            if found and os.path.exists(found):
+                return found
+    for rel in rel_candidates:
+        if os.path.exists(rel):
+            return rel
+    return "🧪"
+
+
 st.set_page_config(
     page_title="Lab Scheduling — Universidad Loyola",
-    page_icon="L",
+    page_icon=_resolve_favicon(),
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
@@ -2363,8 +2381,9 @@ if page == t('nav_home'):
         if not data_ok_home:
             cta_eyebrow = "Welcome"
             cta_title = "Start by loading your data"
-            cta_desc = ("This application will guide you through 4 steps: importing Excel files, "
-                        "optional configuration, optimization, then export of plans in Daniel's format.")
+            cta_desc = ("This application guides you through 4 steps: import the Excel files, "
+                        "optionally adjust the configuration, run the optimization, then export "
+                        "the plans in the required Excel format.")
             cta_btn_label = "Get started →"
             cta_target = 'data'
         else:
@@ -2378,7 +2397,7 @@ if page == t('nav_home'):
         cta_eyebrow = "Pipeline complete"
         cta_title = "View your results"
         cta_desc = ("The plan has been generated. View the statistics, "
-                    "check the groups, or download the Excel files in Daniel's format.")
+                    "check the groups, or download the Excel files in the required format.")
         cta_btn_label = "View results →"
         cta_target = 'results'
 
@@ -3857,48 +3876,9 @@ elif page == t('nav_results'):
         with c4: stat_card(t('rate_lbl'), _rate_txt, "actual")
         with c5: stat_card("Unassigned", _conf_txt, "actual")
 
-        # ── Applied configuration (solver constraints proof) ──────────
-        section_header("Applied configuration")
-        st.caption(
-            "The solver configuration below was read from `config/solver_constraints.yaml` "
-            "and applied during the last optimization run. "
-            "**Presets optimize temporal placement (weeks)** — they do not change global "
-            "headcounts (sessions/groups), which are fixed by group formation rules."
-        )
-        st.info(
-            "**Professor assignment:** Professors are allocated **after** the CP-SAT solve, "
-            "based on official credits from *Asignación docente* (1 P credit = 5 sessions). "
-            "The solver optimizes session placement; professor-to-group matching is then "
-            "computed proportionally to assigned practice credits. See the Teacher View sheet "
-            "for the detailed breakdown per professor.",
-            icon="👨‍🏫"
-        )
-        try:
-            import solver_config as sc
-            import os
-            import datetime
-            cfg_path = sc.default_config_path()
-            cfg = sc.load_config()
-            profile = cfg.get('active_profile', '?')
-            weights_display = {k: v['weight'] for k, v in cfg['soft_constraints'].items()}
-            
-            cfg_stat_col1, cfg_stat_col2, cfg_stat_col3 = st.columns(3)
-            with cfg_stat_col1:
-                stat_card("Active profile", profile, "Strict / Balanced / Relaxed / Custom")
-            with cfg_stat_col2:
-                timestamp_str = "—"
-                if os.path.exists(cfg_path):
-                    mtime = os.path.getmtime(cfg_path)
-                    timestamp_str = datetime.datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
-                stat_card("Config file saved at", timestamp_str, cfg_path)
-            with cfg_stat_col3:
-                total_w = sum(v['weight'] for v in cfg['soft_constraints'].values() if v.get('enabled'))
-                stat_card("Total weight (enabled)", total_w, "Sum of active soft constraints")
-            
-            with st.expander("Effective solver weights"):
-                st.json(weights_display)
-        except Exception as ex:
-            st.warning(f"Could not load solver configuration: {ex}")
+        # NOTE: The "Applied configuration" panel was removed from the Results
+        # page per request — the applied solver configuration is already shown
+        # on the dedicated Configuration page, so repeating it here was noise.
 
         # Distribution
         section_header("Distribution")
@@ -6145,10 +6125,15 @@ elif page == t('nav_updates'):
 # ════════════════════════════════════════════════════════════
 # FOOTER
 # ════════════════════════════════════════════════════════════
+_footer_mark = (
+    f'<img class="footer-logo" src="data:image/png;base64,{LOGO_B64}" '
+    f'alt="Universidad Loyola"/>'
+    if LOGO_B64 else '<span class="footer-mark">UL</span>'
+)
 st.markdown(f"""
     <div class="app-footer">
         <div class="footer-brand">
-            <span class="footer-mark">UL</span>
+            {_footer_mark}
             <span>Universidad Loyola<br><span class="footer-tag">Lab Scheduling Automation</span></span>
         </div>
         <div class="footer-meta">

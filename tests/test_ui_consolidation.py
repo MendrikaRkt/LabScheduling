@@ -54,10 +54,10 @@ def test_simulator_is_render_module():
         source = fh.read()
     ast.parse(source)  # must be valid Python
     # Polished ordering: summary and suggestions come before manual scenarios.
-    assert source.index("Etat du dernier run") < source.index(
-        "1. Suggestions automatiques")
-    assert source.index("1. Suggestions automatiques") < source.index(
-        "2. Simulation manuelle : exclure des groupes")
+    assert source.index("Step 2 — Latest run status") < source.index(
+        "Step 3 — Automatic suggestions")
+    assert source.index("Step 3 — Automatic suggestions") < source.index(
+        "Step 4 — Manual scenario: exclude groups")
 
 
 def test_app_embeds_simulator():

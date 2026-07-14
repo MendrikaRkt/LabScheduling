@@ -116,7 +116,7 @@ def test_year1_afternoon_is_wrong():
     anomalies = dg.detect_wrong_period(groups)
     assert len(anomalies) == 1
     assert anomalies[0]["type"] == "wrong_period"
-    assert anomalies[0]["expected_period"] == "matin"
+    assert anomalies[0]["expected_period"] == "morning"
     assert anomalies[0]["severity"] == dg.SEV_CRITICAL
 
 
@@ -125,7 +125,7 @@ def test_year2_morning_is_wrong():
     groups = dg._dedup_groups(rows)
     anomalies = dg.detect_wrong_period(groups)
     assert len(anomalies) == 1
-    assert anomalies[0]["expected_period"] == "après-midi"
+    assert anomalies[0]["expected_period"] == "afternoon"
 
 
 def test_year1_morning_is_correct():
@@ -167,7 +167,7 @@ def test_remedy_for_oversubscription():
                "single_prof": True}
     remedy = dg.propose_remedy(anomaly)
     assert remedy["action"] == "add_professor_or_reduce_groups"
-    assert "PROF UNIQUE" in remedy["text"]
+    assert "SINGLE PROFESSOR" in remedy["text"]
 
 
 def test_remedy_for_credit_overload():

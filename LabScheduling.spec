@@ -82,6 +82,10 @@ datas += [
     ("ui_infeasibility.py", "."),       # Consolidation — infeasibility simulator
     ("schedule_validation.py", "."),    # Final reliability validator
     ("validation_sheet.py", "."),       # Validación Excel sheet builder
+    ("diagnostics.py", "."),            # Business audit: OPTIMAL != conformant
+    ("diagnostic_sheet.py", "."),       # Diagnostic & Remedies Excel sheet
+    ("ui_validation.py", "."),          # Preventive config validation (UI)
+    ("traceability_sheet.py", "."),     # Traceability Excel sheet
     ("VERSION.txt", "."),
 ]
 
@@ -141,6 +145,8 @@ hidden += [
     "excel_export_enhanced", "export_manager",  # Phase 3
     "ui_solver_constraints", "ui_config_preview",  # Consolidated UI components
     "ui_infeasibility", "schedule_validation", "validation_sheet",
+    "diagnostics", "diagnostic_sheet", "ui_validation",  # Diagnostic + preventive validation
+    "traceability_sheet",
     "streamlit.runtime.scriptrunner.magic_funcs",
 ]
 

@@ -151,9 +151,9 @@ def detect_tiny_groups(groups: List[Dict[str, Any]],
                 "nb_students": n,
                 "min_group_size": min_group_size,
                 "detail": (
-                    f"Groupe {g.get('grupo')} de « {g.get('subject')} » : "
-                    f"{n} étudiant(s) < minimum {min_group_size}"
-                    + (" (GROUPE SOLO)" if solo else "")
+                    f"Group {g.get('grupo')} of \u201c{g.get('subject')}\u201d: "
+                    f"{n} student(s) < minimum {min_group_size}"
+                    + (" (SOLO GROUP)" if solo else "")
                 ),
             })
     return out
@@ -181,13 +181,13 @@ def detect_wrong_period(groups: List[Dict[str, Any]],
                 bad_blocks = sorted(
                     b for b in (g.get("time_blocks") or set())
                     if _period_of(b) == "afternoon")
-                expected = "matin"
+                expected = "morning"
         elif curso in AFTERNOON_YEARS and not allow_morning_y2y4:
             if "morning" in periods:
                 bad_blocks = sorted(
                     b for b in (g.get("time_blocks") or set())
                     if _period_of(b) == "morning")
-                expected = "après-midi"
+                expected = "afternoon"
         if bad_blocks:
             out.append({
                 "type": "wrong_period",
@@ -200,9 +200,9 @@ def detect_wrong_period(groups: List[Dict[str, Any]],
                 "bad_blocks": bad_blocks,
                 "expected_period": expected,
                 "detail": (
-                    f"Groupe {g.get('grupo')} de « {g.get('subject')} » "
-                    f"({_level_label(curso)}) placé sur {', '.join(bad_blocks)} "
-                    f"alors que le {expected} est attendu"
+                    f"Group {g.get('grupo')} of \u201c{g.get('subject')}\u201d "
+                    f"({_level_label(curso)}) placed on {', '.join(bad_blocks)} "
+                    f"whereas the {expected} is expected"
                 ),
             })
     return out
@@ -227,10 +227,10 @@ def propose_remedy(anomaly: Dict[str, Any]) -> Dict[str, Any]:
             "target": f"{anomaly.get('subject')} / grupo {anomaly.get('grupo')}",
             "param": need,
             "text": (
-                f"Fusionner ce groupe avec un autre groupe de la même matière "
-                f"(+{need} étudiant(s) pour atteindre le minimum), OU abaisser "
-                f"MIN_GROUP_SIZE si {n} étudiant(s) est acceptable pour ce cas, "
-                f"OU ouvrir un créneau supplémentaire pour redistribuer."
+                f"Merge this group with another group of the same subject "
+                f"(+{need} student(s) to reach the minimum), OR lower "
+                f"MIN_GROUP_SIZE if {n} student(s) is acceptable for this case, "
+                f"OR open an additional slot to redistribute."
             ),
         }
     if kind == "wrong_period":
@@ -240,10 +240,10 @@ def propose_remedy(anomaly: Dict[str, Any]) -> Dict[str, Any]:
             "target": f"{anomaly.get('subject')} / grupo {anomaly.get('grupo')}",
             "param": expected,
             "text": (
-                f"Déplacer ces séances vers un créneau du {expected} (Édition du "
-                f"plan → Déplacer une séance), OU activer la dérogation "
-                f"correspondante dans Configuration → Préférence horaire par "
-                f"année si le {expected} est réellement impossible."
+                f"Move these sessions to a {expected} slot (Plan editing "
+                f"\u2192 Move a session), OR enable the matching override in "
+                f"Configuration \u2192 Time preference per year level if the "
+                f"{expected} is truly impossible."
             ),
         }
     if kind == "bottleneck":
@@ -253,10 +253,10 @@ def propose_remedy(anomaly: Dict[str, Any]) -> Dict[str, Any]:
             "target": str(anomaly.get("ident", anomaly.get("resource", ""))),
             "param": excess,
             "text": (
-                f"Excès de {excess} séance(s) sur ce créneau. Élargir la fenêtre "
-                f"[min_week, max_week] de +{excess} semaine(s), OU ouvrir une "
-                f"salle/créneau supplémentaire, OU réduire le nombre de groupes "
-                f"parallèles sur ce créneau."
+                f"Excess of {excess} session(s) on this slot. Widen the "
+                f"[min_week, max_week] window by +{excess} week(s), OR open an "
+                f"additional room/slot, OR reduce the number of parallel groups "
+                f"on this slot."
             ),
         }
     if kind == "oversubscription":
@@ -267,11 +267,10 @@ def propose_remedy(anomaly: Dict[str, Any]) -> Dict[str, Any]:
             "target": str(anomaly.get("subject", "")),
             "param": gap,
             "text": (
-                f"{gap} groupe(s) au-delà du budget de crédits."
-                + (" PROF UNIQUE (critique) : " if crit else " ")
-                + "Affecter des crédits P supplémentaires à un professeur "
-                "éligible, OU réduire le nombre de groupes planifiés pour cette "
-                "matière."
+                f"{gap} group(s) beyond the credit budget."
+                + (" SINGLE PROFESSOR (critical): " if crit else " ")
+                + "Allocate additional P credits to an eligible professor, "
+                "OR reduce the number of groups scheduled for this subject."
             ),
         }
     if kind == "credit_overload":
@@ -281,13 +280,14 @@ def propose_remedy(anomaly: Dict[str, Any]) -> Dict[str, Any]:
             "target": str(anomaly.get("professor", "")),
             "param": delta,
             "text": (
-                f"Professeur en dépassement de +{delta} séance(s) vs crédits. "
-                f"Réaffecter {delta} séance(s) à un collègue éligible de la même "
-                f"matière, OU ajuster les crédits P dans l'Asignación docente."
+                f"Professor over budget by +{delta} session(s) vs credits. "
+                f"Reassign {delta} session(s) to an eligible colleague of the "
+                f"same subject, OR adjust the P credits in the Teaching "
+                f"assignment (Asignaci\u00f3n docente)."
             ),
         }
     return {"action": "review", "target": "", "param": None,
-            "text": "Revue manuelle recommandée."}
+            "text": "Manual review recommended."}
 
 
 # ---------------------------------------------------------------------------

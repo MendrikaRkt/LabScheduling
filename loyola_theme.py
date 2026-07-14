@@ -25,6 +25,7 @@ _CSS = """
   --success:#2E86AB; --danger:#B26575; --warning:#D2A24A;
   --green:#2E86AB; --red:#B26575;
   --text-secondary:#A9BBD4; --text-muted:#6B7E9E; --accent:#6FAED9;
+  --text-heading:#EAF1FA;
   --radius:16px; --radius-lg:20px;
   --shadow:0 8px 28px rgba(8,22,41,.45);
   --font-display:'Fraunces',Georgia,serif;
@@ -378,6 +379,23 @@ h1,h2,h3{font-family:var(--font-display);letter-spacing:-.02em;color:var(--ink)}
   display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
   gap:14px;
 }
+/* Home hero / onboarding call-to-action card */
+.tour-card{
+  position:relative;
+  background:linear-gradient(135deg,var(--surface-2),var(--surface));
+  border:1px solid var(--line-bright);
+  border-left:4px solid var(--cyan);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.tour-card::after{
+  content:"";position:absolute;top:-40px;right:-40px;
+  width:160px;height:160px;border-radius:50%;
+  background:radial-gradient(circle,var(--cyan-glow),transparent 70%);
+  pointer-events:none;
+}
+
 .app-footer .footer-brand{
   display:flex;align-items:center;gap:10px;
   font-family:var(--font-display);font-weight:600;font-size:0.98rem;color:var(--ink);
@@ -388,6 +406,11 @@ h1,h2,h3{font-family:var(--font-display);letter-spacing:-.02em;color:var(--ink)}
   background:linear-gradient(135deg,var(--navy),var(--navy-deep));
   color:#fff;font-family:var(--font-display);font-weight:700;font-size:0.82rem;
   border:1px solid var(--line-bright);
+}
+.app-footer .footer-brand .footer-logo{
+  height:34px;width:auto;border-radius:6px;
+  background:#fff;padding:3px 6px;border:1px solid var(--line-bright);
+  object-fit:contain;
 }
 .app-footer .footer-meta{
   font-size:0.8rem;color:var(--ink-mute);line-height:1.5;text-align:right;
