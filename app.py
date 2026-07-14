@@ -659,7 +659,7 @@ with st.sidebar:
     nav_options = [
         t('nav_home'), t('nav_data'), t('nav_config'), t('nav_optimize'),
         t('nav_results'), t('nav_analytics'), t('nav_history'), t('nav_edit'), t('nav_groups'), t('nav_compare'), t('nav_export'),
-        t('nav_student'), t('nav_updates')
+        t('nav_student'), t('nav_simulateur'), t('nav_updates')
     ]
 
     # Handle programmatic navigation from wizard buttons
@@ -682,6 +682,7 @@ with st.sidebar:
             'compare': t('nav_compare'),
             'export': t('nav_export'),
             'student': t('nav_student'),
+            'simulateur': t('nav_simulateur'),
             'updates': t('nav_updates'),
         }
         if target in nav_map and nav_map[target] in nav_options:
@@ -5933,9 +5934,20 @@ elif page == t('nav_student'):
                 st.rerun()
 
 # ════════════════════════════════════════════════════════════
-# PAGE: INFEASIBILITY SIMULATOR — removed on user request (to be re-integrated
-# in a later update). The ui_infeasibility module is kept in the repo but is no
-# longer wired into the navigation or dispatched here.
+# PAGE: INFEASIBILITY SIMULATOR (read-only what-if + stress testing)
+# Consolidated into the main radio navigation (Point 4) so it no longer
+# appears as a separate Streamlit multipage entry.
+# ════════════════════════════════════════════════════════════
+elif page == t('nav_simulateur'):
+    page_header(t('nav_simulateur'),
+                "Test de robustesse : forcer un scénario tendu, voir le solveur "
+                "détecter l'infaisabilité et proposer des remèdes")
+    try:
+        import ui_infeasibility
+        ui_infeasibility.render()
+    except Exception as exc:
+        safe_error("Unable to load the infeasibility simulator.", exc)
+
 # ════════════════════════════════════════════════════════════
 # PAGE: UPDATES (apply Python patches, show version)
 # ════════════════════════════════════════════════════════════

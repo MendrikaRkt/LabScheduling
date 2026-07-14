@@ -54,6 +54,59 @@ _REL_CANDIDATES = [
     "group_composition.csv",
 ]
 
+_SCHEDULE_REL_CANDIDATES = [
+    os.path.join("outputs", "optimization", "optimized_schedule_v5.csv"),
+    "optimized_schedule_v5.csv",
+]
+
+
+def _find_schedule_source() -> str:
+    """Localise optimized_schedule_v5.csv (CWD/workspace/source-tree)."""
+    cands = [os.path.abspath(r) for r in _SCHEDULE_REL_CANDIDATES]
+    if _app_paths is not None:
+        for rel in _SCHEDULE_REL_CANDIDATES:
+            try:
+                cands.append(_app_paths.workspace_path(rel))
+            except Exception:
+                pass
+    cands += [os.path.join(_ROOT, r) for r in _SCHEDULE_REL_CANDIDATES]
+    for p in cands:
+        if os.path.exists(p):
+            return p
+    return ""
+
+
+def _load_audit(path: str, mtime: float):
+    """Audit métier de la solution via diagnostics.audit_schedule (read-only).
+
+    Retourne le dict d'audit ou None. ``mtime`` sert de clé de fraîcheur.
+    """
+    if not path:
+        return None
+    try:
+        import pandas as pd
+        import diagnostics
+    except Exception:
+        return None
+    try:
+        df = pd.read_csv(path)
+        rows = df.to_dict("records")
+        min_group_size = getattr(diagnostics, "DEFAULT_MIN_GROUP_SIZE", 7)
+        allow_pm, allow_am = False, False
+        try:
+            import pipeline
+            min_group_size = int(getattr(pipeline, "MIN_GROUP_SIZE",
+                                         min_group_size))
+            allow_pm = bool(getattr(pipeline, "ALLOW_AFTERNOON_Y1Y3", False))
+            allow_am = bool(getattr(pipeline, "ALLOW_MORNING_Y2Y4", False))
+        except Exception:
+            pass
+        return diagnostics.audit_schedule(
+            rows, min_group_size=min_group_size,
+            allow_afternoon_y1y3=allow_pm, allow_morning_y2y4=allow_am)
+    except Exception:
+        return None
+
 
 def _session_candidates() -> list:
     """Build the ordered list of places to look for group_composition.csv.
@@ -133,6 +186,100 @@ def _render_diff(result: dict) -> None:
         st.warning("Aucune amelioration mesurable avec ce scenario.")
 
 
+_TYPE_LABELS_FR = {
+    "tiny_group": "Groupe sous-dimensionné",
+    "wrong_period": "Séance hors-période",
+    "oversubscription": "Matière sur-souscrite",
+    "bottleneck": "Goulot d'étranglement",
+    "credit_overload": "Surcharge professeur",
+}
+_SEV_LABELS_FR = {
+    "critique": "Critique",
+    "avertissement": "Avertissement",
+    "info": "Info",
+}
+
+
+def _render_business_audit() -> None:
+    """Surface l'audit métier (diagnostics.audit_schedule) dans le simulateur.
+
+    Démontre la thèse centrale : un statut solveur « OPTIMAL » ne garantit pas
+    une solution CONFORME. Affiche les anomalies détectées dans le planning
+    produit et le remède PROPOSÉ (chiffré) pour chacune.
+    """
+    st.header("Audit métier de la solution (au-delà du statut solveur)")
+    st.caption(
+        "Un statut solveur « OPTIMAL » signifie seulement que le modèle a "
+        "trouvé une affectation des semaines respectant ses contraintes dures. "
+        "Il ne garantit PAS que la solution est conforme aux règles de "
+        "l'établissement : le pré-traitement peut absorber une infaisabilité "
+        "en déformant la solution (groupes minuscules/solo, séances "
+        "hors-période). Cet audit scanne le planning produit et propose un "
+        "remède chiffré pour chaque anomalie (jamais appliqué automatiquement)."
+    )
+
+    sched = _find_schedule_source()
+    if not sched:
+        st.warning(
+            "Planning optimisé introuvable (optimized_schedule_v5.csv). Lancez "
+            "d'abord une optimisation pour alimenter l'audit."
+        )
+        return
+
+    audit = _load_audit(sched, os.path.getmtime(sched))
+    if audit is None:
+        st.warning("Audit indisponible (lecture du planning impossible).")
+        return
+
+    a1, a2, a3, a4 = st.columns(4)
+    a1.metric("Anomalies détectées", audit.get("n_total", 0))
+    a2.metric("Dont critiques", audit.get("n_critical", 0))
+    a3.metric("Groupes analysés", audit.get("n_groups_analyzed", 0))
+    a4.metric("Verdict",
+              "CONFORME" if audit.get("healthy") else "À CORRIGER")
+
+    if audit.get("healthy"):
+        st.success(
+            "Aucune anomalie métier détectée : tous les groupes respectent la "
+            "taille minimale et la période attendue pour leur niveau."
+        )
+        return
+
+    st.error(
+        f"{audit.get('n_total', 0)} anomalie(s) métier détectée(s) malgré un "
+        f"statut solveur potentiellement « OPTIMAL » — la preuve que "
+        f"« OPTIMAL » ≠ « conforme »."
+    )
+
+    by_type = audit.get("by_type", {})
+    if by_type:
+        st.markdown("**Synthèse par type d'anomalie**")
+        st.table({
+            "Type": [_TYPE_LABELS_FR.get(k, k) for k in by_type],
+            "Nombre": list(by_type.values()),
+        })
+
+    st.markdown("**Détail des anomalies et remèdes proposés**")
+    rows = []
+    for an in audit.get("anomalies", []):
+        rows.append({
+            "Niveau": an.get("level", ""),
+            "Sem.": an.get("semester", ""),
+            "Matière": an.get("subject", ""),
+            "Grp.": str(an.get("grupo", "")),
+            "Sévérité": _SEV_LABELS_FR.get(an.get("severity"),
+                                           an.get("severity", "")),
+            "Anomalie": an.get("detail", ""),
+            "Remède proposé (chiffré)": (an.get("remedy") or {}).get("text", ""),
+        })
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.caption(
+        "Ces mêmes anomalies et remèdes sont exportés dans la feuille Excel "
+        "« Diagnostic & Remèdes » de chaque classeur généré."
+    )
+    st.divider()
+
+
 def render() -> None:
     """Render the infeasibility simulator inside the main app navigation."""
     # NOTE: the page title is already rendered by app.py via page_header();
@@ -142,6 +289,8 @@ def render() -> None:
         "n'est modifiee. Les resultats sont des estimations basees sur le modele "
         "de capacite (memes regles que le diagnostic du solveur)."
     )
+
+    _render_business_audit()
 
     # ── Data loading (best effort, read-only) with freshness tracking ──
     _src = _find_sessions_source()

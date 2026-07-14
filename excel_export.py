@@ -197,6 +197,59 @@ def _get_validation_report():
     return _VALIDATION_REPORT_CACHE["report"]
 
 
+_DIAGNOSTIC_REPORT_CACHE = {"done": False, "report": None}
+
+
+def _get_diagnostic_report():
+    """Audit métier de la solution (anomalies + remèdes), calculé une fois.
+
+    Lit outputs/optimization/optimized_schedule_v5.csv, détecte les anomalies
+    FAISABLES-MAIS-INCORRECTES (groupes sous-dimensionnés, séances
+    hors-période) via diagnostics.audit_schedule, et intègre si possible les
+    anomalies de sur-souscription/surcharge déjà collectées par monitoring.
+    Retourne le dict d'audit ou None. Ne lève jamais.
+    """
+    if _DIAGNOSTIC_REPORT_CACHE["done"]:
+        return _DIAGNOSTIC_REPORT_CACHE["report"]
+    _DIAGNOSTIC_REPORT_CACHE["done"] = True
+    try:
+        import pandas as pd
+        import diagnostics
+
+        sched_path = app_paths.resolve_existing(
+            "outputs/optimization/optimized_schedule_v5.csv")
+        if not sched_path or not os.path.exists(sched_path):
+            _DIAGNOSTIC_REPORT_CACHE["report"] = None
+            return None
+        df = pd.read_csv(sched_path)
+        rows = df.to_dict("records")
+
+        # Récupère les seuils/dérogations réellement appliqués si disponibles.
+        min_group_size = diagnostics.DEFAULT_MIN_GROUP_SIZE
+        allow_pm_y1y3 = False
+        allow_am_y2y4 = False
+        try:
+            import pipeline
+            min_group_size = int(getattr(pipeline, "MIN_GROUP_SIZE",
+                                         min_group_size))
+            allow_pm_y1y3 = bool(getattr(pipeline, "ALLOW_AFTERNOON_Y1Y3",
+                                         False))
+            allow_am_y2y4 = bool(getattr(pipeline, "ALLOW_MORNING_Y2Y4",
+                                         False))
+        except Exception:
+            pass
+
+        report = diagnostics.audit_schedule(
+            rows, min_group_size=min_group_size,
+            allow_afternoon_y1y3=allow_pm_y1y3,
+            allow_morning_y2y4=allow_am_y2y4)
+        _DIAGNOSTIC_REPORT_CACHE["report"] = report
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"  [WARN] diagnostic report unavailable: {exc}")
+        _DIAGNOSTIC_REPORT_CACHE["report"] = None
+    return _DIAGNOSTIC_REPORT_CACHE["report"]
+
+
 def _build_semester(gen, semester: int, levels: dict) -> list[str]:
     """Replicates the generator's main() loop, parameterised by semester,
     routing all paths through app_paths. Returns list of saved file paths.
@@ -311,6 +364,18 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
                 validation_sheet.build_validation_sheet(wb, report)
         except Exception as exc:  # never break Excel generation
             print(f"    [WARN] Validation sheet skipped: {exc}")
+
+        # Feuille « Diagnostic & Remèdes » : audit métier de la solution
+        # (groupes sous-dimensionnés, séances hors-période, sur-souscription)
+        # avec un remède chiffré PROPOSÉ pour chaque anomalie. Additif, jamais
+        # bloquant. Démontre que « OPTIMAL » ≠ solution conforme.
+        try:
+            diag_report = _get_diagnostic_report()
+            if diag_report is not None:
+                import diagnostic_sheet
+                diagnostic_sheet.build_diagnostic_sheet(wb, diag_report)
+        except Exception as exc:  # never break Excel generation
+            print(f"    [WARN] Diagnostic sheet skipped: {exc}")
 
         # Feuille « Parameters » : traçabilité complète de la configuration
         # réellement appliquée par le solveur pour cette exécution (additif,
