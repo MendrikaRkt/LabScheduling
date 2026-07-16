@@ -904,9 +904,14 @@ def build_lab_overlay(level_schedule, programs):
         label = f"{display_lab_name(subject)}·G{grupo}"
         # Rattache la séance à chaque programme affiché dont le code apparaît
         # dans la chaîne « program » (gère MIXED(GITI+1), OVERFLOW, etc.).
+        # Le planning contient UNE ligne par étudiant : on déduplique donc les
+        # labels par créneau pour n'afficher chaque groupe qu'une seule fois
+        # (évite « Física·G5 / Física·G5 / … »).
         for prog, pn in norm_programs.items():
             if pn and pn.lower() in prog_norm:
-                overlay.setdefault((prog, bid, day_idx), []).append(label)
+                bucket = overlay.setdefault((prog, bid, day_idx), [])
+                if label not in bucket:
+                    bucket.append(label)
     return overlay
 
 
