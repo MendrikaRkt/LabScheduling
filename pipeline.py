@@ -52,6 +52,11 @@ try:
 except Exception:  # validation pré-export optionnelle ; ne jamais casser l'import
     _pev = None
 
+try:
+    import cpsat_verifier as _cpv
+except Exception:  # vérification formelle CP-SAT optionnelle ; ne jamais casser l'import
+    _cpv = None
+
 # ── TASK 5 : porte de validation avant export ──────────────────────────────
 # Détecte les collisions critiques (C1 même matière multi-groupe, C4 salle,
 # double-réservation professeur, chevauchement étudiant) AVANT de générer les
@@ -61,6 +66,17 @@ except Exception:  # validation pré-export optionnelle ; ne jamais casser l'imp
 # LAB_BLOCK_EXPORT_ON_COLLISION=1 pour bloquer réellement l'export.
 BLOCK_EXPORT_ON_COLLISION = os.environ.get(
     "LAB_BLOCK_EXPORT_ON_COLLISION", "0") in ("1", "true", "True")
+
+# ── Vérification formelle CP-SAT ───────────────────────────────────────────
+# Couche de PREUVE FORMELLE (model checking) exécutée après la validation
+# heuristique : encode toutes les contraintes dures dans un modèle CP-SAT et
+# minimise les violations. Un coût de 0 prouve la cohérence du planning.
+# Activée par défaut ; désactivable via LAB_CPSAT_VERIFY=0. Ne bloque l'export
+# que si LAB_BLOCK_EXPORT_ON_CPSAT_FAIL=1 (comme la porte heuristique).
+CPSAT_VERIFY = os.environ.get(
+    "LAB_CPSAT_VERIFY", "1") in ("1", "true", "True")
+BLOCK_EXPORT_ON_CPSAT_FAIL = os.environ.get(
+    "LAB_BLOCK_EXPORT_ON_CPSAT_FAIL", "0") in ("1", "true", "True")
 
 # ── Correction P0 : utiliser les emplois du temps RÉELS (grilles Horarios) ──
 # Le student_busy dérivé de master_schedule.csv contenait des créneaux décalés
@@ -5939,6 +5955,37 @@ def run_pipeline(df):
                       "reports/pre_export_validation.json.")
         except Exception as exc:
             print(f"  [VALIDATION][WARN] validation pré-export ignorée : {exc}")
+
+    # --- Vérification formelle CP-SAT (preuve exhaustive) ----------------
+    # Complète la validation heuristique : encode toutes les contraintes dures
+    # dans un modèle CP-SAT et minimise les violations. Écrit
+    # reports/cpsat_verification.json. Ne bloque que si
+    # LAB_BLOCK_EXPORT_ON_CPSAT_FAIL=1.
+    if _cpv is not None and CPSAT_VERIFY:
+        try:
+            allow_cpsat, cpv_report = _cpv.run_cpsat_verification_gate(
+                results_df,
+                block_on_critical=BLOCK_EXPORT_ON_CPSAT_FAIL,
+            )
+            print()
+            print(cpv_report.format_text())
+            print()
+            if not allow_cpsat:
+                print("  [CP-SAT][BLOQUÉ] Le vérificateur formel a prouvé des "
+                      "violations dures et LAB_BLOCK_EXPORT_ON_CPSAT_FAIL=1 : "
+                      "génération des exports Excel ANNULÉE.")
+                print("  → Corrigez le planning puis relancez, ou définissez "
+                      "LAB_BLOCK_EXPORT_ON_CPSAT_FAIL=0 pour exporter malgré tout.")
+                return False
+            if cpv_report.n_critical > 0:
+                print(f"  [CP-SAT][AVERTISSEMENT] {cpv_report.n_critical} "
+                      "violation(s) dure(s) prouvée(s) mais l'export continue "
+                      "(mode non bloquant). Voir reports/cpsat_verification.json.")
+            else:
+                print("  [CP-SAT][OK] Planning formellement validé "
+                      "(0 violation dure).")
+        except Exception as exc:
+            print(f"  [CP-SAT][WARN] vérification formelle ignorée : {exc}")
 
     run_daniel_format_generation()
     return True
