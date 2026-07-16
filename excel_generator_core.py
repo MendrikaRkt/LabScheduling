@@ -66,6 +66,11 @@ from openpyxl.comments import Comment
 # d'être disponible dans tout le module sous excel_generator_core.CREDIT_TO_SESSIONS.
 from lab_constants import CREDIT_TO_SESSIONS  # noqa: F401
 
+try:
+    import horarios_grid as _hg  # grilles Horarios réelles (source de vérité)
+except Exception:  # pragma: no cover - jamais casser la génération Excel
+    _hg = None
+
 
 # =============================================================================
 # FILE PATHS
@@ -859,6 +864,156 @@ def build_horarios_sheet(workbook, program_timetable, programs):
         worksheet.column_dimensions[get_column_letter(col)].width = 20
 
     return len(program_timetable)
+
+
+# =============================================================================
+# BUILD: HORARIOS SHEET (OVERLAY) — cours magistraux RÉELS + labos planifiés
+# =============================================================================
+
+# Style dédié à la vue superposée.
+LECTURE_FILL = PatternFill(start_color='D9D9D9', end_color='D9D9D9',
+                           fill_type='solid')          # gris : cours magistral
+LAB_FILL = PatternFill(start_color='C6E0B4', end_color='C6E0B4',
+                       fill_type='solid')              # vert : lab planifié
+COLLISION_FILL = PatternFill(start_color='FF7C80', end_color='FF7C80',
+                             fill_type='solid')         # rouge : collision !
+LAB_FONT = Font(name='Calibri', size=9, bold=True, color='1F4E78')
+LECTURE_FONT2 = Font(name='Calibri', size=9, color='404040')
+
+
+def build_lab_overlay(level_schedule, programs):
+    """
+    Construit la superposition des labos planifiés à partir du planning.
+
+    Retourne dict[(program, block_id, day_index)] -> [labels] où chaque label
+    est « SUBJECT·G{grupo} ». Un même créneau peut porter plusieurs labos.
+    """
+    overlay = {}
+    if level_schedule is None or len(level_schedule) == 0 or _hg is None:
+        return overlay
+    norm_programs = {p: _hg.normalize_titulacion(p) for p in programs}
+    for _, row in level_schedule.iterrows():
+        prog_raw = str(row.get('program', ''))
+        prog_norm = _hg.strip_accents(prog_raw)
+        day_idx = _hg.DAY_IDS.get(str(row.get('day', '')).strip())
+        bid = _hg.block_label_to_id(str(row.get('time_block', '')))
+        if day_idx is None or bid is None:
+            continue
+        subject = strip_semester_prefix(str(row.get('subject', '')))
+        grupo = row.get('grupo', '')
+        label = f"{display_lab_name(subject)}·G{grupo}"
+        # Rattache la séance à chaque programme affiché dont le code apparaît
+        # dans la chaîne « program » (gère MIXED(GITI+1), OVERFLOW, etc.).
+        for prog, pn in norm_programs.items():
+            if pn and pn.lower() in prog_norm:
+                overlay.setdefault((prog, bid, day_idx), []).append(label)
+    return overlay
+
+
+def build_horarios_overlay_sheet(workbook, programs, curso_num, level_schedule,
+                                 grid=None, sheet_name='Horarios'):
+    """
+    Feuille « Horarios » (format écran de Daniel) superposant :
+      • les COURS MAGISTRAUX réels (grilles Horarios officielles, fond gris),
+      • les LABOS planifiés par le solveur (fond vert),
+      • les COLLISIONS éventuelles cours↔lab (fond rouge) — visibilité directe.
+
+    Une grille par titulación (2 par bloc de lignes), tous les créneaux affichés.
+    Retourne le nombre de collisions détectées visuellement.
+    """
+    if _hg is None:
+        return 0
+    if grid is None:
+        try:
+            grid = _hg.load_occupancy_grid()
+        except Exception:
+            grid = {}
+
+    lab_overlay = build_lab_overlay(level_schedule, programs)
+
+    # Évite un doublon si une feuille 'Horarios' existe déjà.
+    name = sheet_name
+    if name in workbook.sheetnames:
+        idx = 2
+        while f"{name} ({idx})" in workbook.sheetnames:
+            idx += 1
+        name = f"{name} ({idx})"
+    worksheet = workbook.create_sheet(name)
+
+    # Légende en tête.
+    worksheet.cell(row=1, column=1, value='Leyenda:').font = PROGRAM_FONT
+    lg = [('Clase magistral', LECTURE_FILL), ('Laboratorio', LAB_FILL),
+          ('¡Colisión!', COLLISION_FILL)]
+    for i, (txt, fill) in enumerate(lg):
+        c = worksheet.cell(row=1, column=2 + i * 2, value=txt)
+        c.fill = fill
+        c.font = LECTURE_FONT2
+        c.border = FULL_THIN_BORDER
+    current_row = 3
+
+    block_rows = list(_hg.BLOCK_ID_TO_LABEL.items())  # [(1,'08:30-10:30'),...]
+    collisions = 0
+
+    for pair_start in range(0, len(programs), 2):
+        program_pair = programs[pair_start:pair_start + 2]
+        column_layout = [
+            (1, [2, 3, 4, 5, 6]),
+            (8, [9, 10, 11, 12, 13]),
+        ]
+
+        # En-tête : titulación + jours.
+        for index, (label_col, day_cols) in enumerate(column_layout):
+            if index >= len(program_pair):
+                break
+            hc = worksheet.cell(row=current_row, column=label_col,
+                                value=sanitize_cell(program_pair[index]))
+            hc.font = PROGRAM_FONT
+            hc.border = FULL_THIN_BORDER
+            for di, day_name in enumerate(DAYS_OF_WEEK):
+                write_bordered_cell(worksheet, current_row, day_cols[di],
+                                    f'{day_name} ', WHITE_FONT, HEADER_BLUE_FILL,
+                                    CENTER_ALIGNMENT)
+        current_row += 1
+
+        for bid, blabel in block_rows:
+            for index, (label_col, day_cols) in enumerate(column_layout):
+                if index >= len(program_pair):
+                    break
+                prog = program_pair[index]
+                write_bordered_cell(worksheet, current_row, label_col, blabel,
+                                    TIME_LABEL_FONT, None, RIGHT_ALIGNMENT)
+                gkey = (_hg.normalize_titulacion(prog), int(curso_num))
+                grid_slots = grid.get(gkey, {})
+                for di in range(5):
+                    lecture = grid_slots.get((di, bid), '')
+                    labs = lab_overlay.get((prog, bid, di), [])
+                    if lecture and labs:
+                        # Collision : cours magistral ET lab au même créneau.
+                        collisions += 1
+                        txt = f"⚠ {lecture} + {' / '.join(labs)}"
+                        write_bordered_cell(worksheet, current_row, day_cols[di],
+                                            txt, LAB_FONT, COLLISION_FILL,
+                                            CENTER_ALIGNMENT)
+                    elif labs:
+                        write_bordered_cell(worksheet, current_row, day_cols[di],
+                                            ' / '.join(labs), LAB_FONT, LAB_FILL,
+                                            CENTER_ALIGNMENT)
+                    elif lecture:
+                        write_bordered_cell(worksheet, current_row, day_cols[di],
+                                            lecture, LECTURE_FONT2, LECTURE_FILL,
+                                            CENTER_ALIGNMENT)
+                    else:
+                        write_bordered_cell(worksheet, current_row, day_cols[di],
+                                            '', COURSE_FONT, None, CENTER_ALIGNMENT)
+            current_row += 1
+        current_row += 1  # ligne d'espacement
+
+    for col in [1, 8]:
+        worksheet.column_dimensions[get_column_letter(col)].width = 14
+    for col in [2, 3, 4, 5, 6, 9, 10, 11, 12, 13]:
+        worksheet.column_dimensions[get_column_letter(col)].width = 22
+
+    return collisions
 
 
 # =============================================================================

@@ -332,6 +332,19 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
         wb = Workbook()
         wb.remove(wb.active)
 
+        # Feuille « Horarios » : cours magistraux RÉELS (grilles officielles)
+        # superposés aux labos planifiés, avec mise en évidence des collisions.
+        # C'est la vue de validation visuelle demandée par le coordinateur.
+        if hasattr(gen, "build_horarios_overlay_sheet"):
+            try:
+                n_coll = gen.build_horarios_overlay_sheet(
+                    wb, programs, level_num, level_schedule,
+                )
+                flag = f" ({n_coll} collisions !)" if n_coll else " (0 collision)"
+                print(f"    [OK] Horarios overlay {level_config['label']}{flag}")
+            except Exception as exc:  # never break Excel generation
+                print(f"    [WARN] Horarios overlay skipped: {exc}")
+
         gen.build_grupos_sheet(
             wb, level_groups, subjects,
             level_config["naming"], level_config["single"],
