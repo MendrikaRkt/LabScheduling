@@ -4856,6 +4856,51 @@ elif page == t('nav_edit'):
                     st.error("Conflict — move impossible:\n\n"
                               + "\n".join(f"- {r}" for r in chosen['reasons']))
 
+                # ── Detailed, categorized collision report (TASK 4) ──
+                # For a conflicting slot, break the collision down by type
+                # (student / professor / room / subject), propose free
+                # alternatives, and allow an explicit "force anyway" override.
+                force_move = False
+                if status_kind == 'conflict':
+                    coll = edit_session.validate_edit_collision(
+                        subject=selected_subject, grupo=selected_group,
+                        session_num=sn_choice,
+                        new_week=target_week, new_day=target_day,
+                        new_block=target_block,
+                    )
+                    with st.container(border=True):
+                        st.markdown("**Collision details**")
+                        if coll.subject_conflicts:
+                            st.error("Same-subject overlap (C1):\n\n"
+                                     + "\n".join(f"- {m}" for m in coll.subject_conflicts))
+                        if coll.room_conflicts:
+                            st.error("Room conflict (C4):\n\n"
+                                     + "\n".join(f"- {m}" for m in coll.room_conflicts))
+                        if coll.student_conflicts:
+                            st.error("Student conflict:\n\n"
+                                     + "\n".join(f"- {m}" for m in coll.student_conflicts))
+                        if coll.professor_conflicts:
+                            st.error("Professor conflict:\n\n"
+                                     + "\n".join(f"- {m}" for m in coll.professor_conflicts))
+
+                        if coll.alternatives:
+                            st.markdown("**Free alternatives for this session**")
+                            st.caption("Slots with no student/professor/room/subject collision:")
+                            alt_lines = [
+                                f"- W{w} · {d} · {b}"
+                                for (w, d, b) in coll.alternatives
+                            ]
+                            st.markdown("\n".join(alt_lines))
+                        else:
+                            st.caption("No fully free alternative slot found for this session.")
+
+                        # "Force anyway" override — manual edits may override.
+                        force_move = st.checkbox(
+                            "Force the move despite the collision "
+                            "(I understand this creates a conflict)",
+                            key='force_move_session',
+                        )
+
                 # Action button at the bottom of the page (Step 2 → Step 3)
                 if status_kind == 'free':
                     btn_label, btn_type, btn_disabled = "Continuer vers validation →", "primary", False
@@ -4863,8 +4908,10 @@ elif page == t('nav_edit'):
                     btn_label, btn_type, btn_disabled = "Continue (with warning) →", "secondary", False
                 elif status_kind == 'self':
                     btn_label, btn_type, btn_disabled = "Current position", "secondary", True
+                elif force_move:
+                    btn_label, btn_type, btn_disabled = "Force the move (collision) →", "secondary", False
                 else:
-                    btn_label, btn_type, btn_disabled = "Conflict — choose another slot", "secondary", True
+                    btn_label, btn_type, btn_disabled = "Conflict — choose another slot or force", "secondary", True
 
                 st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
                 if st.button(btn_label, type=btn_type, disabled=btn_disabled,
@@ -4874,6 +4921,7 @@ elif page == t('nav_edit'):
                         subject=selected_subject, grupo=selected_group,
                         session_num=sn_choice,
                         new_week=target_week, new_day=target_day, new_block=target_block,
+                        force=force_move,
                     )
                     if result.is_valid:
                         st.session_state.edit_wizard_step = 3

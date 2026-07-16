@@ -52,6 +52,7 @@ import pandas as pd
 SCHEDULE_CSV_PATH    = 'outputs/optimization/optimized_schedule_v5.csv'
 GROUPS_CSV_PATH      = 'outputs/optimization/group_composition.csv'
 STUDENT_BUSY_PATH    = 'data_clean/optimization/student_busy.csv'
+PROFESSOR_BUSY_PATH  = 'data_clean/optimization/professor_busy.csv'
 
 # Spanish weekday names used throughout the project
 DAYS_OF_WEEK = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
@@ -144,6 +145,47 @@ class ValidationResult:
     warnings: List[str] = field(default_factory=list)
 
 
+@dataclass
+class EditCollisionReport:
+    """
+    Structured result of :meth:`EditSession.validate_edit_collision`.
+
+    Splits detected problems by category so the Edit-Plan UI can show a
+    precise message, propose free alternative slots, and — because these are
+    *manual* edits — still let the user apply the move via a "force anyway"
+    option.
+
+    Attributes:
+        has_collision:   True if at least one hard collision was detected.
+        student_conflicts:   messages about student double-booking.
+        professor_conflicts: messages about professor double-booking / busy.
+        room_conflicts:      messages about room (C4) collisions.
+        subject_conflicts:   messages about same-subject overlap (C1).
+        warnings:            soft issues (C5 order, C7 preference, holidays…).
+        alternatives:        list of free (week, day, block) slots the user
+                             could pick instead (best-effort, capped).
+        can_force:           always True — manual edits may override, but the
+                             UI must show an explicit confirmation.
+    """
+    has_collision: bool
+    student_conflicts: List[str] = field(default_factory=list)
+    professor_conflicts: List[str] = field(default_factory=list)
+    room_conflicts: List[str] = field(default_factory=list)
+    subject_conflicts: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    alternatives: List[Tuple[int, str, str]] = field(default_factory=list)
+    can_force: bool = True
+
+    def all_collisions(self) -> List[str]:
+        """Flat list of every hard-collision message, category-prefixed."""
+        out = []
+        out += [f"[Matière] {m}" for m in self.subject_conflicts]
+        out += [f"[Salle] {m}" for m in self.room_conflicts]
+        out += [f"[Étudiant] {m}" for m in self.student_conflicts]
+        out += [f"[Professeur] {m}" for m in self.professor_conflicts]
+        return out
+
+
 # =============================================================================
 # EDIT SESSION
 # =============================================================================
@@ -176,6 +218,10 @@ class EditSession:
         # Map: student_id -> set of (day_idx, block_id) for their "real" busy slots
         # (from courses, NOT including the labs we are scheduling)
         self.student_busy: Dict[str, Set[Tuple[int, int]]] = {}
+
+        # Map: professor_id -> set of (day_idx, block_id) external unavailability
+        # (from professor_busy.csv — lectures/duties, NOT the labs we schedule)
+        self.professor_busy: Dict[str, Set[Tuple[int, int]]] = {}
 
         # Original schedule_df at load time, to compute diffs on commit
         self._original_schedule_df: Optional[pd.DataFrame] = None
@@ -219,6 +265,20 @@ class EditSession:
                 # Format: student_id, day_idx, block_id (one row per busy slot)
                 for student_id, grp in busy_df.groupby('student_id'):
                     self.student_busy[str(student_id)] = {
+                        (int(r['day_idx']), int(r['block_id'])) for _, r in grp.iterrows()
+                    }
+            except Exception:
+                # Non-critical: continue without it
+                pass
+
+        # Load professor_busy.csv (optional — external professor unavailability).
+        self.professor_busy = {}
+        if os.path.exists(PROFESSOR_BUSY_PATH):
+            try:
+                pb_df = pd.read_csv(PROFESSOR_BUSY_PATH)
+                # Format: professor_id, day_idx, block_id (one row per busy slot)
+                for prof_id, grp in pb_df.groupby('professor_id'):
+                    self.professor_busy[str(prof_id).strip()] = {
                         (int(r['day_idx']), int(r['block_id'])) for _, r in grp.iterrows()
                     }
             except Exception:
@@ -511,6 +571,185 @@ class EditSession:
             warnings=warnings,
         )
 
+    # ─────────────────────────────────────────────────────────────────────
+    # COLLISION DETECTION FOR MANUAL EDITS (TASK 4)
+    # ─────────────────────────────────────────────────────────────────────
+
+    def validate_edit_collision(
+        self,
+        subject: str,
+        grupo: int,
+        session_num: int,
+        new_week: int,
+        new_day: str,
+        new_block: str,
+        propose_alternatives: bool = True,
+        max_alternatives: int = 8,
+    ) -> EditCollisionReport:
+        """
+        Detect collisions for a proposed manual edit and, when the target slot
+        is not free, propose free alternatives.
+
+        Unlike :meth:`validate_move` (which returns a flat blocker list), this
+        method separates the collision types the Edit-Plan UI cares about —
+        student, professor, room and same-subject overlap — and adds a
+        **professor** check that ``validate_move`` did not cover:
+
+        - internal double-booking: the professor of this session already
+          teaches another lab at the target (week, day, block);
+        - external unavailability: the professor is listed busy at that
+          weekly slot in ``professor_busy.csv``.
+
+        Because these are *manual* edits, the report always allows a
+        "force anyway" override (``can_force=True``); the UI is responsible
+        for asking the user to confirm.
+
+        Args:
+            subject, grupo, session_num: identify the session to move.
+            new_week, new_day, new_block: the proposed target slot.
+            propose_alternatives: if True and a collision exists, compute a
+                short list of free alternative slots for this session.
+            max_alternatives: cap on the number of proposed alternatives.
+
+        Returns:
+            EditCollisionReport
+        """
+        if not self.loaded:
+            return EditCollisionReport(
+                has_collision=True,
+                subject_conflicts=['Edit session not loaded'],
+                can_force=False,
+            )
+
+        # Reuse validate_move for C1 (subject), C4 (room) and student checks.
+        base = self.validate_move(
+            subject=subject, grupo=grupo, session_num=session_num,
+            new_week=new_week, new_day=new_day, new_block=new_block,
+        )
+
+        subject_c: List[str] = []
+        room_c: List[str] = []
+        student_c: List[str] = []
+        for b in base.blockers:
+            if b.startswith('C1'):
+                subject_c.append(b)
+            elif b.startswith('C4'):
+                room_c.append(b)
+            else:
+                # "Conflit étudiant: …" and any other student-side blocker
+                student_c.append(b)
+
+        # Professor collision (not covered by validate_move).
+        professor_c = self._detect_professor_conflict(
+            subject=subject, grupo=grupo, session_num=session_num,
+            new_week=new_week, new_day=new_day, new_block=new_block,
+        )
+
+        has_collision = bool(subject_c or room_c or student_c or professor_c)
+
+        alternatives: List[Tuple[int, str, str]] = []
+        if propose_alternatives and has_collision:
+            alternatives = self._free_alternatives(
+                subject=subject, grupo=grupo, session_num=session_num,
+                max_alternatives=max_alternatives,
+            )
+
+        return EditCollisionReport(
+            has_collision=has_collision,
+            student_conflicts=student_c,
+            professor_conflicts=professor_c,
+            room_conflicts=room_c,
+            subject_conflicts=subject_c,
+            warnings=base.warnings,
+            alternatives=alternatives,
+            can_force=True,
+        )
+
+    def _detect_professor_conflict(
+        self,
+        subject: str,
+        grupo: int,
+        session_num: int,
+        new_week: int,
+        new_day: str,
+        new_block: str,
+    ) -> List[str]:
+        """Return professor-collision messages for the proposed slot (may be empty)."""
+        target_mask = (
+            (self.schedule_df['subject'] == subject)
+            & (self.schedule_df['grupo'] == grupo)
+            & (self.schedule_df['session'] == session_num)
+        )
+        target_rows = self.schedule_df[target_mask]
+        if len(target_rows) == 0:
+            return []
+        target_row = target_rows.iloc[0]
+
+        professor = str(target_row.get('professor', '') or '').strip()
+        if not professor or professor.lower() in ('nan', 'none', ''):
+            return []  # unknown professor — cannot check
+
+        semester = int(target_row['semester'])
+        day_idx = DAY_NAME_TO_INDEX.get(new_day, -1)
+        block_idx = TIME_BLOCKS.index(new_block) + 1 if new_block in TIME_BLOCKS else -1
+        conflicts: List[str] = []
+
+        # (a) External unavailability from professor_busy.csv (weekly slot).
+        if day_idx >= 0 and block_idx >= 0:
+            busy = self.professor_busy.get(professor, set())
+            if (day_idx, block_idx) in busy:
+                conflicts.append(
+                    f"{professor} est indisponible à ce créneau "
+                    f"({new_day} {new_block}) selon professor_busy.csv"
+                )
+
+        # (b) Internal double-booking: same professor teaching another lab at
+        #     the exact target (week, day, block).
+        clash_mask = (
+            (self.schedule_df['semester'] == semester)
+            & (self.schedule_df['week'] == new_week)
+            & (self.schedule_df['day'] == new_day)
+            & (self.schedule_df['time_block'] == new_block)
+            & (self.schedule_df['professor'].astype(str).str.strip() == professor)
+            & ~target_mask
+        )
+        for _, other in self.schedule_df[clash_mask].iterrows():
+            conflicts.append(
+                f"{professor} encadre déjà "
+                f"{self._clean_subject(other['subject'])} "
+                f"Grupo {int(other['grupo'])} (P{int(other['session'])}) "
+                f"en semaine {int(other['week'])} à ce créneau"
+            )
+        return conflicts
+
+    def _free_alternatives(
+        self,
+        subject: str,
+        grupo: int,
+        session_num: int,
+        max_alternatives: int = 8,
+    ) -> List[Tuple[int, str, str]]:
+        """Best-effort list of free (week, day, block) slots for this session.
+
+        Uses :meth:`feasibility_grid` and keeps only 'free' slots (no blocker,
+        no warning). Capped at ``max_alternatives``.
+        """
+        try:
+            grid = self.feasibility_grid(
+                subject=subject, grupo=grupo, session_num=session_num,
+            )
+        except Exception:
+            return []
+        free = [key for key, info in grid.items() if info.get('status') == 'free']
+        # Stable ordering: by week, then day order, then block order.
+        def _sort_key(k):
+            week, day, block = k
+            d = DAY_NAME_TO_INDEX.get(day, 99)
+            b = TIME_BLOCKS.index(block) if block in TIME_BLOCKS else 99
+            return (week, d, b)
+        free.sort(key=_sort_key)
+        return free[:max_alternatives]
+
     def _validate_group_move(
         self,
         subject: str,
@@ -566,6 +805,7 @@ class EditSession:
         new_week: int,
         new_day: str,
         new_block: str,
+        force: bool = False,
     ) -> ValidationResult:
         """
         Validate AND stage a single-session move.
@@ -574,13 +814,26 @@ class EditSession:
         applied to the in-memory dataframe (so subsequent moves see the
         updated state). The disk files are NOT modified until commit().
 
-        Returns the ValidationResult. If is_valid is False, the change is
-        NOT staged.
+        Args:
+            force: when True, stage the move even if it has hard blockers
+                (manual "force anyway" override). The blockers are converted
+                into warnings so they remain visible in the pending basket.
+
+        Returns the ValidationResult. If is_valid is False and force is False,
+        the change is NOT staged.
         """
         result = self.validate_move(subject, grupo, session_num,
                                      new_week, new_day, new_block)
-        if not result.is_valid:
+        if not result.is_valid and not force:
             return result
+        if not result.is_valid and force:
+            # Keep the collision info visible as warnings on the staged change.
+            forced_warnings = (
+                [f"[FORCÉ] {b}" for b in result.blockers] + list(result.warnings)
+            )
+            result = ValidationResult(
+                is_valid=True, blockers=[], warnings=forced_warnings,
+            )
 
         target_mask = (
             (self.schedule_df['subject'] == subject)
