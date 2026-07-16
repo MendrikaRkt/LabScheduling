@@ -345,6 +345,18 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
             except Exception as exc:  # never break Excel generation
                 print(f"    [WARN] Horarios overlay skipped: {exc}")
 
+        # Feuille « Horarios (filtrable) » : version tabulaire avec AutoFilter
+        # Excel sur la colonne « Tipo » (Clase magistral / Laboratorio /
+        # ¡Colisión!). Répond à la demande de filtres directs dans Horarios.
+        if hasattr(gen, "build_horarios_tabla_sheet"):
+            try:
+                gen.build_horarios_tabla_sheet(
+                    wb, programs, level_num, level_schedule,
+                )
+                print(f"    [OK] Horarios (filtrable) {level_config['label']}")
+            except Exception as exc:  # never break Excel generation
+                print(f"    [WARN] Horarios (filtrable) skipped: {exc}")
+
         gen.build_grupos_sheet(
             wb, level_groups, subjects,
             level_config["naming"], level_config["single"],

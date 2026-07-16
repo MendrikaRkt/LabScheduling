@@ -1021,6 +1021,109 @@ def build_horarios_overlay_sheet(workbook, programs, curso_num, level_schedule,
     return collisions
 
 
+def build_horarios_tabla_sheet(workbook, programs, curso_num, level_schedule,
+                               grid=None, sheet_name='Horarios (filtrable)'):
+    """
+    Feuille « Horarios (filtrable) » : version TABULAIRE et FILTRABLE de la
+    grille Horarios, avec un AutoFilter Excel sur chaque colonne.
+
+    Une ligne par créneau occupé, avec la colonne « Tipo » permettant de filtrer
+    directement :
+        • Clase magistral  (cours magistral réel, fond gris)
+        • Laboratorio      (labo planifié, fond vert)
+        • ¡Colisión!       (cours ↔ labo au même créneau, fond rouge)
+
+    Colonnes : Titulación | Curso | Día | Hora | Tipo | Materia / Grupo(s)
+
+    Répond directement à la demande : « placer des filtres pour afficher clase
+    magistral, laboratorio, colisión ». Additif : ne remplace pas la grille
+    visuelle « Horarios ».
+    """
+    if _hg is None:
+        return 0
+    if grid is None:
+        try:
+            grid = _hg.load_occupancy_grid()
+        except Exception:
+            grid = {}
+
+    lab_overlay = build_lab_overlay(level_schedule, programs)
+
+    name = sheet_name
+    if name in workbook.sheetnames:
+        idx = 2
+        while f"{name} ({idx})" in workbook.sheetnames:
+            idx += 1
+        name = f"{name} ({idx})"
+    worksheet = workbook.create_sheet(name)
+
+    # En-tête.
+    headers = ['Titulación', 'Curso', 'Día', 'Hora', 'Tipo', 'Materia / Grupo(s)']
+    for ci, htxt in enumerate(headers, start=1):
+        write_bordered_cell(worksheet, 1, ci, htxt, WHITE_FONT,
+                            HEADER_BLUE_FILL, CENTER_ALIGNMENT)
+
+    block_rows = list(_hg.BLOCK_ID_TO_LABEL.items())  # [(1,'08:30-10:30'),...]
+    row = 2
+    collisions = 0
+
+    for prog in programs:
+        gkey = (_hg.normalize_titulacion(prog), int(curso_num))
+        grid_slots = grid.get(gkey, {})
+        for bid, blabel in block_rows:
+            for di in range(5):
+                lecture = grid_slots.get((di, bid), '')
+                labs = lab_overlay.get((prog, bid, di), [])
+                day_name = DAYS_OF_WEEK[di]
+                # Ordre : d'abord la collision (la plus importante), puis
+                # les cours magistraux seuls, puis les labos seuls.
+                if lecture and labs:
+                    collisions += 1
+                    detail = f"{lecture}  ↔  {' / '.join(labs)}"
+                    _write_tabla_row(worksheet, row, prog, curso_num, day_name,
+                                     blabel, '¡Colisión!', detail, COLLISION_FILL)
+                    row += 1
+                elif lecture:
+                    _write_tabla_row(worksheet, row, prog, curso_num, day_name,
+                                     blabel, 'Clase magistral', lecture,
+                                     LECTURE_FILL)
+                    row += 1
+                elif labs:
+                    _write_tabla_row(worksheet, row, prog, curso_num, day_name,
+                                     blabel, 'Laboratorio', ' / '.join(labs),
+                                     LAB_FILL)
+                    row += 1
+
+    # AutoFilter Excel sur toute la plage (permet de filtrer par Tipo, etc.).
+    last_row = max(row - 1, 1)
+    worksheet.auto_filter.ref = f"A1:F{last_row}"
+    worksheet.freeze_panes = "A2"
+
+    widths = [16, 8, 12, 14, 16, 46]
+    for ci, w in enumerate(widths, start=1):
+        worksheet.column_dimensions[get_column_letter(ci)].width = w
+
+    return collisions
+
+
+def _write_tabla_row(worksheet, row, prog, curso_num, day_name, blabel,
+                     tipo, detail, fill):
+    """Écrit une ligne de la feuille Horarios filtrable (helper interne)."""
+    write_bordered_cell(worksheet, row, 1, sanitize_cell(prog),
+                        COURSE_FONT, None, CENTER_ALIGNMENT)
+    write_bordered_cell(worksheet, row, 2, f"{curso_num}",
+                        COURSE_FONT, None, CENTER_ALIGNMENT)
+    write_bordered_cell(worksheet, row, 3, day_name,
+                        COURSE_FONT, None, CENTER_ALIGNMENT)
+    write_bordered_cell(worksheet, row, 4, blabel,
+                        COURSE_FONT, None, CENTER_ALIGNMENT)
+    # La colonne « Tipo » porte la couleur (repère visuel + filtrable).
+    write_bordered_cell(worksheet, row, 5, tipo, LAB_FONT, fill,
+                        CENTER_ALIGNMENT)
+    write_bordered_cell(worksheet, row, 6, sanitize_cell(detail),
+                        COURSE_FONT, fill, CENTER_ALIGNMENT)
+
+
 # =============================================================================
 # BUILD: GRUPO DE PRÁCTICAS SHEET (student groups)
 # =============================================================================
