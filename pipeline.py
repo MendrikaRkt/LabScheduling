@@ -47,6 +47,21 @@ try:
 except Exception:  # module Horarios optionnel ; ne jamais casser l'import
     _hg = None
 
+try:
+    import pre_export_validation as _pev
+except Exception:  # validation pré-export optionnelle ; ne jamais casser l'import
+    _pev = None
+
+# ── TASK 5 : porte de validation avant export ──────────────────────────────
+# Détecte les collisions critiques (C1 même matière multi-groupe, C4 salle,
+# double-réservation professeur, chevauchement étudiant) AVANT de générer les
+# exports Excel. Par défaut la porte AVERTIT bruyamment et écrit un rapport
+# JSON sans bloquer (le planning courant peut contenir des collisions réelles
+# héritées ; on ne veut pas casser la démo). Passer
+# LAB_BLOCK_EXPORT_ON_COLLISION=1 pour bloquer réellement l'export.
+BLOCK_EXPORT_ON_COLLISION = os.environ.get(
+    "LAB_BLOCK_EXPORT_ON_COLLISION", "0") in ("1", "true", "True")
+
 # ── Correction P0 : utiliser les emplois du temps RÉELS (grilles Horarios) ──
 # Le student_busy dérivé de master_schedule.csv contenait des créneaux décalés
 # (99 collisions / 75,6 %). Quand les grilles Horarios réelles sont
@@ -5896,6 +5911,34 @@ def run_pipeline(df):
     name_lookup, program_lookup = build_output_lookups(df)
     generate_outputs(results_df, all_groups, name_lookup, program_lookup, subject_students)
     analyze(results_df)
+
+    # --- Porte de validation pré-export (TASK 5) -------------------------
+    # Détecte les collisions critiques et écrit reports/pre_export_validation.json.
+    # N'interrompt l'export que si LAB_BLOCK_EXPORT_ON_COLLISION=1.
+    if _pev is not None:
+        try:
+            allow_export, pev_report = _pev.run_pre_export_gate(
+                results_df,
+                block_on_critical=BLOCK_EXPORT_ON_COLLISION,
+            )
+            print()
+            print(pev_report.format_text())
+            print()
+            if not allow_export:
+                print("  [VALIDATION][BLOQUÉ] Des collisions critiques ont été "
+                      "détectées et LAB_BLOCK_EXPORT_ON_COLLISION=1 : "
+                      "génération des exports Excel ANNULÉE.")
+                print("  → Corrigez le planning (Éditer le plan) puis relancez, "
+                      "ou définissez LAB_BLOCK_EXPORT_ON_COLLISION=0 pour "
+                      "exporter malgré tout.")
+                return False
+            if pev_report.n_critical > 0:
+                print(f"  [VALIDATION][AVERTISSEMENT] {pev_report.n_critical} "
+                      "collision(s) critique(s) détectée(s) mais l'export "
+                      "continue (mode non bloquant). Voir "
+                      "reports/pre_export_validation.json.")
+        except Exception as exc:
+            print(f"  [VALIDATION][WARN] validation pré-export ignorée : {exc}")
 
     run_daniel_format_generation()
     return True
