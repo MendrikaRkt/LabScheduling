@@ -42,6 +42,33 @@ try:
 except Exception:  # le module KPI est optionnel ; ne jamais casser l'import
     _kpi = None
 
+try:
+    import horarios_grid as _hg
+except Exception:  # module Horarios optionnel ; ne jamais casser l'import
+    _hg = None
+
+try:
+    import pre_export_validation as _pev
+except Exception:  # validation pré-export optionnelle ; ne jamais casser l'import
+    _pev = None
+
+# ── TASK 5 : porte de validation avant export ──────────────────────────────
+# Détecte les collisions critiques (C1 même matière multi-groupe, C4 salle,
+# double-réservation professeur, chevauchement étudiant) AVANT de générer les
+# exports Excel. Par défaut la porte AVERTIT bruyamment et écrit un rapport
+# JSON sans bloquer (le planning courant peut contenir des collisions réelles
+# héritées ; on ne veut pas casser la démo). Passer
+# LAB_BLOCK_EXPORT_ON_COLLISION=1 pour bloquer réellement l'export.
+BLOCK_EXPORT_ON_COLLISION = os.environ.get(
+    "LAB_BLOCK_EXPORT_ON_COLLISION", "0") in ("1", "true", "True")
+
+# ── Correction P0 : utiliser les emplois du temps RÉELS (grilles Horarios) ──
+# Le student_busy dérivé de master_schedule.csv contenait des créneaux décalés
+# (99 collisions / 75,6 %). Quand les grilles Horarios réelles sont
+# disponibles, on remplace la dérivation par la SOURCE DE VÉRITÉ.
+USE_CORRECTED_HORARIOS = os.environ.get(
+    "LAB_USE_CORRECTED_HORARIOS", "1") not in ("0", "false", "False")
+
 # Phase 2 — configurable soft-constraint weights (additive; degrades to the
 # validated defaults if the module or its YAML file is unavailable).
 try:
@@ -442,6 +469,38 @@ PARITY_PENALTY_WEIGHT = 50
 SOLVER_TIME_LIMIT = 300
 
 
+# ---------------------------------------------------------------------------
+#  Semaines exclues (TASK 3)
+#  - EXCLUDED_WEEKS_ALL : semaines interdites pour TOUTES les matières
+#    (ex. semaine d'examens partiels, semaine de projet transversal…).
+#  - Par matière : LAB_CONFIG[subj]['excluded_weeks'] = [7, 8, 11, 12]
+#    (ex. Chimie 1re année / S1 : exclure les semaines 7,8,11,12).
+#  Ces semaines sont retirées du domaine des variables « semaine » du
+#  solveur CP-SAT : aucune séance de TP ne pourra y être planifiée.
+# ---------------------------------------------------------------------------
+EXCLUDED_WEEKS_ALL = []
+
+
+def excluded_weeks_for(subject):
+    """Ensemble des semaines interdites pour `subject`.
+
+    Combine les semaines exclues globales (EXCLUDED_WEEKS_ALL) et les
+    semaines exclues propres à la matière (LAB_CONFIG[subject]['excluded_weeks']).
+    Retourne un set d'entiers (numéros de semaine).
+    """
+    weeks = set()
+    try:
+        weeks.update(int(w) for w in EXCLUDED_WEEKS_ALL)
+    except (TypeError, ValueError):
+        pass
+    cfg = LAB_CONFIG.get(subject, {})
+    try:
+        weeks.update(int(w) for w in cfg.get('excluded_weeks', []) or [])
+    except (TypeError, ValueError):
+        pass
+    return weeks
+
+
 HOLIDAYS = {
     1: {
 
@@ -771,6 +830,7 @@ def apply_user_config():
     global SEMESTER_1_WEEKS, SEMESTER_2_WEEKS
     global ALLOW_AFTERNOON_Y1Y3, ALLOW_MORNING_Y2Y4, TEACHER_UNAVAILABILITY
     global QUIMICA_USE_TWO_ROOMS, PARITY_ALTERNATION
+    global EXCLUDED_WEEKS_ALL
 
     if not os.path.exists(USER_CONFIG_PATH):
         print(f"\n  [INFO]  Aucune config utilisateur trouvée ({USER_CONFIG_PATH})")
@@ -836,6 +896,16 @@ def apply_user_config():
             QUIMICA_USE_TWO_ROOMS = bool(global_cfg['quimica_use_two_rooms'])
         if 'parity_alternation' in global_cfg:
             PARITY_ALTERNATION = bool(global_cfg['parity_alternation'])
+        if 'excluded_weeks_all' in global_cfg:
+            try:
+                EXCLUDED_WEEKS_ALL = sorted({
+                    int(w) for w in (global_cfg['excluded_weeks_all'] or [])
+                })
+                if EXCLUDED_WEEKS_ALL:
+                    print(f"     EXCLUDED_WEEKS_ALL = {EXCLUDED_WEEKS_ALL} "
+                          f"(semaines interdites pour TOUTES les matières)")
+            except (TypeError, ValueError):
+                print(f"     [WARN]  excluded_weeks_all invalide, ignoré")
 
 
     if QUIMICA_USE_TWO_ROOMS and 'S1_Química' in LAB_CONFIG:
@@ -880,6 +950,19 @@ def apply_user_config():
                 if old != new:
                     base['max_week'] = new
                     applied.append(f"max_week {old}→{new}")
+
+            if 'excluded_weeks' in overrides:
+                try:
+                    new_ex = sorted({int(w) for w in (overrides['excluded_weeks'] or [])})
+                except (TypeError, ValueError):
+                    new_ex = []
+                old_ex = base.get('excluded_weeks', [])
+                if new_ex != old_ex:
+                    base['excluded_weeks'] = new_ex
+                    if new_ex:
+                        applied.append(f"excluded_weeks {new_ex}")
+                    else:
+                        applied.append("excluded_weeks (aucune)")
 
             if 'lab_rooms' in overrides and overrides['lab_rooms']:
                 new_rooms = list(overrides['lab_rooms'])
@@ -980,6 +1063,7 @@ def write_applied_config():
             's2_total_weeks':   SEMESTER_2_WEEKS,
             'quimica_use_two_rooms': QUIMICA_USE_TWO_ROOMS,
             'parity_alternation': PARITY_ALTERNATION,
+            'excluded_weeks_all': list(EXCLUDED_WEEKS_ALL),
         },
         'year_prefs': {
             'allow_afternoon_y1y3': ALLOW_AFTERNOON_Y1Y3,
@@ -1004,6 +1088,7 @@ def write_applied_config():
                 'max_students':    v.get('max_students'),
                 'min_week':        v.get('min_week'),
                 'max_week':        v.get('max_week'),
+                'excluded_weeks':  list(v.get('excluded_weeks', [])),
                 'lab_rooms':       v.get('lab_rooms', []),
             }
             for k, v in LAB_CONFIG.items()
@@ -1132,6 +1217,108 @@ def identify_students(df):
     return subject_students
 
 
+# Abréviations des grilles Horarios (1er cours) -> mots-clés matière de lab.
+# Les grilles de 2e/3e cours utilisent des noms complets qui matchent déjà les
+# keywords de LAB_CONFIG ; seules les abréviations du 1er cours doivent être
+# explicitées.
+# Chaque abréviation est étendue vers le(s) nom(s) canonique(s) complet(s) du
+# cours. La correspondance est ensuite UNIDIRECTIONNELLE (le nom canonique
+# CONTIENT le mot-clé), ce qui évite les confusions de chiffres romains
+# (« FIS I » ne doit pas matcher « Física II »).
+_HORARIOS_ABBREV_KEYWORDS = {
+    "fis i": ["física i"],
+    "fis ii": ["física ii"],
+    "quim": ["química general", "química"],
+}
+
+
+def _norm_txt(s):
+    return _hg.strip_accents(s) if _hg is not None else str(s).strip().lower()
+
+
+def _grid_course_matches_subject(course_name, subject, config):
+    """
+    Détermine si un intitulé de cours d'une grille Horarios correspond à la
+    matière de lab `subject` (pour libérer le créneau du cours remplacé).
+    Insensible aux accents/casse ; gère les abréviations du 1er cours.
+    Correspondance unidirectionnelle : un nom de cours (éventuellement étendu
+    via une abréviation) CONTIENT un mot-clé de la matière.
+    """
+    if not course_name:
+        return False
+    norm = _norm_txt(course_name)
+    # Textes candidats : le nom brut + ses formes canoniques (abréviations).
+    candidates = [norm] + [_norm_txt(x)
+                           for x in _HORARIOS_ABBREV_KEYWORDS.get(norm, [])]
+    keywords = [_norm_txt(k) for k in config.get("keywords", [])]
+    excl = [_norm_txt(x) for x in config.get("keyword_exclude", [])]
+    for cand in candidates:
+        if any(ex and ex in cand for ex in excl):
+            continue
+        if any(kw and kw in cand for kw in keywords):
+            return True
+    return False
+
+
+def build_corrected_timetables(subject_students):
+    """
+    Construit (student_busy, student_subject_slots) à partir des grilles
+    Horarios RÉELLES (source de vérité), au lieu de master_schedule.csv.
+
+    Retourne (student_busy, student_subject_slots) ou None si les données
+    Horarios ne sont pas disponibles.
+    """
+    if _hg is None:
+        return None
+    try:
+        grid = _hg.load_occupancy_grid()
+    except Exception as e:
+        print(f"  [WARN] Grille Horarios indisponible : {e}")
+        return None
+    if not grid:
+        return None
+
+    try:
+        import rebuild_student_constraints as _rsc
+        sd_path = _rsc._resolve(_rsc.STUDENT_DIRECTORY_CANDIDATES)
+        gc_path = _rsc._resolve(_rsc.GROUP_COMPOSITION_CANDIDATES)
+        if not sd_path:
+            print("  [WARN] student_directory.csv absent -> pas de correction Horarios.")
+            return None
+        year_map, _ = _rsc.load_student_year_map(sd_path, gc_path)
+    except Exception as e:
+        print(f"  [WARN] Mapping étudiant→année indisponible : {e}")
+        return None
+
+    all_student_ids = set()
+    for ids in subject_students.values():
+        all_student_ids.update(ids)
+
+    student_busy = {}
+    student_subject_slots = defaultdict(lambda: defaultdict(set))
+    covered = 0
+    for sid in all_student_ids:
+        pairs = year_map.get(sid, set())
+        busy = set()
+        for (tit, curso) in pairs:
+            key = (tit, curso)
+            slots_map = grid.get(key, {})
+            for (day_idx, block_id), course in slots_map.items():
+                busy.add((day_idx, block_id))
+                # Créneaux du propre cours de la matière -> récupérables.
+                for subject, config in LAB_CONFIG.items():
+                    if _grid_course_matches_subject(course, subject, config):
+                        student_subject_slots[sid][subject].add((day_idx, block_id))
+        student_busy[sid] = busy
+        if busy:
+            covered += 1
+
+    print(f"  [CORRECTION Horarios] student_busy dérivé des grilles réelles : "
+          f"{covered}/{len(all_student_ids)} étudiants couverts, "
+          f"{sum(len(b) for b in student_busy.values())} créneaux occupés.")
+    return student_busy, student_subject_slots
+
+
 def build_individual_timetables(df, subject_students):
     """
     Pour chaque étudiant inscrit à une matière avec lab,
@@ -1220,6 +1407,37 @@ def build_individual_timetables(df, subject_students):
             print(f"  [OK] Export {sb_path} ({len(sb_rows)} entrées)")
     except Exception as e:
         print(f"  [WARN]  Erreur export student_busy.csv : {e}")
+
+    # ── Correction P0 : remplacer par les emplois du temps RÉELS si dispo ──
+    if USE_CORRECTED_HORARIOS:
+        corrected = build_corrected_timetables(subject_students)
+        if corrected is not None:
+            corr_busy, corr_subject_slots = corrected
+            # On ne remplace que pour les étudiants réellement couverts par une
+            # grille Horarios ; sinon on conserve la dérivation historique
+            # (évite de « libérer » un étudiant sans données réelles).
+            replaced = 0
+            for sid, busy in corr_busy.items():
+                if busy:
+                    student_busy[sid] = busy
+                    student_subject_slots[sid] = corr_subject_slots.get(
+                        sid, defaultdict(set))
+                    replaced += 1
+            print(f"  [CORRECTION Horarios] {replaced} emplois du temps "
+                  f"étudiants remplacés par les grilles réelles 2025-26.")
+            # Réécrit student_busy.csv corrigé.
+            try:
+                sb_rows = []
+                for sid, busy_set in student_busy.items():
+                    for (day_idx, block_id) in busy_set:
+                        sb_rows.append({'student_id': sid, 'day_idx': day_idx,
+                                        'block_id': block_id})
+                if sb_rows:
+                    pd.DataFrame(sb_rows).to_csv(
+                        'data_clean/optimization/student_busy.csv',
+                        index=False, encoding='utf-8-sig')
+            except Exception as e:
+                print(f"  [WARN] Réécriture student_busy.csv corrigé : {e}")
 
     return student_busy, student_subject_slots
 
@@ -3535,12 +3753,19 @@ def solve(all_groups):
         sem_holidays = HOLIDAYS.get(sem, {})
         week_vars = {}
         for s in sessions:
+            excl = excluded_weeks_for(s['subject'])
             valid_weeks = [w for w in range(s['min_week'], s['max_week'] + 1)
-                           if (w, s['day_idx']) not in sem_holidays]
+                           if (w, s['day_idx']) not in sem_holidays
+                           and w not in excl]
             if not valid_weeks:
                 print(f"    [WARN]  Session {s['id']} ({s['subject']} G{s['grupo']}): "
-                      f"aucune semaine disponible pour {s['day']}!")
-                valid_weeks = list(range(s['min_week'], s['max_week'] + 1))
+                      f"aucune semaine disponible pour {s['day']}"
+                      + (f" (semaines exclues {sorted(excl)})" if excl else "") + "!")
+                # On relâche d'abord les semaines exclues, puis les fériés en dernier
+                valid_weeks = [w for w in range(s['min_week'], s['max_week'] + 1)
+                               if (w, s['day_idx']) not in sem_holidays]
+                if not valid_weeks:
+                    valid_weeks = list(range(s['min_week'], s['max_week'] + 1))
             week_vars[s['id']] = model.NewIntVarFromDomain(
                 cp_model.Domain.FromValues(valid_weeks), f"w_{s['id']}")
 
@@ -3920,10 +4145,15 @@ def solve(all_groups):
                     model2 = cp_model.CpModel()
                     week_vars2 = {}
                     for s in filtered_sessions:
+                        excl = excluded_weeks_for(s['subject'])
                         valid_weeks = [w for w in range(s['min_week'], s['max_week'] + 1)
-                                       if (w, s['day_idx']) not in sem_holidays]
+                                       if (w, s['day_idx']) not in sem_holidays
+                                       and w not in excl]
                         if not valid_weeks:
-                            valid_weeks = list(range(s['min_week'], s['max_week'] + 1))
+                            valid_weeks = [w for w in range(s['min_week'], s['max_week'] + 1)
+                                           if (w, s['day_idx']) not in sem_holidays]
+                            if not valid_weeks:
+                                valid_weeks = list(range(s['min_week'], s['max_week'] + 1))
                         week_vars2[s['id']] = model2.NewIntVarFromDomain(
                             cp_model.Domain.FromValues(valid_weeks), f"w_{s['id']}")
 
@@ -5681,6 +5911,34 @@ def run_pipeline(df):
     name_lookup, program_lookup = build_output_lookups(df)
     generate_outputs(results_df, all_groups, name_lookup, program_lookup, subject_students)
     analyze(results_df)
+
+    # --- Porte de validation pré-export (TASK 5) -------------------------
+    # Détecte les collisions critiques et écrit reports/pre_export_validation.json.
+    # N'interrompt l'export que si LAB_BLOCK_EXPORT_ON_COLLISION=1.
+    if _pev is not None:
+        try:
+            allow_export, pev_report = _pev.run_pre_export_gate(
+                results_df,
+                block_on_critical=BLOCK_EXPORT_ON_COLLISION,
+            )
+            print()
+            print(pev_report.format_text())
+            print()
+            if not allow_export:
+                print("  [VALIDATION][BLOQUÉ] Des collisions critiques ont été "
+                      "détectées et LAB_BLOCK_EXPORT_ON_COLLISION=1 : "
+                      "génération des exports Excel ANNULÉE.")
+                print("  → Corrigez le planning (Éditer le plan) puis relancez, "
+                      "ou définissez LAB_BLOCK_EXPORT_ON_COLLISION=0 pour "
+                      "exporter malgré tout.")
+                return False
+            if pev_report.n_critical > 0:
+                print(f"  [VALIDATION][AVERTISSEMENT] {pev_report.n_critical} "
+                      "collision(s) critique(s) détectée(s) mais l'export "
+                      "continue (mode non bloquant). Voir "
+                      "reports/pre_export_validation.json.")
+        except Exception as exc:
+            print(f"  [VALIDATION][WARN] validation pré-export ignorée : {exc}")
 
     run_daniel_format_generation()
     return True
