@@ -454,6 +454,38 @@ PARITY_PENALTY_WEIGHT = 50
 SOLVER_TIME_LIMIT = 300
 
 
+# ---------------------------------------------------------------------------
+#  Semaines exclues (TASK 3)
+#  - EXCLUDED_WEEKS_ALL : semaines interdites pour TOUTES les matières
+#    (ex. semaine d'examens partiels, semaine de projet transversal…).
+#  - Par matière : LAB_CONFIG[subj]['excluded_weeks'] = [7, 8, 11, 12]
+#    (ex. Chimie 1re année / S1 : exclure les semaines 7,8,11,12).
+#  Ces semaines sont retirées du domaine des variables « semaine » du
+#  solveur CP-SAT : aucune séance de TP ne pourra y être planifiée.
+# ---------------------------------------------------------------------------
+EXCLUDED_WEEKS_ALL = []
+
+
+def excluded_weeks_for(subject):
+    """Ensemble des semaines interdites pour `subject`.
+
+    Combine les semaines exclues globales (EXCLUDED_WEEKS_ALL) et les
+    semaines exclues propres à la matière (LAB_CONFIG[subject]['excluded_weeks']).
+    Retourne un set d'entiers (numéros de semaine).
+    """
+    weeks = set()
+    try:
+        weeks.update(int(w) for w in EXCLUDED_WEEKS_ALL)
+    except (TypeError, ValueError):
+        pass
+    cfg = LAB_CONFIG.get(subject, {})
+    try:
+        weeks.update(int(w) for w in cfg.get('excluded_weeks', []) or [])
+    except (TypeError, ValueError):
+        pass
+    return weeks
+
+
 HOLIDAYS = {
     1: {
 
@@ -783,6 +815,7 @@ def apply_user_config():
     global SEMESTER_1_WEEKS, SEMESTER_2_WEEKS
     global ALLOW_AFTERNOON_Y1Y3, ALLOW_MORNING_Y2Y4, TEACHER_UNAVAILABILITY
     global QUIMICA_USE_TWO_ROOMS, PARITY_ALTERNATION
+    global EXCLUDED_WEEKS_ALL
 
     if not os.path.exists(USER_CONFIG_PATH):
         print(f"\n  [INFO]  Aucune config utilisateur trouvée ({USER_CONFIG_PATH})")
@@ -848,6 +881,16 @@ def apply_user_config():
             QUIMICA_USE_TWO_ROOMS = bool(global_cfg['quimica_use_two_rooms'])
         if 'parity_alternation' in global_cfg:
             PARITY_ALTERNATION = bool(global_cfg['parity_alternation'])
+        if 'excluded_weeks_all' in global_cfg:
+            try:
+                EXCLUDED_WEEKS_ALL = sorted({
+                    int(w) for w in (global_cfg['excluded_weeks_all'] or [])
+                })
+                if EXCLUDED_WEEKS_ALL:
+                    print(f"     EXCLUDED_WEEKS_ALL = {EXCLUDED_WEEKS_ALL} "
+                          f"(semaines interdites pour TOUTES les matières)")
+            except (TypeError, ValueError):
+                print(f"     [WARN]  excluded_weeks_all invalide, ignoré")
 
 
     if QUIMICA_USE_TWO_ROOMS and 'S1_Química' in LAB_CONFIG:
@@ -892,6 +935,19 @@ def apply_user_config():
                 if old != new:
                     base['max_week'] = new
                     applied.append(f"max_week {old}→{new}")
+
+            if 'excluded_weeks' in overrides:
+                try:
+                    new_ex = sorted({int(w) for w in (overrides['excluded_weeks'] or [])})
+                except (TypeError, ValueError):
+                    new_ex = []
+                old_ex = base.get('excluded_weeks', [])
+                if new_ex != old_ex:
+                    base['excluded_weeks'] = new_ex
+                    if new_ex:
+                        applied.append(f"excluded_weeks {new_ex}")
+                    else:
+                        applied.append("excluded_weeks (aucune)")
 
             if 'lab_rooms' in overrides and overrides['lab_rooms']:
                 new_rooms = list(overrides['lab_rooms'])
@@ -992,6 +1048,7 @@ def write_applied_config():
             's2_total_weeks':   SEMESTER_2_WEEKS,
             'quimica_use_two_rooms': QUIMICA_USE_TWO_ROOMS,
             'parity_alternation': PARITY_ALTERNATION,
+            'excluded_weeks_all': list(EXCLUDED_WEEKS_ALL),
         },
         'year_prefs': {
             'allow_afternoon_y1y3': ALLOW_AFTERNOON_Y1Y3,
@@ -1016,6 +1073,7 @@ def write_applied_config():
                 'max_students':    v.get('max_students'),
                 'min_week':        v.get('min_week'),
                 'max_week':        v.get('max_week'),
+                'excluded_weeks':  list(v.get('excluded_weeks', [])),
                 'lab_rooms':       v.get('lab_rooms', []),
             }
             for k, v in LAB_CONFIG.items()
@@ -3680,12 +3738,19 @@ def solve(all_groups):
         sem_holidays = HOLIDAYS.get(sem, {})
         week_vars = {}
         for s in sessions:
+            excl = excluded_weeks_for(s['subject'])
             valid_weeks = [w for w in range(s['min_week'], s['max_week'] + 1)
-                           if (w, s['day_idx']) not in sem_holidays]
+                           if (w, s['day_idx']) not in sem_holidays
+                           and w not in excl]
             if not valid_weeks:
                 print(f"    [WARN]  Session {s['id']} ({s['subject']} G{s['grupo']}): "
-                      f"aucune semaine disponible pour {s['day']}!")
-                valid_weeks = list(range(s['min_week'], s['max_week'] + 1))
+                      f"aucune semaine disponible pour {s['day']}"
+                      + (f" (semaines exclues {sorted(excl)})" if excl else "") + "!")
+                # On relâche d'abord les semaines exclues, puis les fériés en dernier
+                valid_weeks = [w for w in range(s['min_week'], s['max_week'] + 1)
+                               if (w, s['day_idx']) not in sem_holidays]
+                if not valid_weeks:
+                    valid_weeks = list(range(s['min_week'], s['max_week'] + 1))
             week_vars[s['id']] = model.NewIntVarFromDomain(
                 cp_model.Domain.FromValues(valid_weeks), f"w_{s['id']}")
 
@@ -4065,10 +4130,15 @@ def solve(all_groups):
                     model2 = cp_model.CpModel()
                     week_vars2 = {}
                     for s in filtered_sessions:
+                        excl = excluded_weeks_for(s['subject'])
                         valid_weeks = [w for w in range(s['min_week'], s['max_week'] + 1)
-                                       if (w, s['day_idx']) not in sem_holidays]
+                                       if (w, s['day_idx']) not in sem_holidays
+                                       and w not in excl]
                         if not valid_weeks:
-                            valid_weeks = list(range(s['min_week'], s['max_week'] + 1))
+                            valid_weeks = [w for w in range(s['min_week'], s['max_week'] + 1)
+                                           if (w, s['day_idx']) not in sem_holidays]
+                            if not valid_weeks:
+                                valid_weeks = list(range(s['min_week'], s['max_week'] + 1))
                         week_vars2[s['id']] = model2.NewIntVarFromDomain(
                             cp_model.Domain.FromValues(valid_weeks), f"w_{s['id']}")
 

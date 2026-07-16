@@ -2892,6 +2892,34 @@ elif page == t('nav_config'):
                 "S2 total weeks", 14, 24, 20, help="Last available week in S2"
             )
 
+        # ── Globally excluded weeks (TASK 3) ──
+        st.markdown("##### Globally excluded weeks")
+        st.caption(
+            "Weeks blocked for ALL subjects (e.g., mid-term exam week, "
+            "institutional break). These add to any per-subject excluded weeks "
+            "set in the 'Per-subject' tab. No lab of any subject will be "
+            "scheduled during these weeks."
+        )
+        _max_weeks_ui = max(
+            int(st.session_state.advanced_config.get('s1_total_weeks', 14)),
+            int(st.session_state.advanced_config.get('s2_total_weeks', 20)),
+        )
+        _all_week_opts = list(range(1, _max_weeks_ui + 1))
+        _prev_all_excl = [
+            w for w in st.session_state.advanced_config.get('excluded_weeks_all', [])
+            if w in _all_week_opts
+        ]
+        st.session_state.advanced_config['excluded_weeks_all'] = sorted(
+            int(w) for w in st.multiselect(
+                "Weeks to exclude for every subject",
+                options=_all_week_opts,
+                default=_prev_all_excl,
+                format_func=lambda w: f"W{w}",
+                key="excluded_weeks_all_ui",
+                help="Applied on top of per-subject exclusions",
+            )
+        )
+
         # ────────────────────────────────────────────────────────────
         # VALIDATION PRÉVENTIVE EN TEMPS RÉEL (paramètres globaux)
         # Bloque en amont les combinaisons de paramètres incompatibles
@@ -3097,6 +3125,25 @@ elif page == t('nav_config'):
                             key=f"sp_{selected_subj}",
                         )
 
+                    # ── Excluded weeks (TASK 3) ──
+                    st.markdown("---")
+                    st.markdown("**Excluded weeks (no labs)**")
+                    st.caption(
+                        "Weeks where this subject must NOT be scheduled (exams, "
+                        "field trips, transversal projects…). "
+                        "Example — Chemistry 1st year / S1: exclude weeks 7, 8, 11, 12."
+                    )
+                    _week_range = list(range(int(new_min_w), int(new_max_w) + 1))
+                    _prev_excl = [w for w in ov.get('excluded_weeks', []) if w in _week_range]
+                    new_excluded_weeks = st.multiselect(
+                        "Weeks to exclude for this subject",
+                        options=_week_range,
+                        default=_prev_excl,
+                        format_func=lambda w: f"W{w}",
+                        key=f"exw_{selected_subj}",
+                        help="These weeks are removed from the solver's domain for this subject",
+                    )
+
                     st.markdown("---")
                     st.markdown("**Práctica-by-práctica earliest week**")
                     st.caption("Each práctica may have a specific earliest start week (e.g., topic must be taught first)")
@@ -3185,6 +3232,7 @@ elif page == t('nav_config'):
                     'max_students': new_max,
                     'min_week': new_min_w,
                     'max_week': new_max_w,
+                    'excluded_weeks': sorted(int(w) for w in new_excluded_weeks),
                     'num_groups': new_n_groups,
                     'min_size': new_min_size,
                     'schedule_pref': sched_pref,
@@ -3201,17 +3249,31 @@ elif page == t('nav_config'):
                 validation_msgs = []
 
                 # Check 1: max_week >= min_week + num_sessions - 1
-                weeks_window = new_max_w - new_min_w + 1
+                # (accounting for per-subject + global excluded weeks — TASK 3)
+                _excl_in_window = {
+                    w for w in new_excluded_weeks
+                    if new_min_w <= w <= new_max_w
+                }
+                _excl_in_window |= {
+                    w for w in st.session_state.advanced_config.get('excluded_weeks_all', [])
+                    if new_min_w <= w <= new_max_w
+                }
+                weeks_window = (new_max_w - new_min_w + 1) - len(_excl_in_window)
+                _excl_note = (
+                    f" (after removing {len(_excl_in_window)} excluded week(s))"
+                    if _excl_in_window else ""
+                )
                 if weeks_window < new_n_sess:
                     validation_msgs.append((
                         'error',
                         f"Week window too small: {weeks_window} weeks "
-                        f"available for {new_n_sess} sessions. Increase `End week` or reduce `Sessions`."
+                        f"available{_excl_note} for {new_n_sess} sessions. "
+                        f"Increase `End week`, reduce `Sessions`, or remove some excluded weeks."
                     ))
                 elif weeks_window == new_n_sess:
                     validation_msgs.append((
                         'warning',
-                        f"Tight window: exactly {weeks_window} weeks for {new_n_sess} sessions. "
+                        f"Tight window: exactly {weeks_window} weeks{_excl_note} for {new_n_sess} sessions. "
                         f"No flexibility — a holiday could cause a conflict."
                     ))
 
@@ -3636,6 +3698,7 @@ elif page == t('nav_optimize'):
                 'start_week': st.session_state.advanced_config.get('start_week', 4),
                 's1_total_weeks': st.session_state.advanced_config.get('s1_total_weeks', 14),
                 's2_total_weeks': st.session_state.advanced_config.get('s2_total_weeks', 20),
+                'excluded_weeks_all': st.session_state.advanced_config.get('excluded_weeks_all', []),
             },
             'subjects': st.session_state.advanced_config.get('subject_overrides', {}),
             'year_prefs': {
