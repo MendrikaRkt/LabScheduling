@@ -87,6 +87,45 @@ un contrôle visuel immédiat.
   collisions réelles. Pour **bloquer** réellement l'export en cas de collision
   critique, définir `LAB_BLOCK_EXPORT_ON_COLLISION=1`.
 
+### TASK 7 — Vérification formelle CP-SAT (`cpsat_verifier.py`)
+
+Une **couche de preuve formelle** vient compléter la validation heuristique
+ci-dessus. Là où `pre_export_validation.py` fait une détection rapide *par
+paires*, `cpsat_verifier.py` encode le planning dans un **modèle CP-SAT**
+(OR-Tools) et **prouve** exhaustivement sa cohérence.
+
+- **Principe** : chaque séance est figée à son créneau réel (semaine, jour,
+  bloc, salle, professeur). Toutes les contraintes dures sont posées sous
+  forme de variables de violation réifiées, dont on **minimise la somme**.
+  - Coût minimal **= 0** ⇒ le planning est *formellement valide* (preuve).
+  - Coût **> 0** ⇒ chaque violation est identifiée précisément (nature,
+    séances, créneau) — pas d'`INFEASIBLE` opaque.
+- **Contraintes vérifiées** : C1 (matière), professeur (double-réservation
+  interne + indisponibilité externe `professor_busy`), salle physique
+  (double-booking + réservation externe), semaines exclues
+  (`excluded_weeks_for`), collisions étudiant (double-TP + TP vs cours via
+  `group_composition` / `student_busy`), et préférence horaire par année
+  (signal **non bloquant**).
+- **API** : `verify_schedule(schedule_df, ...) -> VerificationResult` avec
+  `is_feasible`, `violations`, `n_violations_by_type`, `solver_status`,
+  `wall_time`, `format_text()`, `to_dict()`.
+- **Intégration** : `pipeline.run_pipeline()` appelle
+  `cpsat_verifier.run_cpsat_verification_gate(...)` **après** la porte
+  heuristique. Écrit `reports/cpsat_verification.json`. **Non bloquant par
+  défaut** (comme la porte heuristique) ; passer
+  `LAB_BLOCK_EXPORT_ON_CPSAT_FAIL=1` pour bloquer l'export sur violation dure,
+  ou `LAB_CPSAT_VERIFY=0` pour désactiver la couche.
+- **CLI** :
+  ```bash
+  python cpsat_verifier.py --schedule outputs/optimization/optimized_schedule_v5.csv
+  python cpsat_verifier.py --schedule <csv> --semester 1   # restreindre à un semestre
+  ```
+- **Différence avec `pre_export_validation.py`** : la validation heuristique
+  donne un *feedback immédiat* (rapide, par paires) ; le vérificateur CP-SAT
+  fournit une *garantie formelle exhaustive* (modèle de contraintes) — les deux
+  sont cohérents (mêmes types de collisions, mêmes chemins CSV, même convention
+  de créneaux jours 0-4 / blocs 1-6).
+
 ## 3. Régénérer les contraintes (guide)
 
 ```bash
@@ -114,7 +153,9 @@ python pre_export_validation.py outputs/optimization/optimized_schedule_v5.csv
 | Variable | Défaut | Effet |
 |----------|--------|-------|
 | `LAB_USE_CORRECTED_HORARIOS` | `1` | Utiliser les grilles Horarios réelles pour `student_busy`. Mettre à `0` pour l'ancien comportement. |
-| `LAB_BLOCK_EXPORT_ON_COLLISION` | `0` | Bloquer l'export Excel si des collisions critiques sont détectées. |
+| `LAB_BLOCK_EXPORT_ON_COLLISION` | `0` | Bloquer l'export Excel si des collisions critiques sont détectées (porte heuristique). |
+| `LAB_CPSAT_VERIFY` | `1` | Exécuter la vérification formelle CP-SAT après la porte heuristique. Mettre à `0` pour la désactiver. |
+| `LAB_BLOCK_EXPORT_ON_CPSAT_FAIL` | `0` | Bloquer l'export Excel si le vérificateur CP-SAT prouve des violations dures. |
 
 ## 4. Tests
 
@@ -129,6 +170,9 @@ python pre_export_validation.py outputs/optimization/optimized_schedule_v5.csv
   bloquant).
 - `test_excluded_weeks.py` — `excluded_weeks_for` (global, par matière, union,
   valeurs malformées).
+- `test_cpsat_verifier.py` — vérification formelle CP-SAT : planning valide,
+  C1, professeur (interne + externe), salle, semaine exclue, collisions
+  étudiant, signal préférence, rapport, porte `run_cpsat_verification_gate`.
 
 ### Lancer les tests
 
@@ -143,7 +187,7 @@ python -m pytest tests/test_horarios_grid.py \
                  tests/test_excluded_weeks.py -q
 ```
 
-**État actuel : 294 tests au vert** (267 de référence + 27 ajoutés). Aucune
+**État actuel : 309 tests au vert** (267 de référence + 42 ajoutés). Aucune
 régression.
 
 ## 5. Vérification de la correction (avant / après)
@@ -168,14 +212,17 @@ régression.
 - `horarios_grid.py`
 - `rebuild_student_constraints.py`
 - `pre_export_validation.py`
+- `cpsat_verifier.py` — vérification formelle CP-SAT.
 - `tests/test_horarios_grid.py`
 - `tests/test_rebuild_student_constraints.py`
 - `tests/test_pre_export_validation.py`
 - `tests/test_excluded_weeks.py`
+- `tests/test_cpsat_verifier.py`
 - `CORRECTION_PLAN.md` (ce fichier)
 
 **Modifiés**
-- `pipeline.py` — grilles réelles, semaines exclues, porte pré-export.
+- `pipeline.py` — grilles réelles, semaines exclues, porte pré-export,
+  porte de vérification formelle CP-SAT.
 - `app.py` — UI semaines exclues (par matière + global), rapport de collisions
   dans « Éditer le plan ».
 - `manual_edit.py` — `validate_edit_collision`, option « Forcer ».
