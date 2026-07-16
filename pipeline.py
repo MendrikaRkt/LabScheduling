@@ -42,6 +42,18 @@ try:
 except Exception:  # le module KPI est optionnel ; ne jamais casser l'import
     _kpi = None
 
+try:
+    import horarios_grid as _hg
+except Exception:  # module Horarios optionnel ; ne jamais casser l'import
+    _hg = None
+
+# ── Correction P0 : utiliser les emplois du temps RÉELS (grilles Horarios) ──
+# Le student_busy dérivé de master_schedule.csv contenait des créneaux décalés
+# (99 collisions / 75,6 %). Quand les grilles Horarios réelles sont
+# disponibles, on remplace la dérivation par la SOURCE DE VÉRITÉ.
+USE_CORRECTED_HORARIOS = os.environ.get(
+    "LAB_USE_CORRECTED_HORARIOS", "1") not in ("0", "false", "False")
+
 # Phase 2 — configurable soft-constraint weights (additive; degrades to the
 # validated defaults if the module or its YAML file is unavailable).
 try:
@@ -1132,6 +1144,108 @@ def identify_students(df):
     return subject_students
 
 
+# Abréviations des grilles Horarios (1er cours) -> mots-clés matière de lab.
+# Les grilles de 2e/3e cours utilisent des noms complets qui matchent déjà les
+# keywords de LAB_CONFIG ; seules les abréviations du 1er cours doivent être
+# explicitées.
+# Chaque abréviation est étendue vers le(s) nom(s) canonique(s) complet(s) du
+# cours. La correspondance est ensuite UNIDIRECTIONNELLE (le nom canonique
+# CONTIENT le mot-clé), ce qui évite les confusions de chiffres romains
+# (« FIS I » ne doit pas matcher « Física II »).
+_HORARIOS_ABBREV_KEYWORDS = {
+    "fis i": ["física i"],
+    "fis ii": ["física ii"],
+    "quim": ["química general", "química"],
+}
+
+
+def _norm_txt(s):
+    return _hg.strip_accents(s) if _hg is not None else str(s).strip().lower()
+
+
+def _grid_course_matches_subject(course_name, subject, config):
+    """
+    Détermine si un intitulé de cours d'une grille Horarios correspond à la
+    matière de lab `subject` (pour libérer le créneau du cours remplacé).
+    Insensible aux accents/casse ; gère les abréviations du 1er cours.
+    Correspondance unidirectionnelle : un nom de cours (éventuellement étendu
+    via une abréviation) CONTIENT un mot-clé de la matière.
+    """
+    if not course_name:
+        return False
+    norm = _norm_txt(course_name)
+    # Textes candidats : le nom brut + ses formes canoniques (abréviations).
+    candidates = [norm] + [_norm_txt(x)
+                           for x in _HORARIOS_ABBREV_KEYWORDS.get(norm, [])]
+    keywords = [_norm_txt(k) for k in config.get("keywords", [])]
+    excl = [_norm_txt(x) for x in config.get("keyword_exclude", [])]
+    for cand in candidates:
+        if any(ex and ex in cand for ex in excl):
+            continue
+        if any(kw and kw in cand for kw in keywords):
+            return True
+    return False
+
+
+def build_corrected_timetables(subject_students):
+    """
+    Construit (student_busy, student_subject_slots) à partir des grilles
+    Horarios RÉELLES (source de vérité), au lieu de master_schedule.csv.
+
+    Retourne (student_busy, student_subject_slots) ou None si les données
+    Horarios ne sont pas disponibles.
+    """
+    if _hg is None:
+        return None
+    try:
+        grid = _hg.load_occupancy_grid()
+    except Exception as e:
+        print(f"  [WARN] Grille Horarios indisponible : {e}")
+        return None
+    if not grid:
+        return None
+
+    try:
+        import rebuild_student_constraints as _rsc
+        sd_path = _rsc._resolve(_rsc.STUDENT_DIRECTORY_CANDIDATES)
+        gc_path = _rsc._resolve(_rsc.GROUP_COMPOSITION_CANDIDATES)
+        if not sd_path:
+            print("  [WARN] student_directory.csv absent -> pas de correction Horarios.")
+            return None
+        year_map, _ = _rsc.load_student_year_map(sd_path, gc_path)
+    except Exception as e:
+        print(f"  [WARN] Mapping étudiant→année indisponible : {e}")
+        return None
+
+    all_student_ids = set()
+    for ids in subject_students.values():
+        all_student_ids.update(ids)
+
+    student_busy = {}
+    student_subject_slots = defaultdict(lambda: defaultdict(set))
+    covered = 0
+    for sid in all_student_ids:
+        pairs = year_map.get(sid, set())
+        busy = set()
+        for (tit, curso) in pairs:
+            key = (tit, curso)
+            slots_map = grid.get(key, {})
+            for (day_idx, block_id), course in slots_map.items():
+                busy.add((day_idx, block_id))
+                # Créneaux du propre cours de la matière -> récupérables.
+                for subject, config in LAB_CONFIG.items():
+                    if _grid_course_matches_subject(course, subject, config):
+                        student_subject_slots[sid][subject].add((day_idx, block_id))
+        student_busy[sid] = busy
+        if busy:
+            covered += 1
+
+    print(f"  [CORRECTION Horarios] student_busy dérivé des grilles réelles : "
+          f"{covered}/{len(all_student_ids)} étudiants couverts, "
+          f"{sum(len(b) for b in student_busy.values())} créneaux occupés.")
+    return student_busy, student_subject_slots
+
+
 def build_individual_timetables(df, subject_students):
     """
     Pour chaque étudiant inscrit à une matière avec lab,
@@ -1220,6 +1334,37 @@ def build_individual_timetables(df, subject_students):
             print(f"  [OK] Export {sb_path} ({len(sb_rows)} entrées)")
     except Exception as e:
         print(f"  [WARN]  Erreur export student_busy.csv : {e}")
+
+    # ── Correction P0 : remplacer par les emplois du temps RÉELS si dispo ──
+    if USE_CORRECTED_HORARIOS:
+        corrected = build_corrected_timetables(subject_students)
+        if corrected is not None:
+            corr_busy, corr_subject_slots = corrected
+            # On ne remplace que pour les étudiants réellement couverts par une
+            # grille Horarios ; sinon on conserve la dérivation historique
+            # (évite de « libérer » un étudiant sans données réelles).
+            replaced = 0
+            for sid, busy in corr_busy.items():
+                if busy:
+                    student_busy[sid] = busy
+                    student_subject_slots[sid] = corr_subject_slots.get(
+                        sid, defaultdict(set))
+                    replaced += 1
+            print(f"  [CORRECTION Horarios] {replaced} emplois du temps "
+                  f"étudiants remplacés par les grilles réelles 2025-26.")
+            # Réécrit student_busy.csv corrigé.
+            try:
+                sb_rows = []
+                for sid, busy_set in student_busy.items():
+                    for (day_idx, block_id) in busy_set:
+                        sb_rows.append({'student_id': sid, 'day_idx': day_idx,
+                                        'block_id': block_id})
+                if sb_rows:
+                    pd.DataFrame(sb_rows).to_csv(
+                        'data_clean/optimization/student_busy.csv',
+                        index=False, encoding='utf-8-sig')
+            except Exception as e:
+                print(f"  [WARN] Réécriture student_busy.csv corrigé : {e}")
 
     return student_busy, student_subject_slots
 
