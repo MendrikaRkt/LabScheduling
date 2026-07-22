@@ -297,6 +297,25 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
         master_df = pd.read_csv(master_path, low_memory=False)
         print(f"  [OK] Master: {len(master_df)} rows")
 
+    # Grille Horarios RÉELLE, chargée PAR SEMESTRE (clé (titulación, curso, sem)).
+    # Elle est la source de vérité des cours magistraux affichés dans la feuille
+    # « Horarios » : un fichier S1 ne montre que les magistraux du S1 (idem S2),
+    # ce qui évite tout mélange inter-semestre dans la vue de validation.
+    horarios_grid_sem = None
+    try:
+        if hasattr(gen, "_hg") and gen._hg is not None and hasattr(
+            gen._hg, "load_occupancy_grid_semester"
+        ):
+            horarios_grid_sem = gen._hg.load_occupancy_grid_semester()
+            print(
+                f"  [OK] Grille Horarios S{semester}: "
+                f"{sum(1 for k in horarios_grid_sem if k[2] == semester)} "
+                f"(titulación,curso) chargées"
+            )
+    except Exception as exc:
+        print(f"  [WARN] Grille Horarios par semestre non chargée: {exc}")
+        horarios_grid_sem = None
+
     out_base = app_paths.workspace_path("outputs", "optimization", "Curso_2025_2026")
     saved = []
     name_map = _load_name_map()  # hash -> real name (local only); empty when names already present
@@ -339,6 +358,7 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
             try:
                 n_coll = gen.build_horarios_overlay_sheet(
                     wb, programs, level_num, level_schedule,
+                    grid=horarios_grid_sem, semester=semester,
                 )
                 flag = f" ({n_coll} collisions !)" if n_coll else " (0 collision)"
                 print(f"    [OK] Horarios overlay {level_config['label']}{flag}")
@@ -352,6 +372,7 @@ def _build_semester(gen, semester: int, levels: dict) -> list[str]:
             try:
                 gen.build_horarios_tabla_sheet(
                     wb, programs, level_num, level_schedule,
+                    grid=horarios_grid_sem, semester=semester,
                 )
                 print(f"    [OK] Horarios (filtrable) {level_config['label']}")
             except Exception as exc:  # never break Excel generation

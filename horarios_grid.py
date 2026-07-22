@@ -78,7 +78,7 @@ KNOWN_TITULACIONES = {
     "IEM", "IINFTV", "ISW",
 }
 
-# Fichiers officiels par défaut (curso -> chemins candidats).
+# Fichiers officiels par défaut (curso -> chemins candidats) — SEMESTRE 1.
 DEFAULT_HORARIOS_FILES: Dict[int, List[str]] = {
     1: [
         "/home/ubuntu/Uploads/Distribucion_Practicas_25-26_rev15.xlsx",
@@ -92,6 +92,32 @@ DEFAULT_HORARIOS_FILES: Dict[int, List[str]] = {
         "/home/ubuntu/Uploads/Distribucion_Practicas_tercercurso_25-26_rev11.xlsx",
         "data/Distribucion_Practicas_tercercurso_25-26_rev11.xlsx",
     ],
+}
+
+# Fichiers officiels par défaut (curso -> chemins candidats) — SEMESTRE 2.
+# Les cours magistraux du 2e semestre (Física II, Tecnología del medio
+# ambiente, Estructuras…) figurent dans des fichiers distincts, dont l'onglet
+# « Horarios » représente l'emploi du temps du S2. Sans eux, les TP du S2
+# étaient comparés à tort aux cours magistraux du S1.
+DEFAULT_HORARIOS_FILES_S2: Dict[int, List[str]] = {
+    1: [
+        "/home/ubuntu/Uploads/Reparto Pract FIS_II_rev19.xlsx",
+        "data/Reparto Pract FIS_II_rev19.xlsx",
+    ],
+    2: [
+        "/home/ubuntu/Uploads/Reparto Pract_rev23.xlsx",
+        "data/Reparto Pract_rev23.xlsx",
+    ],
+    3: [
+        "/home/ubuntu/Uploads/Reparto Pract3_rev3.xlsx",
+        "data/Reparto Pract3_rev3.xlsx",
+    ],
+}
+
+# Table (semestre -> mapping curso->fichiers).
+DEFAULT_HORARIOS_FILES_BY_SEMESTER: Dict[int, Dict[int, List[str]]] = {
+    1: DEFAULT_HORARIOS_FILES,
+    2: DEFAULT_HORARIOS_FILES_S2,
 }
 
 _TIME_RE = re.compile(r"^\s*(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})\s*$")
@@ -115,6 +141,8 @@ def normalize_titulacion(code) -> str:
         return ""
     s = str(code).strip().upper()
     s = re.sub(r"\s+", "", s)
+    # Retire un suffixe de sous-groupe final : GITIADE-A -> GITIADE, IOI/B -> IOI
+    s = re.sub(r"[-/][A-Z]$", "", s)
     # Retire un suffixe numérique final (plan d'études) : GITIADE22 -> GITIADE
     s = re.sub(r"\d+$", "", s)
     return s
@@ -279,6 +307,70 @@ def load_occupancy_grid(
             n_tit = len([k for k in grid if k[1] == curso_num])
             print(f"  [horarios] curso {curso_num} ({os.path.basename(path)}): "
                   f"{n_tit} titulaciones, +{after - before} créneaux")
+
+    return grid
+
+
+def load_occupancy_grid_semester(
+    files_by_curso_sem: Optional[Dict[int, Dict[int, str]]] = None,
+    sheet_name: str = "Horarios",
+    verbose: bool = False,
+) -> dict:
+    """
+    Charge une grille d'occupation **par semestre**.
+
+    Contrairement à :func:`load_occupancy_grid` (qui ne charge que le S1),
+    cette fonction charge les fichiers du S1 ET du S2 et renvoie une grille
+    clé = (titulacion, curso_num, semester) :
+
+        grid[(titulacion, curso, semester)][(day_idx, block_id)] = course
+
+    files_by_curso_sem : {semester: {curso_num: chemin_xlsx}}. Si None, utilise
+    DEFAULT_HORARIOS_FILES_BY_SEMESTER (premier chemin existant par curso).
+    """
+    grid: dict = {}
+    if files_by_curso_sem is None:
+        files_by_curso_sem = {}
+        for sem, mapping in DEFAULT_HORARIOS_FILES_BY_SEMESTER.items():
+            files_by_curso_sem[sem] = {}
+            for curso, cands in mapping.items():
+                path = _resolve_path(cands)
+                if path:
+                    files_by_curso_sem[sem][curso] = path
+
+    for semester, mapping in sorted(files_by_curso_sem.items()):
+        for curso_num, path in sorted(mapping.items()):
+            if not path or not os.path.exists(path):
+                if verbose:
+                    print(f"  [horarios] S{semester} curso {curso_num}: absent ({path})")
+                continue
+            try:
+                xl = pd.ExcelFile(path)
+            except Exception as e:  # pragma: no cover
+                if verbose:
+                    print(f"  [horarios] S{semester} curso {curso_num}: lecture échouée ({e})")
+                continue
+            target = sheet_name if sheet_name in xl.sheet_names else None
+            if target is None:
+                for s in xl.sheet_names:
+                    if strip_accents(s) == strip_accents(sheet_name):
+                        target = s
+                        break
+            if target is None:
+                if verbose:
+                    print(f"  [horarios] S{semester} curso {curso_num}: onglet absent")
+                continue
+            df = xl.parse(target, header=None)
+            # Parse dans une grille temporaire clé (tit, curso), puis on ré-indexe
+            # avec le semestre.
+            tmp: dict = {}
+            parse_horarios_sheet(df, curso_num, tmp)
+            for (tit, cur), slots in tmp.items():
+                grid.setdefault((tit, cur, int(semester)), {}).update(slots)
+            if verbose:
+                n = sum(len(v) for k, v in grid.items() if k[2] == semester and k[1] == curso_num)
+                print(f"  [horarios] S{semester} curso {curso_num} "
+                      f"({os.path.basename(path)}): {n} créneaux")
 
     return grid
 
