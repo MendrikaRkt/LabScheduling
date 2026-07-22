@@ -56,6 +56,8 @@ for pkg in meta_pkgs:
 datas += [
     ("app.py", "."),
     ("pipeline.py", "."),
+    ("magistral_busy.py", "."),        # Fix définitif collisions TP↔magistral
+    ("horarios_grid.py", "."),         # Grilles Horarios semester-aware
     ("reliability_metrics.py", "."),
     ("version_manager.py", "."),
     ("manual_edit.py", "."),
@@ -135,7 +137,8 @@ hidden += collect_submodules("ortools")
 hidden += collect_submodules("altair")
 hidden += [
     "pandas", "numpy", "pyarrow", "openpyxl", "PIL", "PIL.Image",
-    "reliability_metrics", "pipeline", "version_manager",
+    "reliability_metrics", "pipeline", "magistral_busy", "horarios_grid",
+    "version_manager",
     "persistence", "manual_edit", "app_paths", "excel_export",
     "excel_generator_core",
     "loyola_theme", "update_manager", "config_verify",
