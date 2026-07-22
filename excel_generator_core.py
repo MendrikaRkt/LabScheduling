@@ -1015,13 +1015,12 @@ def build_lab_overlay_subjects(level_schedule, programs):
 def build_horarios_overlay_sheet(workbook, programs, curso_num, level_schedule,
                                  grid=None, sheet_name='Horarios', semester=None):
     """
-    Feuille « Horarios » (format écran de Daniel) superposant :
-      • les COURS MAGISTRAUX réels (grilles Horarios officielles, fond gris),
-      • les LABOS planifiés par le solveur (fond vert),
-      • les COLLISIONS éventuelles cours↔lab (fond rouge) — visibilité directe.
+    Feuille « Horarios » (format écran de Daniel) affichant UNIQUEMENT :
+      • les COURS MAGISTRAUX réels (grilles Horarios officielles, fond gris).
 
     Une grille par titulación (2 par bloc de lignes), tous les créneaux affichés.
-    Retourne le nombre de collisions détectées visuellement.
+    Laboratoires et collisions ne sont PAS affichés dans cette vue.
+    Retourne toujours 0 (pas de détection de collisions dans cette vue simplifiée).
 
     ``semester`` (1 ou 2) : quand fourni, la grille magistrale est chargée PAR
     SEMESTRE (``load_occupancy_grid_semester`` → clé (titulación, curso, sem)),
@@ -1039,9 +1038,6 @@ def build_horarios_overlay_sheet(workbook, programs, curso_num, level_schedule,
         except Exception:
             grid = {}
 
-    lab_overlay = build_lab_overlay(level_schedule, programs)
-    lab_subjects_overlay = build_lab_overlay_subjects(level_schedule, programs)
-
     # Évite un doublon si une feuille 'Horarios' existe déjà.
     name = sheet_name
     if name in workbook.sheetnames:
@@ -1051,10 +1047,9 @@ def build_horarios_overlay_sheet(workbook, programs, curso_num, level_schedule,
         name = f"{name} ({idx})"
     worksheet = workbook.create_sheet(name)
 
-    # Légende en tête.
+    # Légende en tête (uniquement cours magistraux).
     worksheet.cell(row=1, column=1, value='Leyenda:').font = PROGRAM_FONT
-    lg = [('Clase magistral', LECTURE_FILL), ('Laboratorio', LAB_FILL),
-          ('¡Colisión!', COLLISION_FILL)]
+    lg = [('Clase magistral', LECTURE_FILL)]
     for i, (txt, fill) in enumerate(lg):
         c = worksheet.cell(row=1, column=2 + i * 2, value=txt)
         c.fill = fill
@@ -1063,7 +1058,6 @@ def build_horarios_overlay_sheet(workbook, programs, curso_num, level_schedule,
     current_row = 3
 
     block_rows = list(_hg.BLOCK_ID_TO_LABEL.items())  # [(1,'08:30-10:30'),...]
-    collisions = 0
 
     for pair_start in range(0, len(programs), 2):
         program_pair = programs[pair_start:pair_start + 2]
@@ -1100,35 +1094,8 @@ def build_horarios_overlay_sheet(workbook, programs, curso_num, level_schedule,
                 grid_slots = grid.get(gkey, {})
                 for di in range(5):
                     lecture = grid_slots.get((di, bid), '')
-                    labs = lab_overlay.get((prog, bid, di), [])
-                    lab_subjs = lab_subjects_overlay.get((prog, bid, di), set())
-                    # VRAIE collision uniquement si un labo est d'une matière
-                    # DIFFÉRENTE du cours magistral (l'exception « lab sur sa
-                    # propre matière », y compris groupes partagés, est légitime).
-                    real_collision = (
-                        bool(lecture) and bool(labs)
-                        and _slot_is_real_collision(lecture, lab_subjs)
-                    )
-                    if real_collision:
-                        # Collision : cours magistral ET lab d'une AUTRE matière.
-                        collisions += 1
-                        txt = f"⚠ {lecture} + {' / '.join(labs)}"
-                        write_bordered_cell(worksheet, current_row, day_cols[di],
-                                            txt, LAB_FONT, COLLISION_FILL,
-                                            CENTER_ALIGNMENT)
-                    elif lecture and labs:
-                        # Superposition légitime (lab sur le magistral de SA
-                        # matière) : on montre les deux, fond vert (labo), sans
-                        # alerte rouge — cohérent avec « 0 collision réelle ».
-                        txt = f"{lecture} + {' / '.join(labs)}"
-                        write_bordered_cell(worksheet, current_row, day_cols[di],
-                                            txt, LAB_FONT, LAB_FILL,
-                                            CENTER_ALIGNMENT)
-                    elif labs:
-                        write_bordered_cell(worksheet, current_row, day_cols[di],
-                                            ' / '.join(labs), LAB_FONT, LAB_FILL,
-                                            CENTER_ALIGNMENT)
-                    elif lecture:
+                    # N'affiche QUE les cours magistraux (pas de labos, pas de collisions)
+                    if lecture:
                         write_bordered_cell(worksheet, current_row, day_cols[di],
                                             lecture, LECTURE_FONT2, LECTURE_FILL,
                                             CENTER_ALIGNMENT)
@@ -1143,7 +1110,7 @@ def build_horarios_overlay_sheet(workbook, programs, curso_num, level_schedule,
     for col in [2, 3, 4, 5, 6, 9, 10, 11, 12, 13]:
         worksheet.column_dimensions[get_column_letter(col)].width = 22
 
-    return collisions
+    return 0  # Pas de détection de collisions dans cette vue simplifiée
 
 
 def build_horarios_tabla_sheet(workbook, programs, curso_num, level_schedule,
