@@ -117,12 +117,18 @@ _PII_FILES = {
     "student_busy.csv",        # per-student busy slots (ids)
     "enrollment_pairs.csv",
 }
-for folder in ("assets", "config", "data_clean"):
+# NOTE: data/reference/ contient les grilles Horarios officielles (cours
+# magistraux) — SANS PII. Elles sont la source de vérité affichée dans la
+# feuille « Horarios » des Excel générés. Elles DOIVENT être embarquées, sinon
+# la grille est vide dans l'app packagée (aucune matière affichée).
+for folder in ("assets", "config", "data_clean", os.path.join("data", "reference")):
     if os.path.isdir(folder):
         for root, _dirs, files in os.walk(folder):
             for fn in files:
                 if fn in _PII_FILES:
                     print(f"[spec] SKIP (PII, not bundled): {os.path.join(root, fn)}")
+                    continue
+                if fn.startswith("~$"):  # fichiers temporaires Excel
                     continue
                 full = os.path.join(root, fn)
                 datas.append((full, root))

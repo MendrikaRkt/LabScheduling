@@ -78,20 +78,51 @@ KNOWN_TITULACIONES = {
     "IEM", "IINFTV", "ISW",
 }
 
+# ── Résolution robuste des fichiers Horarios de référence ───────────────────
+# Les grilles magistrales officielles (« Horarios ») sont livrées avec l'app
+# dans data/reference/. Selon le contexte d'exécution, ce dossier se trouve à
+# des endroits différents :
+#   • lancement depuis les sources  -> ./data/reference/<fichier>
+#   • exécutable PyInstaller (.exe)  -> <bundle>/data/reference/<fichier>
+#         (résolu via app_paths.resource_path)
+#   • réf. personnalisée par l'user  -> <workspace>/data/reference/<fichier>
+#         (résolu via app_paths.workspace_path — prioritaire)
+#   • environnement de dev historique-> /home/ubuntu/Uploads/<fichier>
+# On génère donc, pour chaque nom de fichier, la LISTE des emplacements
+# candidats dans cet ordre de priorité, et on prend le premier existant.
+try:  # app_paths n'existe qu'empaqueté / dans l'app, pas forcément en test isolé
+    import app_paths as _app_paths  # type: ignore
+except Exception:  # pragma: no cover
+    _app_paths = None
+
+
+def _reference_candidates(filename: str) -> List[str]:
+    """Liste ordonnée des chemins candidats pour un fichier Horarios de réf."""
+    cands: List[str] = []
+    # 1) Copie personnalisée dans le workspace de l'utilisateur (prioritaire).
+    if _app_paths is not None:
+        try:
+            cands.append(_app_paths.workspace_path("data", "reference", filename))
+        except Exception:
+            pass
+        # 2) Fichier embarqué dans le bundle .exe (resource_path).
+        try:
+            cands.append(_app_paths.resource_path("data", "reference", filename))
+        except Exception:
+            pass
+    # 3) Lancement depuis les sources (CWD = racine du projet).
+    cands.append(os.path.join("data", "reference", filename))
+    # 4) Emplacements historiques / de dev.
+    cands.append(os.path.join("data", filename))
+    cands.append(os.path.join("/home/ubuntu/Uploads", filename))
+    return cands
+
+
 # Fichiers officiels par défaut (curso -> chemins candidats) — SEMESTRE 1.
 DEFAULT_HORARIOS_FILES: Dict[int, List[str]] = {
-    1: [
-        "/home/ubuntu/Uploads/Distribucion_Practicas_25-26_rev15.xlsx",
-        "data/Distribucion_Practicas_25-26_rev15.xlsx",
-    ],
-    2: [
-        "/home/ubuntu/Uploads/Distribucion_Practicas_segundocurso_25-26_rev17.xlsx",
-        "data/Distribucion_Practicas_segundocurso_25-26_rev17.xlsx",
-    ],
-    3: [
-        "/home/ubuntu/Uploads/Distribucion_Practicas_tercercurso_25-26_rev11.xlsx",
-        "data/Distribucion_Practicas_tercercurso_25-26_rev11.xlsx",
-    ],
+    1: _reference_candidates("Distribucion_Practicas_25-26_rev15.xlsx"),
+    2: _reference_candidates("Distribucion_Practicas_segundocurso_25-26_rev17.xlsx"),
+    3: _reference_candidates("Distribucion_Practicas_tercercurso_25-26_rev11.xlsx"),
 }
 
 # Fichiers officiels par défaut (curso -> chemins candidats) — SEMESTRE 2.
@@ -100,18 +131,9 @@ DEFAULT_HORARIOS_FILES: Dict[int, List[str]] = {
 # « Horarios » représente l'emploi du temps du S2. Sans eux, les TP du S2
 # étaient comparés à tort aux cours magistraux du S1.
 DEFAULT_HORARIOS_FILES_S2: Dict[int, List[str]] = {
-    1: [
-        "/home/ubuntu/Uploads/Reparto Pract FIS_II_rev19.xlsx",
-        "data/Reparto Pract FIS_II_rev19.xlsx",
-    ],
-    2: [
-        "/home/ubuntu/Uploads/Reparto Pract_rev23.xlsx",
-        "data/Reparto Pract_rev23.xlsx",
-    ],
-    3: [
-        "/home/ubuntu/Uploads/Reparto Pract3_rev3.xlsx",
-        "data/Reparto Pract3_rev3.xlsx",
-    ],
+    1: _reference_candidates("Reparto Pract FIS_II_rev19.xlsx"),
+    2: _reference_candidates("Reparto Pract_rev23.xlsx"),
+    3: _reference_candidates("Reparto Pract3_rev3.xlsx"),
 }
 
 # Table (semestre -> mapping curso->fichiers).
