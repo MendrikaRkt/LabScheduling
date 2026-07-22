@@ -915,8 +915,105 @@ def build_lab_overlay(level_schedule, programs):
     return overlay
 
 
+# ── Détection de collision RÉELLE (alignée sur la correction définitive) ──────
+# Un labo posé sur le créneau d'un cours magistral n'est une VRAIE collision que
+# si sa matière (ou l'une de ses matières de groupe partagé) NE correspond PAS au
+# cours magistral affiché. Le cas « le lab remplace le cours de sa PROPRE matière »
+# (p. ex. lab de Química sur le magistral QUIM, y compris via les groupes partagés
+# Física/Química) est LÉGITIME et ne doit pas être signalé en rouge. On réutilise
+# exactement la même logique que le pipeline (matcher + groupes partagés), de sorte
+# que la feuille Horarios reflète fidèlement les 0 collision réelles du solveur.
+_PIPELINE_MATCH = None
+_SHARED_SUBJECT_MAP = None
+
+
+def _load_pipeline_collision_helpers():
+    """Charge paresseusement le matcher et la carte des groupes partagés du
+    pipeline. Dégradation sûre : renvoie (None, {}) en cas d'échec (l'overlay
+    retombe alors sur la détection naïve lecture+lab)."""
+    global _PIPELINE_MATCH, _SHARED_SUBJECT_MAP
+    if _PIPELINE_MATCH is not None or _SHARED_SUBJECT_MAP is not None:
+        return _PIPELINE_MATCH, _SHARED_SUBJECT_MAP
+    try:
+        import pipeline as _P
+        lab_config = getattr(_P, "LAB_CONFIG", {}) or {}
+        sg_map = {}
+        for subj, cfg in lab_config.items():
+            g = (cfg or {}).get("shared_group")
+            if g:
+                sg_map.setdefault(g, []).append(subj)
+        shared = {}
+        for subj, cfg in lab_config.items():
+            g = (cfg or {}).get("shared_group")
+            shared[subj] = sg_map.get(g, [subj]) if g else [subj]
+        _SHARED_SUBJECT_MAP = shared
+        _PIPELINE_MATCH = (_P._grid_course_matches_subject, lab_config)
+    except Exception:
+        _SHARED_SUBJECT_MAP = {}
+        _PIPELINE_MATCH = None
+    return _PIPELINE_MATCH, _SHARED_SUBJECT_MAP
+
+
+def _lab_matches_lecture(lecture_course, lab_subject):
+    """True si ``lab_subject`` (ou l'une de ses matières de groupe partagé)
+    correspond au cours magistral ``lecture_course`` — i.e. c'est le cas
+    légitime « le lab remplace le cours de sa propre matière »."""
+    match_pack, shared = _load_pipeline_collision_helpers()
+    if not match_pack:
+        return False
+    matcher, lab_config = match_pack
+    for ss in (shared.get(lab_subject, [lab_subject]) if shared else [lab_subject]):
+        cfg = lab_config.get(ss)
+        if cfg is not None:
+            try:
+                if matcher(lecture_course, ss, cfg):
+                    return True
+            except Exception:
+                continue
+    return False
+
+
+def _slot_is_real_collision(lecture_course, lab_subjects):
+    """Un créneau lecture+labos est une VRAIE collision si AU MOINS un labo
+    ne correspond pas au cours magistral (matière différente). Si tous les labos
+    sont sur leur propre matière (exception légitime), ce n'est PAS une collision.
+    Sans les helpers du pipeline, on retombe sur « toute superposition = collision »
+    (comportement prudent, jamais silencieux à tort)."""
+    match_pack, _ = _load_pipeline_collision_helpers()
+    if not match_pack:
+        return True  # dégradation prudente
+    for subj in lab_subjects:
+        if not _lab_matches_lecture(lecture_course, subj):
+            return True
+    return False
+
+
+def build_lab_overlay_subjects(level_schedule, programs):
+    """Comme :func:`build_lab_overlay`, mais renvoie l'ensemble des matières
+    BRUTES (clé sujet, préfixe semestre retiré) posées sur chaque créneau —
+    nécessaire pour décider si une superposition lecture+lab est une VRAIE
+    collision (matière différente) ou l'exception légitime « propre matière »."""
+    subj_overlay = {}
+    if level_schedule is None or len(level_schedule) == 0 or _hg is None:
+        return subj_overlay
+    norm_programs = {p: _hg.normalize_titulacion(p) for p in programs}
+    for _, row in level_schedule.iterrows():
+        prog_norm = _hg.strip_accents(str(row.get('program', '')))
+        day_idx = _hg.DAY_IDS.get(str(row.get('day', '')).strip())
+        bid = _hg.block_label_to_id(str(row.get('time_block', '')))
+        if day_idx is None or bid is None:
+            continue
+        # Clé de matière TELLE QUELLE (préfixe S1_/S2_ conservé) : c'est la clé
+        # de LAB_CONFIG utilisée par le matcher et la carte des groupes partagés.
+        subject = str(row.get('subject', '')).strip()
+        for prog, pn in norm_programs.items():
+            if pn and pn.lower() in prog_norm:
+                subj_overlay.setdefault((prog, bid, day_idx), set()).add(subject)
+    return subj_overlay
+
+
 def build_horarios_overlay_sheet(workbook, programs, curso_num, level_schedule,
-                                 grid=None, sheet_name='Horarios'):
+                                 grid=None, sheet_name='Horarios', semester=None):
     """
     Feuille « Horarios » (format écran de Daniel) superposant :
       • les COURS MAGISTRAUX réels (grilles Horarios officielles, fond gris),
@@ -925,16 +1022,25 @@ def build_horarios_overlay_sheet(workbook, programs, curso_num, level_schedule,
 
     Une grille par titulación (2 par bloc de lignes), tous les créneaux affichés.
     Retourne le nombre de collisions détectées visuellement.
+
+    ``semester`` (1 ou 2) : quand fourni, la grille magistrale est chargée PAR
+    SEMESTRE (``load_occupancy_grid_semester`` → clé (titulación, curso, sem)),
+    de sorte que la feuille Horarios d'un fichier S1 n'affiche QUE les cours
+    magistraux du S1 (idem S2). ``None`` = ancien comportement (grille S1).
     """
     if _hg is None:
         return 0
     if grid is None:
         try:
-            grid = _hg.load_occupancy_grid()
+            if semester is not None and hasattr(_hg, "load_occupancy_grid_semester"):
+                grid = _hg.load_occupancy_grid_semester()
+            else:
+                grid = _hg.load_occupancy_grid()
         except Exception:
             grid = {}
 
     lab_overlay = build_lab_overlay(level_schedule, programs)
+    lab_subjects_overlay = build_lab_overlay_subjects(level_schedule, programs)
 
     # Évite un doublon si une feuille 'Horarios' existe déjà.
     name = sheet_name
@@ -987,17 +1093,36 @@ def build_horarios_overlay_sheet(workbook, programs, curso_num, level_schedule,
                 prog = program_pair[index]
                 write_bordered_cell(worksheet, current_row, label_col, blabel,
                                     TIME_LABEL_FONT, None, RIGHT_ALIGNMENT)
-                gkey = (_hg.normalize_titulacion(prog), int(curso_num))
+                if semester is not None:
+                    gkey = (_hg.normalize_titulacion(prog), int(curso_num), int(semester))
+                else:
+                    gkey = (_hg.normalize_titulacion(prog), int(curso_num))
                 grid_slots = grid.get(gkey, {})
                 for di in range(5):
                     lecture = grid_slots.get((di, bid), '')
                     labs = lab_overlay.get((prog, bid, di), [])
-                    if lecture and labs:
-                        # Collision : cours magistral ET lab au même créneau.
+                    lab_subjs = lab_subjects_overlay.get((prog, bid, di), set())
+                    # VRAIE collision uniquement si un labo est d'une matière
+                    # DIFFÉRENTE du cours magistral (l'exception « lab sur sa
+                    # propre matière », y compris groupes partagés, est légitime).
+                    real_collision = (
+                        bool(lecture) and bool(labs)
+                        and _slot_is_real_collision(lecture, lab_subjs)
+                    )
+                    if real_collision:
+                        # Collision : cours magistral ET lab d'une AUTRE matière.
                         collisions += 1
                         txt = f"⚠ {lecture} + {' / '.join(labs)}"
                         write_bordered_cell(worksheet, current_row, day_cols[di],
                                             txt, LAB_FONT, COLLISION_FILL,
+                                            CENTER_ALIGNMENT)
+                    elif lecture and labs:
+                        # Superposition légitime (lab sur le magistral de SA
+                        # matière) : on montre les deux, fond vert (labo), sans
+                        # alerte rouge — cohérent avec « 0 collision réelle ».
+                        txt = f"{lecture} + {' / '.join(labs)}"
+                        write_bordered_cell(worksheet, current_row, day_cols[di],
+                                            txt, LAB_FONT, LAB_FILL,
                                             CENTER_ALIGNMENT)
                     elif labs:
                         write_bordered_cell(worksheet, current_row, day_cols[di],
@@ -1022,7 +1147,8 @@ def build_horarios_overlay_sheet(workbook, programs, curso_num, level_schedule,
 
 
 def build_horarios_tabla_sheet(workbook, programs, curso_num, level_schedule,
-                               grid=None, sheet_name='Horarios (filtrable)'):
+                               grid=None, sheet_name='Horarios (filtrable)',
+                               semester=None):
     """
     Feuille « Horarios (filtrable) » : version TABULAIRE et FILTRABLE de la
     grille Horarios, avec un AutoFilter Excel sur chaque colonne.
@@ -1043,11 +1169,15 @@ def build_horarios_tabla_sheet(workbook, programs, curso_num, level_schedule,
         return 0
     if grid is None:
         try:
-            grid = _hg.load_occupancy_grid()
+            if semester is not None and hasattr(_hg, "load_occupancy_grid_semester"):
+                grid = _hg.load_occupancy_grid_semester()
+            else:
+                grid = _hg.load_occupancy_grid()
         except Exception:
             grid = {}
 
     lab_overlay = build_lab_overlay(level_schedule, programs)
+    lab_subjects_overlay = build_lab_overlay_subjects(level_schedule, programs)
 
     name = sheet_name
     if name in workbook.sheetnames:
@@ -1068,20 +1198,42 @@ def build_horarios_tabla_sheet(workbook, programs, curso_num, level_schedule,
     collisions = 0
 
     for prog in programs:
-        gkey = (_hg.normalize_titulacion(prog), int(curso_num))
+        if semester is not None:
+            gkey = (_hg.normalize_titulacion(prog), int(curso_num), int(semester))
+        else:
+            gkey = (_hg.normalize_titulacion(prog), int(curso_num))
         grid_slots = grid.get(gkey, {})
         for bid, blabel in block_rows:
             for di in range(5):
                 lecture = grid_slots.get((di, bid), '')
                 labs = lab_overlay.get((prog, bid, di), [])
+                lab_subjs = lab_subjects_overlay.get((prog, bid, di), set())
                 day_name = DAYS_OF_WEEK[di]
-                # Ordre : d'abord la collision (la plus importante), puis
-                # les cours magistraux seuls, puis les labos seuls.
-                if lecture and labs:
+                # VRAIE collision uniquement si un labo est d'une matière
+                # DIFFÉRENTE du cours magistral (l'exception « lab sur sa propre
+                # matière », groupes partagés inclus, est légitime).
+                real_collision = (
+                    bool(lecture) and bool(labs)
+                    and _slot_is_real_collision(lecture, lab_subjs)
+                )
+                # Ordre : d'abord la collision (la plus importante), puis la
+                # superposition légitime / cours magistraux seuls, puis labos seuls.
+                if real_collision:
                     collisions += 1
                     detail = f"{lecture}  ↔  {' / '.join(labs)}"
                     _write_tabla_row(worksheet, row, prog, curso_num, day_name,
                                      blabel, '¡Colisión!', detail, COLLISION_FILL)
+                    row += 1
+                elif lecture and labs:
+                    # Labo sur le magistral de SA propre matière : deux lignes
+                    # distinctes (magistral + labo), aucune alerte.
+                    _write_tabla_row(worksheet, row, prog, curso_num, day_name,
+                                     blabel, 'Clase magistral', lecture,
+                                     LECTURE_FILL)
+                    row += 1
+                    _write_tabla_row(worksheet, row, prog, curso_num, day_name,
+                                     blabel, 'Laboratorio', ' / '.join(labs),
+                                     LAB_FILL)
                     row += 1
                 elif lecture:
                     _write_tabla_row(worksheet, row, prog, curso_num, day_name,

@@ -85,6 +85,17 @@ BLOCK_EXPORT_ON_CPSAT_FAIL = os.environ.get(
 USE_CORRECTED_HORARIOS = os.environ.get(
     "LAB_USE_CORRECTED_HORARIOS", "1") not in ("0", "false", "False")
 
+# ── Correction définitive : contrainte dure « pas de TP sur un cours magistral »
+# (niveau titulación). Indépendante de student_directory.csv : dérive
+# l'occupation des grilles Horarios réelles + du programme de chaque étudiant.
+# Empêche les collisions TP↔magistral à la formation des groupes.
+USE_MAGISTRAL_CONSTRAINT = os.environ.get(
+    "LAB_USE_MAGISTRAL_CONSTRAINT", "1") not in ("0", "false", "False")
+try:
+    import magistral_busy as _magistral_busy
+except Exception:  # ne jamais casser l'import si le module optionnel manque
+    _magistral_busy = None
+
 # Phase 2 — configurable soft-constraint weights (additive; degrades to the
 # validated defaults if the module or its YAML file is unavailable).
 try:
@@ -1592,9 +1603,96 @@ def build_professor_busy(df):
     return professor_busy, dict(professor_subjects), True
 
 
+class _SemesterAwareLabBusy:
+    """Vue sémestre- ET matière-consciente du blocage dur ``student_lab_busy``.
+
+    ``student_lab_busy`` est le canal de blocage DUR d'un étudiant (un créneau
+    déjà pris par un lab, jamais neutralisé par ``own_slots``). On l'enveloppe
+    pour y injecter, en LECTURE (``.get``), les créneaux magistraux INTERDITS
+    calculés SPÉCIFIQUEMENT pour la matière en cours de placement :
+
+        interdits(sid) = mag_full[sem][sid] − ⋃_{S' ∈ groupe_partagé(S)} own[sem][sid][S']
+
+    c.-à-d. TOUS les cours magistraux de la titulación de l'étudiant pour le
+    semestre courant, SAUF ceux de la matière ``S`` elle-même (exception « le
+    lab remplace le cours de SA PROPRE matière », groupes partagés inclus).
+    Ainsi, poser un lab d'une AUTRE matière sur le créneau magistral d'une
+    matière que l'étudiant suit aussi reste INTERDIT (corrige la fuite de
+    l'ancienne agrégation « own » toutes matières confondues).
+
+    Les ÉCRITURES passent par ``__getitem__`` (``student_lab_busy[sid].add(...)``
+    dans ``_propagate_busy``) et restent dirigées vers le set réel mutable.
+    Semestre/matière non fixés (None) ⇒ comportement d'origine (dégradation sûre)."""
+
+    __slots__ = ("_real", "_mag_full", "_own", "_shared", "_sem", "_subject")
+
+    def __init__(self, real, mag_full_by_sem, own_by_sem_subject, shared_map):
+        self._real = real                       # defaultdict(set)
+        self._mag_full = mag_full_by_sem or {}   # {sem: {sid: {(d,b),...}}}
+        self._own = own_by_sem_subject or {}     # {sem: {sid: {subject: {(d,b),...}}}}
+        self._shared = shared_map or {}          # {subject: [subject, ...]}
+        self._sem = None
+        self._subject = None
+
+    def set_semester(self, sem):
+        self._sem = sem
+
+    def set_subject(self, subject):
+        self._subject = subject
+
+    def _extra(self, sid):
+        if self._sem is None:
+            return None
+        full = self._mag_full.get(self._sem, {}).get(sid)
+        if not full:
+            return None
+        # Créneaux « propres » de la matière courante (et de ses partenaires de
+        # groupe partagé) — autorisés pour CE lab uniquement.
+        own_union = set()
+        if self._subject is not None:
+            own_by_subj = self._own.get(self._sem, {}).get(sid, {})
+            if own_by_subj:
+                for ss in self._shared.get(self._subject, (self._subject,)):
+                    s = own_by_subj.get(ss)
+                    if s:
+                        own_union |= s
+        return full - own_union if own_union else full
+
+    def get(self, sid, default=None):
+        base = self._real.get(sid, set())
+        extra = self._extra(sid)
+        if not extra:
+            return base if base else (set() if default is None else default)
+        return set(base) | extra
+
+    def __getitem__(self, sid):
+        # Renvoie le set réel MUTABLE (pour .add dans _propagate_busy).
+        return self._real[sid]
+
+    def __setitem__(self, sid, value):
+        self._real[sid] = value
+
+    def __contains__(self, sid):
+        return sid in self._real
+
+    def setdefault(self, sid, default):
+        return self._real.setdefault(sid, default)
+
+    def __iter__(self):
+        return iter(self._real)
+
+    def keys(self):
+        return self._real.keys()
+
+    def items(self):
+        return self._real.items()
+
+
 def form_groups(subject_students, student_busy, student_subject_slots, student_program,
                 subject_professor_busy=None,
-                subject_block_penalty=None):
+                subject_block_penalty=None,
+                mag_full_by_sem=None,
+                own_by_sem_subject=None):
     """
     Formation des groupes avec support pour:
     1. Groupes partagés (shared_group): Física et Química partagent les mêmes groupes
@@ -1610,6 +1708,21 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
         subject_professor_busy = {}
     if subject_block_penalty is None:
         subject_block_penalty = {}
+
+    def _set_sem(sd_or_sem):
+        """Fixe le semestre ET la matière courants sur la vue de blocage dur
+        (no-op si non enveloppée). Appelé au début de chaque boucle par matière.
+
+        • dict (subject_data[subject]) ⇒ fixe semestre + matière ;
+        • int (semestre seul) ⇒ fixe le semestre, conserve la matière courante
+          (chaque appel int est précédé, dans la même itération, d'un appel dict
+          qui a déjà fixé la bonne matière)."""
+        if isinstance(student_lab_busy, _SemesterAwareLabBusy):
+            if isinstance(sd_or_sem, dict):
+                student_lab_busy.set_semester(sd_or_sem.get('semester'))
+                student_lab_busy.set_subject(sd_or_sem.get('subject'))
+            else:
+                student_lab_busy.set_semester(sd_or_sem)
 
     # Reinitialise le suivi des relachements de contrainte (voir plus bas).
     RELAXED_PROF_CONSTRAINT_SUBJECTS.clear()
@@ -1628,6 +1741,28 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
 
 
     student_lab_busy = defaultdict(set)
+    # Contrainte magistrale PAR SEMESTRE (correction définitive des collisions
+    # TP↔magistral) : on enveloppe le blocage dur student_lab_busy dans une vue
+    # sémestre-consciente. Chaque phase fixe le semestre courant via _set_sem()
+    # au début de sa boucle par matière ; les contrôles de disponibilité
+    # (student_lab_busy.get(sid)) voient alors, EN PLUS, les créneaux magistraux
+    # d'autres matières du bon semestre — dérivés de la grille Horarios réelle.
+    if mag_full_by_sem:
+        # Carte des groupes partagés : {matière: [matières du même shared_group]}
+        # (sinon [matière] seule). Sert à l'exception « le lab remplace le cours
+        # de SA PROPRE matière », étendue aux partenaires de groupe partagé
+        # (ex. S1_Física ↔ S1_Química) pour ne pas sur-bloquer ces placements.
+        _sg_members = defaultdict(list)
+        for _subj, _cfg in LAB_CONFIG.items():
+            _sg = _cfg.get('shared_group')
+            if _sg:
+                _sg_members[_sg].append(_subj)
+        _shared_map = {}
+        for _subj, _cfg in LAB_CONFIG.items():
+            _sg = _cfg.get('shared_group')
+            _shared_map[_subj] = list(_sg_members[_sg]) if _sg else [_subj]
+        student_lab_busy = _SemesterAwareLabBusy(
+            student_lab_busy, mag_full_by_sem, own_by_sem_subject, _shared_map)
 
     def _propagate_busy(group):
         """Block the group's (day, block) slot for every member: they now have
@@ -1644,6 +1779,30 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
         """Same for a SINGLE student added to an existing group."""
         student_lab_busy[sid].add(
             (group['day_idx'], group['block_id']))
+
+    def _free_at_general(sid, slot, subject):
+        """Disponibilité pour un placement de DERNIER RECOURS (phases 7/8).
+
+        Renvoie False si l'étudiant a déjà un AUTRE lab au même créneau
+        (student_lab_busy réel — collision TP↔TP physiquement impossible) OU
+        un cours magistral d'une autre matière (via la vue enveloppée) OU une
+        occupation master hors matière propre. Le sujet courant doit avoir été
+        fixé via _set_sem(sd) pour que l'exception « propre matière » du canal
+        magistral s'applique correctement."""
+        cfg = LAB_CONFIG.get(subject, {})
+        sg = cfg.get('shared_group')
+        if sg:
+            shared_subjs = [s for s, c in LAB_CONFIG.items()
+                            if c.get('shared_group') == sg]
+        else:
+            shared_subjs = [subject]
+        if slot in student_lab_busy.get(sid, set()):
+            return False
+        busy = student_busy.get(sid, set())
+        own = set()
+        for ss in shared_subjs:
+            own |= student_subject_slots.get(sid, {}).get(ss, set())
+        return slot not in (busy - own)
 
 
     shared_group_map = {}
@@ -1747,6 +1906,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
         }
 
         subject_data[subject] = {
+            'subject': subject,
             'config': config,
             'unassigned': set(student_ids),
             'groups': [],
@@ -1778,6 +1938,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
     print(f"  Ordre de traitement (plus contraint en premier) :")
     for s in sorted_subjects:
         sd = subject_data[s]
+        _set_sem(sd)
         print(f"    {s:40s} | {sd['total_students']:3d} étu | "
               f"{len(sd['all_slots']):2d} slots | "
               f"{len(sd['lab_rooms_list'])} salle(s)")
@@ -1821,6 +1982,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
             shared_progress = False
             for subject in shared_subjects_list_rr:
                 sd = subject_data[subject]
+                _set_sem(sd)
                 if not sd['unassigned']:
                     continue
                 config = sd['config']
@@ -1945,6 +2107,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
 
         for s in shared_subjects_list_rr:
             sd = subject_data[s]
+            _set_sem(sd)
             assigned = sum(g['nb_students'] for g in sd['groups'])
             print(f"    {s:40s} | {len(sd['groups']):2d} gr | {assigned}/{sd['total_students']} assignés")
 
@@ -1952,6 +2115,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
         overflow_count = 0
         for s in shared_subjects_list_rr:
             sd = subject_data[s]
+            _set_sem(sd)
             if not sd['unassigned']:
                 continue
 
@@ -1986,6 +2150,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
             print(f"    [RECYCLE]  {overflow_count} étudiants cross-programme redistribués")
             for s in shared_subjects_list_rr:
                 sd = subject_data[s]
+                _set_sem(sd)
                 assigned = sum(g['nb_students'] for g in sd['groups'])
                 if sd['unassigned']:
                     print(f"    {s:40s} | {assigned}/{sd['total_students']} assignés ({len(sd['unassigned'])} restants)")
@@ -2002,6 +2167,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
 
         for subject in remaining_subjects:
             sd = subject_data[subject]
+            _set_sem(sd)
 
             if not sd['unassigned']:
                 continue
@@ -2185,6 +2351,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
         if subject not in subject_data:
             continue
         sd = subject_data[subject]
+        _set_sem(sd)
         if not sd['unassigned']:
             continue
 
@@ -2302,6 +2469,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
     refit_count = 0
     for subject in sorted_subjects:
         sd = subject_data[subject]
+        _set_sem(sd)
         if not sd['unassigned']:
             continue
 
@@ -2348,6 +2516,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
 
     for subject in sorted_subjects:
         sd = subject_data[subject]
+        _set_sem(sd)
         if not sd['unassigned']:
             continue
 
@@ -2380,6 +2549,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
         num_sessions = sd['num_sessions']
         lab_rooms_list = sd['lab_rooms_list']
         sem = sd['semester']
+        _set_sem(sem)
         min_w = sd['min_week']
         max_w = sd['max_week']
 
@@ -2511,6 +2681,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
     expand_count = 0
     for subject in sorted_subjects:
         sd = subject_data[subject]
+        _set_sem(sd)
         if not sd['unassigned']:
             continue
 
@@ -2525,6 +2696,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
             continue
 
         sem = sd['semester']
+        _set_sem(sem)
         num_sessions = sd['num_sessions']
         max_per_group = sd['max_per_group']
 
@@ -2629,6 +2801,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
 
     for subject in list(subject_data.keys()):
         sd = subject_data[subject]
+        _set_sem(sd)
         groups = sd['groups']
         if len(groups) <= 1:
             continue
@@ -2680,6 +2853,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
 
     for subject, gnum in dissolved_groups:
         sd = subject_data[subject]
+        _set_sem(sd)
         sd['groups'] = [g for g in sd['groups'] if g['group_num'] != gnum]
 
         all_groups[:] = [g for g in all_groups if not (g['subject'] == subject and g['group_num'] == gnum)]
@@ -2690,6 +2864,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
 
     for subject in subject_data:
         sd = subject_data[subject]
+        _set_sem(sd)
         for i, g in enumerate(sorted(sd['groups'], key=lambda x: x['group_num'])):
             old_num = g['group_num']
             g['group_num'] = i + 1
@@ -2716,6 +2891,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
         enrolled = set(subject_students.get(subject, []))
 
         semester = config['semester']
+        _set_sem(semester)
         min_week = config['min_week']
 
 
@@ -2835,6 +3011,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
             continue
 
         sem = config['semester']
+        _set_sem(sem)
         min_week = config['min_week']
         sem_max = SEMESTER_1_WEEKS if sem == 1 else SEMESTER_2_WEEKS
         max_week = config.get('max_week', sem_max)
@@ -3021,11 +3198,13 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
 
     for subject in sorted_subjects:
         sd = subject_data[subject]
+        _set_sem(sd)
         if not sd['unassigned']:
             continue
 
         config = sd['config']
         sem = sd['semester']
+        _set_sem(sem)
         num_sessions = sd['num_sessions']
         max_per_group = sd['max_per_group']
         lab_rooms_list = sd['lab_rooms_list']
@@ -3130,11 +3309,13 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
     p5b_groups = 0
     for subject in sorted_subjects:
         sd = subject_data[subject]
+        _set_sem(sd)
         if not sd['unassigned']:
             continue
 
         config = sd['config']
         sem = sd['semester']
+        _set_sem(sem)
         num_sessions = sd['num_sessions']
         max_per_group = sd['max_per_group']
         lab_rooms_list = sd['lab_rooms_list']
@@ -3250,10 +3431,12 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
 
     for subject in all_subjects_with_rest:
         sd = subject_data[subject]
+        _set_sem(sd)
         if not sd['unassigned']:
             continue
         config = sd['config']
         sem = sd['semester']
+        _set_sem(sem)
         num_sessions = sd['num_sessions']
         absolute_max = MAX_GROUP_SIZE
         lab_rooms_list = sd['lab_rooms_list']
@@ -3432,11 +3615,26 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
             new_unplaceable.append((subject, sid))
             continue
 
-        target = max(sd['groups'], key=lambda g: g['nb_students'])
+        # Placement de dernier recours SANS créer de collision physiquement
+        # impossible : on ne retient qu'un groupe où l'étudiant est réellement
+        # libre (pas d'autre lab ni cours magistral d'une autre matière au même
+        # créneau). Sinon on le laisse « non plaçable » et on le signale — le
+        # système valide, il ne décide jamais (pas de double-réservation forcée).
+        _set_sem(sd)
+        cand_groups = [g for g in sd['groups']
+                       if _free_at_general(sid, (g['day_idx'], g['block_id']), subject)]
+        if not cand_groups:
+            new_unplaceable.append((subject, sid))
+            continue
+
+        target = max(cand_groups, key=lambda g: g['nb_students'])
         target['student_ids'].append(sid)
         target['nb_students'] += 1
         target['_manual_override'] = target.get('_manual_override', 0) + 1
         target.setdefault('_override_sids', set()).add(sid)
+        _propagate_busy_one(sid, target)
+        student_busy.setdefault(sid, set()).add(
+            (target['day_idx'], target['block_id']))
 
 
         if isinstance(sd.get('unassigned'), set):
@@ -3449,22 +3647,33 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
 
     p8_solo_dissolved = []
     for subject, sd in subject_data.items():
+        _set_sem(sd)
         solos = [g for g in sd['groups'] if g['nb_students'] == 1]
         for solo_g in solos:
             others = [g for g in sd['groups']
                       if g is not solo_g and g['nb_students'] >= 2]
             if not others:
                 continue
-            target = max(others, key=lambda g: g['nb_students'])
+            # On ne fusionne un solo dans un groupe existant QUE si l'étudiant y
+            # est réellement libre (pas de collision TP↔TP ni TP↔magistral).
+            # Sinon on conserve le groupe solo (valide, quoique petit) — jamais
+            # de double-réservation forcée.
             for sid in list(solo_g['student_ids']):
+                cand = [g for g in others
+                        if _free_at_general(sid, (g['day_idx'], g['block_id']), subject)]
+                if not cand:
+                    continue
+                target = max(cand, key=lambda g: g['nb_students'])
                 target['student_ids'].append(sid)
                 target['nb_students'] += 1
                 target['_manual_override'] = target.get('_manual_override', 0) + 1
                 target.setdefault('_override_sids', set()).add(sid)
+                _propagate_busy_one(sid, target)
+                solo_g['student_ids'].remove(sid)
+                solo_g['nb_students'] -= 1
                 p8_overrides.append((subject, sid, target['group_num']))
-            solo_g['student_ids'] = []
-            solo_g['nb_students'] = 0
-            p8_solo_dissolved.append((subject, solo_g['group_num']))
+            if solo_g['nb_students'] == 0:
+                p8_solo_dissolved.append((subject, solo_g['group_num']))
 
     for subj, gnum in p8_solo_dissolved:
         subject_data[subj]['groups'] = [
@@ -3601,6 +3810,7 @@ def form_groups(subject_students, student_busy, student_subject_slots, student_p
     print(f"  (Taille préférée: {PREFERRED_GROUP_SIZE} | Max autorisé: {MAX_GROUP_SIZE})")
     for subject in sorted_subjects:
         sd = subject_data[subject]
+        _set_sem(sd)
         assigned = sum(g['nb_students'] for g in sd['groups'])
         unassigned = len(sd['unassigned'])
         total = sd['total_students']
@@ -5852,6 +6062,28 @@ def run_pipeline(df):
     subject_professor_busy, subject_block_penalty, professors_of_subject = prepare_professor_constraints(df)
     student_program = build_student_program_lookup(df)
 
+    # ── Correction définitive : contrainte dure « pas de TP sur un cours
+    # magistral » (niveau titulación, PAR SEMESTRE), dérivée des grilles
+    # Horarios réelles. On calcule l'occupation magistrale par semestre et on
+    # augmente student_subject_slots (exception « le lab remplace le cours de sa
+    # propre matière »). form_groups bloque ensuite tout créneau magistral d'une
+    # AUTRE matière → aucune collision TP↔magistral ne peut être créée.
+    mag_full_by_sem = None
+    own_by_sem_subject = None
+    if USE_MAGISTRAL_CONSTRAINT and _magistral_busy is not None:
+        try:
+            mag_full_by_sem, own_by_sem_subject, _mag_stats = _magistral_busy.apply_magistral_by_sem(
+                student_subject_slots,
+                student_program,
+                subject_students,
+                LAB_CONFIG,
+                matches_subject=_grid_course_matches_subject,
+            )
+        except Exception as exc:  # non bloquant : on signale, on ne casse pas
+            print(f"  [CONTRAINTE Horarios][WARN] non appliquée : {exc}")
+            mag_full_by_sem = None
+            own_by_sem_subject = None
+
     all_groups = form_groups(
         subject_students,
         student_busy,
@@ -5859,6 +6091,8 @@ def run_pipeline(df):
         student_program,
         subject_professor_busy,
         subject_block_penalty,
+        mag_full_by_sem=mag_full_by_sem,
+        own_by_sem_subject=own_by_sem_subject,
     )
 
     if not all_groups:
