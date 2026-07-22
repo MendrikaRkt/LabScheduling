@@ -1,0 +1,112 @@
+name: Build Windows EXE
+
+# Compile l'application en un vrai .exe Windows sur un runner Windows.
+# PyInstaller NE fait PAS de compilation croisée : construire sur Linux produit
+# un binaire Linux inutilisable sous Windows. Ce workflow tourne donc sur
+# `windows-latest` pour produire un exécutable Windows authentique.
+#
+# Déclenchement :
+#   - manuellement (bouton "Run workflow" dans l'onglet Actions), OU
+#   - à chaque push d'un tag de version "v*" (ex. v1.0.0).
+#
+# Sortie :
+#   - Artefact téléchargeable "LabScheduling-Windows" (dossier zippé complet).
+#   - Si déclenché par un tag, le .zip est aussi attaché à une Release GitHub.
+
+on:
+  workflow_dispatch:        # lancement manuel depuis l'onglet Actions
+  push:
+    tags:
+      - 'v*'                 # ex. v1.0.0
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write        # nécessaire pour publier une Release
+
+    steps:
+      - name: Checkout du dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Python 3.11 (64-bit)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: 'x64'
+
+      - name: Mettre à jour pip
+        run: python -m pip install --upgrade pip
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Compiler l'application (PyInstaller)
+        run: pyinstaller LabScheduling.spec --noconfirm
+
+      - name: Vérifier que le .exe a bien été produit
+        shell: pwsh
+        run: |
+          if (Test-Path "dist/LabScheduling/LabScheduling.exe") {
+            Write-Host "OK : LabScheduling.exe produit"
+            Get-Item "dist/LabScheduling/LabScheduling.exe" | Format-List Name, Length
+          } else {
+            Write-Error "ECHEC : LabScheduling.exe introuvable dans dist/LabScheduling/"
+            exit 1
+          }
+
+      - name: Lire la version
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Get-Content VERSION.txt -Raw).Trim()
+          echo "app_version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Zipper la distribution portable
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/LabScheduling/*" -DestinationPath "LabScheduling_Windows_v${{ steps.version.outputs.app_version }}.zip" -Force
+
+      # ── (Optionnel) Construire l'installeur Inno Setup si présent ──
+      - name: Installer Inno Setup
+        if: hashFiles('installer.iss') != ''
+        run: choco install innosetup --no-progress -y
+
+      - name: Compiler l'installeur (Inno Setup)
+        if: hashFiles('installer.iss') != ''
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (Test-Path $iscc) {
+            & $iscc installer.iss
+          } else {
+            Write-Host "Inno Setup introuvable, on saute l'installeur (le portable suffit)."
+          }
+
+      - name: Publier l'artefact portable (téléchargeable depuis Actions)
+        uses: actions/upload-artifact@v4
+        with:
+          name: LabScheduling-Windows
+          path: LabScheduling_Windows_v${{ steps.version.outputs.app_version }}.zip
+          retention-days: 30
+
+      - name: Publier l'installeur en artefact (si généré)
+        if: hashFiles('Output/*.exe') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: LabScheduling-Installer
+          path: Output/*.exe
+          retention-days: 30
+
+      # ── Attacher les binaires à une Release quand on pousse un tag v* ──
+      - name: Créer / mettre à jour la Release GitHub
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            LabScheduling_Windows_v${{ steps.version.outputs.app_version }}.zip
+            Output/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
